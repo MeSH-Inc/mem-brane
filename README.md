@@ -49,7 +49,7 @@ Middle/right mouse panning remains available across tools. Use Fit View to find 
 
 Selection belongs to placements: two instances of the same block can be selected independently. **Use as context** resolves that selection to unique blocks. Selection, proximity, movement and resizing never invoke a model or implicitly change context.
 
-Mobile defaults to **Focus**, with a full-width editor, horizontal block outline, tap-to-add, image picker and brane navigation. Canvas is an optional overview, with touch viewport panning. A focused link has the form `/b/:braneId?focus=:blockId&view=focus`.
+Mobile defaults to **Focus**, with a full-width editor, horizontal block outline, tap-to-add, image picker and brane navigation. Canvas is an optional overview, with touch viewport panning. The canvas code and React Flow stylesheet load only when Canvas is opened, so Focus does not download them at startup. A focused link has the form `/b/:braneId?focus=:blockId&view=focus`.
 
 ## Local verification and development
 

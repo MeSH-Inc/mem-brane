@@ -1,11 +1,7 @@
 import { SelectionMode } from '@xyflow/react';
 
-export type CanvasTool = 'write' | 'pan' | 'select';
-export const canvasTools: { id: CanvasTool; label: string }[] = [
-  { id: 'write', label: '↗ Write' },
-  { id: 'pan', label: '✥ Pan' },
-  { id: 'select', label: '▱ Select' },
-];
+import type { CanvasTool } from './tools';
+
 const secondaryButtons = [1, 2];
 const allButtons = [0, 1, 2];
 export function toolPolicy(tool: CanvasTool) {

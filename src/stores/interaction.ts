@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CanvasTool } from '../canvas/toolPolicy';
+import type { CanvasTool } from '../canvas/tools';
 import { DraftRecovery, indexedDraftStorage, draftKey, type Draft } from '../services/drafts';
 const recovery = new DraftRecovery(indexedDraftStorage());
 interface Interaction {

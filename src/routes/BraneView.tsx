@@ -1,6 +1,15 @@
-import { canvasTools } from '../canvas/toolPolicy';
+import { canvasTools } from '../canvas/tools';
 import { selectedBlockIds } from '../canvas/selection';
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  lazy,
+  Suspense,
+} from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import type {
   BraneState,
@@ -13,12 +22,15 @@ import { PlacementSaves } from '../services/placement-saves';
 import type { Geometry, Placement } from '../../shared/types/domain';
 import { api, ApiError } from '../services/api';
 import { useInteraction } from '../stores/interaction';
-import { BraneCanvas } from '../canvas/BraneCanvas';
 import { BlockContent } from '../components/BlockContent';
 import { SpawnButton } from '../components/SpawnButton';
 import { ArtifactActions } from '../components/ArtifactActions';
 import { draftDisposition } from '../services/drafts';
 import { useMobile } from '../lib/useMobile';
+const BraneCanvas = lazy(() =>
+  import('../canvas/BraneCanvas').then((module) => ({ default: module.BraneCanvas })),
+);
+
 export function BraneView({
   braneId,
   focus,
@@ -733,19 +745,27 @@ export function BraneView({
               )}
             </div>
           ) : (
-            <BraneCanvas
-              state={state}
-              revealedBlock={revealedBlock}
-              onSpawn={spawn}
-              spawning={spawning}
-              retrySpawns={retrySpawns}
-              newBlock={newBlock}
-              onCreate={(g) => void create(g)}
-              onEdit={edit}
-              onGeometry={geometry}
-              onFocus={focusBlock}
-              onManage={setManaged}
-            />
+            <Suspense
+              fallback={
+                <div className="canvas-host" role="status">
+                  Loading canvas…
+                </div>
+              }
+            >
+              <BraneCanvas
+                state={state}
+                revealedBlock={revealedBlock}
+                onSpawn={spawn}
+                spawning={spawning}
+                retrySpawns={retrySpawns}
+                newBlock={newBlock}
+                onCreate={(g) => void create(g)}
+                onEdit={edit}
+                onGeometry={geometry}
+                onFocus={focusBlock}
+                onManage={setManaged}
+              />
+            </Suspense>
           )}
           <div className="composer">
             <div className="context-chips">

@@ -5,7 +5,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import type { CanvasTool } from './toolPolicy';
+import type { CanvasTool } from './tools';
 import { useInteraction } from '../stores/interaction';
 
 type Point = { x: number; y: number };
