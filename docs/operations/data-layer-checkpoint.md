@@ -77,6 +77,8 @@ retrieval and general workflow engines remain deferred by the project's non-goal
 
 ## Recommended pivot and bounded follow-up
 
+Completed by the [product workflow checkpoint](product-workflow-checkpoint.md), which records the recovery contract, validation and next stopping point. The original recommendation follows for context.
+
 My recommendation is a short **product workflow and reliability round**, with a
 clear exit criterion rather than another open-ended architecture sweep:
 

@@ -75,7 +75,7 @@ On Linux, if browser system libraries are missing, use `npx playwright install -
 3. Vitest unit and integration tests.
 4. Playwright browser tests in Chromium.
 
-The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests include intercepted canvas APIs and an isolated built-server flow through authentication, text saving, generation, SSE reconciliation and session expiration. They do not exercise live provider accounts. Ports 4179 and 4181 must be available.
+The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests include intercepted canvas APIs and an isolated built-server flow through authentication, text saving, generation, SSE reconciliation and session expiration. They do not exercise live provider accounts. The mixed-media workspace rehearsal also covers composer/title recovery, independent tabs, branching and historical provenance. Ports 4179, 4181, 4183, 4185 and 4187 must be available.
 
 Development currently favors direct architectural improvements over compatibility scaffolding. Make focused, atomic commits directly to `main`, verify changes locally before committing, and run `npm run verify` before pushing. GitHub Actions is deferred until it provides a concrete benefit such as catching platform differences, shared verification across independent contributors, or repeatable release artifacts.
 

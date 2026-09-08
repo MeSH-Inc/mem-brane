@@ -6,7 +6,7 @@ All five recommended work areas have implementation and local verification. Fina
 
 IndexedDB preserves text, actor/Block identity, base version and save time. Local writes and deletes are ordered; an older asynchronous write cannot recreate a cleared draft. Reload hydrates the authenticated actor's drafts. A remotely changed version remains a conflict until the user chooses server text or explicitly overwrites using the currently displayed version. A second intervening change still fails optimistic concurrency. Pending newer keystrokes retain their text when an earlier HTTP save finishes.
 
-Recovery applies to block text. Composer prompts, title drafts and independent simultaneous drafts of the same Block in multiple tabs are not separately versioned local artifacts. Browser profile data removal and denied IndexedDB access can prevent recovery; errors are visible and do not block ordinary server saves. This is not CRDT synchronization or automatic merging.
+Block text recovery uses IndexedDB. The subsequent [product workflow round](operations/product-workflow-checkpoint.md) adds independent tab-session recovery for composer prompts, model, ordered references, continuation and title drafts across reload/navigation. Closing the tab can discard those workspace drafts. Independent simultaneous drafts of the same Block in multiple tabs are still not separately versioned local artifacts. Browser profile data removal and denied IndexedDB access can prevent recovery; errors are visible and do not block ordinary server saves. This is not CRDT synchronization or automatic merging.
 
 ## Image model context
 
@@ -36,7 +36,7 @@ This work preserves the concurrent canvas-selection and generated-artifact/Spawn
 
 ## Recommended next round
 
-1. Give simultaneous tabs independent recoverable draft identities, preserve composer/title drafts, and add a three-way text comparison before overwriting conflicts.
+1. Follow the bounded interruption/conflict drill in the [product workflow checkpoint](operations/product-workflow-checkpoint.md): exercise concurrent Block edits and interrupted saves, preserve independent Block draft identities if needed, and add a three-way comparison where overwrite decisions lack evidence. Composer/title tab-session recovery is complete.
 2. Add an operator budget dashboard for pricing freshness, uncertain liabilities and evidence-backed reconciliation, including cached-token/tier-specific pricing if the chosen provider needs it.
 3. Extend the new browser regression suite with offline network transitions, repeated recovery after process shutdown, and interactions between multi-tab drafts and Spawn.
 4. Strengthen asset operations with bounded retrieval, explicit retention policies and a restore drill covering SQLite plus object bytes. Keep live-bucket verification optional until authorized.
