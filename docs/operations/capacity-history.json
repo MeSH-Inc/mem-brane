@@ -1,0 +1,179 @@
+{
+  "time": "2026-09-08T09:19:40.209Z",
+  "environment": {
+    "node": "v24.13.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "totalMemoryGiB": 24,
+    "cpus": 12
+  },
+  "fixture": {
+    "placements": 200,
+    "textCharacters": 20000,
+    "queueLimit": 8,
+    "workerConcurrency": 2,
+    "maxOutputTokens": 1024,
+    "readConcurrency": 4,
+    "requests": 40,
+    "overflowRejected": true
+  },
+  "http": {
+    "status": {
+      "200": 40
+    },
+    "p50Ms": 38.62758299999996,
+    "p95Ms": 72.37420800000018,
+    "maxMs": 83.81750000000011,
+    "responseBytes": 4101186
+  },
+  "runtime": {
+    "samples": 132,
+    "peakSampledRssBytes": 339148800,
+    "maxEventLoopMs": 51.81
+  },
+  "workers": {
+    "outcomes": [
+      {
+        "status": "completed",
+        "count": 8
+      }
+    ],
+    "queueWaitP95Ms": 25154,
+    "queueWaitMaxMs": 25154,
+    "durationP95Ms": 8251
+  },
+  "history": {
+    "historyBlockId": "5c775a88-6696-4bc8-8e22-2f9f7d91e856",
+    "snapshotRequests": 1000,
+    "unchanged": {
+      "revisions": 1,
+      "contentBytes": 20027
+    },
+    "historyVersions": 120,
+    "chainTurns": 80,
+    "lineage": [
+      {
+        "turns": 10,
+        "inputRows": 110,
+        "liveDatabaseBytes": 2928640
+      },
+      {
+        "turns": 40,
+        "inputRows": 1640,
+        "liveDatabaseBytes": 3338240
+      },
+      {
+        "turns": 80,
+        "inputRows": 6480,
+        "liveDatabaseBytes": 4530176
+      }
+    ],
+    "independentRuns": 250,
+    "removedPlacements": 330,
+    "legacyHistoryBytes": 4825681,
+    "database": {
+      "initial": {
+        "allocatedBytes": 323584,
+        "freeBytes": 0,
+        "liveBytes": 323584
+      },
+      "afterSnapshots": {
+        "allocatedBytes": 356352,
+        "freeBytes": 0,
+        "liveBytes": 356352
+      },
+      "afterVersions": {
+        "allocatedBytes": 2879488,
+        "freeBytes": 0,
+        "liveBytes": 2879488
+      },
+      "afterRuns": {
+        "allocatedBytes": 5607424,
+        "freeBytes": 0,
+        "liveBytes": 5607424
+      }
+    },
+    "firstPageHttp": {
+      "requests": 20,
+      "p50Ms": 3.069499999997788,
+      "p95Ms": 9.621957999996084,
+      "responseBytes": 504088
+    },
+    "finalDatabase": {
+      "allocatedBytes": 10027008,
+      "freeBytes": 0,
+      "liveBytes": 10027008
+    },
+    "queryPlans": [
+      {
+        "sql": "SELECT * FROM branes WHERE id=? AND owner_id=?",
+        "plan": ["SEARCH branes USING INDEX sqlite_autoindex_branes_1 (id=?)"]
+      },
+      {
+        "sql": "SELECT id,brane_id,block_id,x,y,width,height,z_index,version FROM placements WHERE brane_id=? ORDER BY z_index,updated_at",
+        "plan": [
+          "SEARCH placements USING INDEX placements_brane_block (brane_id=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      {
+        "sql": "SELECT b.id,b.kind,b.origin,l.content_json,l.version,v.content_json final_content,o.message_id\n        FROM blocks b LEFT JOIN block_live_state l ON l.block_id=b.id\n        LEFT JOIN runs r ON r.output_block_id=b.id\n        LEFT JOIN run_outputs o ON o.run_id=r.id\n        LEFT JOIN block_revisions v ON v.id=o.revision_id\n        WHERE b.id IN (SELECT block_id FROM placements WHERE brane_id=?)\n        ORDER BY b.created_at,b.id",
+        "plan": [
+          "SEARCH b USING INDEX sqlite_autoindex_blocks_1 (id=?)",
+          "LIST SUBQUERY 1",
+          "SEARCH placements USING COVERING INDEX placements_brane_block (brane_id=?)",
+          "SEARCH l USING INDEX sqlite_autoindex_block_live_state_1 (block_id=?) LEFT-JOIN",
+          "SEARCH r USING INDEX runs_output_block (output_block_id=?) LEFT-JOIN",
+          "SEARCH o USING INDEX sqlite_autoindex_run_outputs_1 (run_id=?) LEFT-JOIN",
+          "SEARCH v USING INDEX sqlite_autoindex_block_revisions_1 (id=?) LEFT-JOIN",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      {
+        "sql": "SELECT r.id,r.brane_id,r.status,r.model,r.provider,r.output_block_id,COALESCE(c.text,'') partial,r.error,r.usage_json,r.retry_of,r.created_at FROM runs r LEFT JOIN run_checkpoints c ON c.run_id=r.id AND r.status!='completed' WHERE r.brane_id=? AND (r.output_block_id IN (SELECT block_id FROM placements WHERE brane_id=?) OR r.status IN ('queued','claimed','running','cancel_requested') OR r.id IN (SELECT id FROM runs WHERE brane_id=? ORDER BY created_at DESC,id DESC LIMIT 100)) ORDER BY r.created_at,r.id",
+        "plan": [
+          "SEARCH r USING INDEX runs_brane (brane_id=?)",
+          "LIST SUBQUERY 1",
+          "SEARCH placements USING COVERING INDEX placements_brane_block (brane_id=?)",
+          "CREATE BLOOM FILTER",
+          "LIST SUBQUERY 2",
+          "SEARCH runs USING INDEX runs_brane (brane_id=?)",
+          "USE TEMP B-TREE FOR LAST TERM OF ORDER BY",
+          "SEARCH c USING INDEX sqlite_autoindex_run_checkpoints_1 (run_id=?) LEFT-JOIN",
+          "USE TEMP B-TREE FOR LAST TERM OF ORDER BY"
+        ]
+      },
+      {
+        "sql": "\n    SELECT i.run_id runId, v.block_id sourceBlockId, i.revision_id sourceRevisionId,\n      r.output_block_id outputBlockId, i.position,\n      l.anchor_placement_id anchorPlacementId, l.output_placement_id outputPlacementId\n    FROM run_inputs i JOIN block_revisions v ON v.id=i.revision_id\n    JOIN runs r ON r.id=i.run_id LEFT JOIN run_placements l ON l.run_id=r.id\n    WHERE i.kind='source' AND r.owner_id=? AND r.output_block_id IN (\n      SELECT block_id FROM placements WHERE brane_id=?\n    ) ORDER BY r.created_at,i.position\n  ",
+        "plan": [
+          "SEARCH r USING INDEX runs_owner (owner_id=?)",
+          "LIST SUBQUERY 1",
+          "SEARCH placements USING COVERING INDEX placements_brane_block (brane_id=?)",
+          "CREATE BLOOM FILTER",
+          "SEARCH i USING INDEX sqlite_autoindex_run_inputs_1 (run_id=?)",
+          "SEARCH v USING INDEX sqlite_autoindex_block_revisions_1 (id=?)",
+          "SEARCH l USING INDEX sqlite_autoindex_run_placements_1 (run_id=?) LEFT-JOIN",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      {
+        "sql": "SELECT * FROM blocks WHERE id=? AND owner_id=?",
+        "plan": ["SEARCH blocks USING INDEX sqlite_autoindex_blocks_1 (id=?)"]
+      },
+      {
+        "sql": "SELECT id,block_id,content_json,created_at FROM block_revisions WHERE block_id=? ORDER BY created_at DESC,id DESC LIMIT ?",
+        "plan": ["SEARCH block_revisions USING INDEX revisions_history (block_id=?)"]
+      },
+      {
+        "sql": "SELECT created_at,id FROM block_revisions WHERE block_id=? AND id=?",
+        "plan": ["SEARCH block_revisions USING INDEX sqlite_autoindex_block_revisions_1 (id=?)"]
+      },
+      {
+        "sql": "SELECT id,block_id,content_json,created_at FROM block_revisions WHERE block_id=? AND (created_at,id)<(?,?) ORDER BY created_at DESC,id DESC LIMIT ?",
+        "plan": [
+          "SEARCH block_revisions USING INDEX revisions_history (block_id=? AND (created_at,id)<(?,?))"
+        ]
+      }
+    ]
+  }
+}

@@ -10,10 +10,11 @@ import { openDatabase } from '../server/db/index.js';
 import { createAuth } from '../server/auth/index.js';
 import { createBrane, createBlock, revisions, uid } from '../server/services/content.js';
 import { submitRun } from '../server/services/runs.js';
+import { databaseFootprint, explainHistoryReads, seedHistory } from './fixtures/history.js';
 const output = process.argv[2];
 if (!output)
   throw new Error(
-    'Usage: node --import tsx scripts/capacity.ts /report.json [queue-size] [text-characters] [max-output-tokens]',
+    'Usage: node --import tsx scripts/capacity.ts /report.json [queue-size] [text-characters] [max-output-tokens] [history]',
   );
 const queueLimit = Number(process.argv[3] ?? 8),
   chars = Number(process.argv[4] ?? 2048);
@@ -50,6 +51,9 @@ const cookie = signed.headers
   .map((s) => s.split(';')[0])
   .join('; ');
 const brane = createBrane(db, actor);
+if (process.argv[6] && process.argv[6] !== 'history') throw new Error('Unknown fixture mode');
+const history =
+  process.argv[6] === 'history' ? await seedHistory(db, actor, brane.id, chars) : undefined;
 db.transaction(() => {
   for (let i = 0; i < MAX_BRANE_PLACEMENTS; i++)
     createBlock(db, actor, 'text', { format: 'text', text: 'x'.repeat(chars) }, brane.id);
@@ -176,15 +180,43 @@ try {
   const percentile = (values: number[], p: number) =>
     [...values].sort((a, b) => a - b)[Math.max(0, Math.ceil(values.length * p) - 1)] ?? 0;
   const waits = (
-    db.prepare('SELECT started_at-created_at wait FROM runs').all() as { wait: number }[]
+    db.prepare('SELECT started_at-created_at wait FROM runs WHERE owner_id<>?').all(actor) as {
+      wait: number;
+    }[]
   ).map((r) => r.wait);
   const durations = (
-    db.prepare('SELECT finished_at-started_at duration FROM runs').all() as { duration: number }[]
+    db.prepare('SELECT finished_at-started_at duration FROM runs WHERE owner_id<>?').all(actor) as {
+      duration: number;
+    }[]
   ).map((r) => r.duration);
-  const outcomes = db.prepare('SELECT status,count(*) count FROM runs GROUP BY status').all() as {
+  const outcomes = db
+    .prepare('SELECT status,count(*) count FROM runs WHERE owner_id<>? GROUP BY status')
+    .all(actor) as {
     status: string;
     count: number;
   }[];
+  const historyLatency: number[] = [];
+  const historyBytes: number[] = [];
+  if (history) {
+    for (let request = 0; request < 20; request++) {
+      const start = performance.now();
+      const response = await fetch(`${origin}/api/blocks/${history.historyBlockId}/revisions`, {
+        headers: { cookie },
+        signal: AbortSignal.timeout(30000),
+      });
+      const body = await response.text();
+      historyLatency.push(performance.now() - start);
+      historyBytes.push(Buffer.byteLength(body));
+      const page = JSON.parse(body);
+      if (
+        !response.ok ||
+        page.items.length !== 25 ||
+        !page.nextCursor ||
+        page.items.some((item: object) => 'content_json' in item)
+      )
+        throw new Error('History page contract failed');
+    }
+  }
   const report = {
     time: new Date().toISOString(),
     environment: {
@@ -222,6 +254,19 @@ try {
       queueWaitMaxMs: Math.max(...waits),
       durationP95Ms: percentile(durations, 0.95),
     },
+    history: history
+      ? {
+          ...history,
+          firstPageHttp: {
+            requests: historyLatency.length,
+            p50Ms: percentile(historyLatency, 0.5),
+            p95Ms: percentile(historyLatency, 0.95),
+            responseBytes: Math.max(...historyBytes),
+          },
+          finalDatabase: databaseFootprint(db),
+          queryPlans: explainHistoryReads(path, actor, brane.id, history.historyBlockId),
+        }
+      : undefined,
   };
   writeFileSync(resolve(output), JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report, null, 2));

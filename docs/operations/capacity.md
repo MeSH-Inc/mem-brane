@@ -54,3 +54,7 @@ Raw reports are checked in beside this document as `capacity-*.json`.
 Next capacity work should repeat this exact fixture on the intended production
 host and add a sustained mixed workload with uploads and imported pages. Revisit
 limits only after comparing p95/p99 latency, sampled RSS, queue wait and disk headroom.
+
+The [data-efficiency follow-up](data-efficiency.md) adds unchanged snapshot reuse,
+long conversation chains, removed historical outputs and paginated revision reads
+to this fixture, with current measurements and query plans.
