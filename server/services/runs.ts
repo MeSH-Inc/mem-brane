@@ -16,10 +16,17 @@ export function readInputs(db: DB, runId: string): RunInput[] {
   return (
     db
       .prepare(
-        'SELECT i.*,r.content_json FROM run_inputs i JOIN block_revisions r ON r.id=i.revision_id WHERE run_id=? ORDER BY position',
+        'SELECT i.position,i.kind,i.label,i.role,i.revision_id,r.content_json FROM run_inputs i JOIN block_revisions r ON r.id=i.revision_id WHERE run_id=? ORDER BY position',
       )
       .all(runId) as any[]
-  ).map((i) => ({ ...i, content: JSON.parse(i.content_json) }));
+  ).map((i) => ({
+    position: i.position,
+    kind: i.kind,
+    label: i.label,
+    role: i.role,
+    revision_id: i.revision_id,
+    content: JSON.parse(i.content_json),
+  }));
 }
 export function readLineage(db: DB, actor: string, messageId: string): any[] {
   const result: any[] = [];

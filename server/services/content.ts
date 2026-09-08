@@ -13,7 +13,12 @@ import type {
   Revision,
   Placement,
   Geometry,
+  BraneState,
+  Block,
+  Run,
+  Derivation,
 } from '../../shared/types/domain.js';
+import type { RevisionPage } from '../../shared/types/history.js';
 import { canEditBrane, canReadBrane, DomainError, requireOwned } from '../domain/access.js';
 export const uid = () => randomUUID();
 export const now = () => Date.now();
@@ -167,6 +172,48 @@ function revisionDto(row: RevisionRow): Revision {
     created_at: row.created_at,
   };
 }
+export function readRevision(db: DB, actor: string, id: string): Revision {
+  const row = db
+    .prepare('SELECT id,block_id,content_json,created_at FROM block_revisions WHERE id=?')
+    .get(id) as RevisionRow | undefined;
+  if (!row) throw new DomainError(404, 'Revision not found');
+  requireOwned(db, 'blocks', actor, row.block_id);
+  return revisionDto(row);
+}
+export function readRevisionPage(
+  db: DB,
+  actor: string,
+  blockId: string,
+  limit = 25,
+  cursor?: string,
+): RevisionPage {
+  requireOwned(db, 'blocks', actor, blockId);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50)
+    throw new DomainError(400, 'Revision page limit must be 1..50');
+  const anchor = cursor
+    ? (db
+        .prepare('SELECT created_at,id FROM block_revisions WHERE block_id=? AND id=?')
+        .get(blockId, cursor) as { created_at: number; id: string } | undefined)
+    : undefined;
+  if (cursor && !anchor) throw new DomainError(400, 'Invalid revision cursor');
+  const rows = (
+    anchor
+      ? db
+          .prepare(
+            'SELECT id,block_id,content_json,created_at FROM block_revisions WHERE block_id=? AND (created_at,id)<(?,?) ORDER BY created_at DESC,id DESC LIMIT ?',
+          )
+          .all(blockId, anchor.created_at, anchor.id, limit + 1)
+      : db
+          .prepare(
+            'SELECT id,block_id,content_json,created_at FROM block_revisions WHERE block_id=? ORDER BY created_at DESC,id DESC LIMIT ?',
+          )
+          .all(blockId, limit + 1)
+  ) as RevisionRow[];
+  return {
+    items: rows.slice(0, limit).map(revisionDto),
+    nextCursor: rows.length > limit ? rows[limit - 1].id : null,
+  };
+}
 export function getPlacement(db: DB, actor: string, id: string): Placement {
   const placement = db.prepare('SELECT * FROM placements WHERE id=?').get(id) as
     Placement | undefined;
@@ -201,18 +248,32 @@ export function removePlacement(db: DB, actor: string, id: string) {
   canEditBrane(db, actor, p.brane_id);
   db.prepare('DELETE FROM placements WHERE id=?').run(id);
 }
-export function readBrane(db: DB, actor: string, id: string) {
-  const brane = canReadBrane(db, actor, id);
+export function readBrane(db: DB, actor: string, id: string): BraneState {
+  const owned = canReadBrane(db, actor, id);
+  const brane = {
+    id: owned.id,
+    title: owned.title,
+    created_at: owned.created_at,
+    updated_at: owned.updated_at,
+  };
   const placements = db
-    .prepare('SELECT * FROM placements WHERE brane_id=? ORDER BY z_index,updated_at')
-    .all(id);
+    .prepare(
+      'SELECT id,brane_id,block_id,x,y,width,height,z_index,version FROM placements WHERE brane_id=? ORDER BY z_index,updated_at',
+    )
+    .all(id) as Placement[];
   const blocks = (
     db
       .prepare(
-        `SELECT DISTINCT b.*, l.content_json, l.version, v.content_json final_content, o.message_id FROM blocks b JOIN placements p ON p.block_id=b.id LEFT JOIN block_live_state l ON l.block_id=b.id LEFT JOIN block_revisions v ON v.block_id=b.id AND b.origin='generated' LEFT JOIN run_outputs o ON o.revision_id=v.id WHERE p.brane_id=?`,
+        `SELECT b.id,b.kind,b.origin,l.content_json,l.version,v.content_json final_content,o.message_id
+        FROM blocks b LEFT JOIN block_live_state l ON l.block_id=b.id
+        LEFT JOIN runs r ON r.output_block_id=b.id
+        LEFT JOIN run_outputs o ON o.run_id=r.id
+        LEFT JOIN block_revisions v ON v.id=o.revision_id
+        WHERE b.id IN (SELECT block_id FROM placements WHERE brane_id=?)
+        ORDER BY b.created_at,b.id`,
       )
       .all(id) as any[]
-  ).map((b) => {
+  ).map((b): Block => {
     return {
       id: b.id,
       kind: b.kind,
@@ -224,9 +285,9 @@ export function readBrane(db: DB, actor: string, id: string) {
   });
   const runs = db
     .prepare(
-      "SELECT r.*,COALESCE(c.text,'') partial FROM runs r LEFT JOIN run_checkpoints c ON c.run_id=r.id WHERE r.brane_id=? AND (r.output_block_id IN (SELECT block_id FROM placements WHERE brane_id=?) OR r.status IN ('queued','claimed','running','cancel_requested') OR r.id IN (SELECT id FROM runs WHERE brane_id=? ORDER BY created_at DESC LIMIT 100)) ORDER BY r.created_at",
+      "SELECT r.id,r.brane_id,r.status,r.model,r.provider,r.output_block_id,COALESCE(c.text,'') partial,r.error,r.usage_json,r.retry_of,r.created_at FROM runs r LEFT JOIN run_checkpoints c ON c.run_id=r.id AND r.status!='completed' WHERE r.brane_id=? AND (r.output_block_id IN (SELECT block_id FROM placements WHERE brane_id=?) OR r.status IN ('queued','claimed','running','cancel_requested') OR r.id IN (SELECT id FROM runs WHERE brane_id=? ORDER BY created_at DESC,id DESC LIMIT 100)) ORDER BY r.created_at,r.id",
     )
-    .all(id, id, id);
+    .all(id, id, id) as Run[];
   const derivations = db
     .prepare(
       `
@@ -235,11 +296,11 @@ export function readBrane(db: DB, actor: string, id: string) {
       l.anchor_placement_id anchorPlacementId, l.output_placement_id outputPlacementId
     FROM run_inputs i JOIN block_revisions v ON v.id=i.revision_id
     JOIN runs r ON r.id=i.run_id LEFT JOIN run_placements l ON l.run_id=r.id
-    WHERE i.kind='source' AND r.owner_id=? AND EXISTS (
-      SELECT 1 FROM placements p WHERE p.brane_id=? AND p.block_id=r.output_block_id
+    WHERE i.kind='source' AND r.owner_id=? AND r.output_block_id IN (
+      SELECT block_id FROM placements WHERE brane_id=?
     ) ORDER BY r.created_at,i.position
   `,
     )
-    .all(actor, id);
+    .all(actor, id) as Derivation[];
   return { brane, placements, blocks, runs, derivations };
 }

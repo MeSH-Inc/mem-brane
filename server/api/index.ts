@@ -25,6 +25,8 @@ import {
   getPlacement,
   removePlacement,
   revisions,
+  readRevision,
+  readRevisionPage,
   now,
   uid,
 } from '../services/content.js';
@@ -132,14 +134,11 @@ export function createApi(
     c.json(updateBlockLiveState(db, c.get('actor'), edit.parse(await c.req.json()))),
   );
   app.get('/blocks/:id/revisions', (c) => {
-    const blockId = id.parse(c.req.param('id'));
-    requireOwned(db, 'blocks', c.get('actor'), blockId);
+    const query = z
+      .object({ limit: z.coerce.number().int().min(1).max(50).default(25), cursor: id.optional() })
+      .parse(c.req.query());
     return c.json(
-      (
-        db
-          .prepare('SELECT * FROM block_revisions WHERE block_id=? ORDER BY created_at DESC')
-          .all(blockId) as any[]
-      ).map((r) => ({ ...r, content: JSON.parse(r.content_json) })),
+      readRevisionPage(db, c.get('actor'), id.parse(c.req.param('id')), query.limit, query.cursor),
     );
   });
   app.get('/operations', (c) =>
@@ -154,14 +153,9 @@ export function createApi(
   app.post('/blocks/:id/snapshot', (c) =>
     c.json(revisions(db).snapshotBlock(c.get('actor'), id.parse(c.req.param('id'))), 201),
   );
-  app.get('/revisions/:id', (c) => {
-    const row = db
-      .prepare('SELECT * FROM block_revisions WHERE id=?')
-      .get(id.parse(c.req.param('id'))) as any;
-    if (!row) throw new DomainError(404, 'Revision not found');
-    requireOwned(db, 'blocks', c.get('actor'), row.block_id);
-    return c.json({ ...row, content: JSON.parse(row.content_json) });
-  });
+  app.get('/revisions/:id', (c) =>
+    c.json(readRevision(db, c.get('actor'), id.parse(c.req.param('id')))),
+  );
   app.post('/placements', async (c) => {
     const body = z
       .object({ braneId: id, blockId: id, geometry: geometry.optional() })

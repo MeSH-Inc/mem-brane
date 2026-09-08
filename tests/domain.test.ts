@@ -88,9 +88,7 @@ describe('immutable content boundary', () => {
     );
     cancelRun(db, actor, first.id);
     const retried = retryRun(db, actor, first.id, uid(), limits);
-    expect(readInputs(db, retried.id)).toEqual(
-      readInputs(db, first.id).map((i) => ({ ...i, run_id: retried.id })),
-    );
+    expect(readInputs(db, retried.id)).toEqual(readInputs(db, first.id));
   });
   it('rolls back a new snapshot and earlier edits when a later source cannot be frozen', () => {
     const unavailable = submit().output_block_id;

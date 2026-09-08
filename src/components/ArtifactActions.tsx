@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Block, Brane, Placement, Revision, Geometry } from '../../shared/types/domain';
+import type { RevisionPage } from '../../shared/types/history';
 import { api } from '../services/api';
 export function ArtifactActions({
   block,
@@ -21,12 +22,38 @@ export function ArtifactActions({
     [history, setHistory] = useState<Revision[]>([]),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
-  const load = () => api<Revision[]>(`/blocks/${block.id}/revisions`).then(setHistory);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const historyRequest = useRef(0);
+  const activeBlock = useRef(block.id);
+  activeBlock.current = block.id;
+  const load = async (cursor?: string) => {
+    if (block.id !== activeBlock.current) return;
+    const request = ++historyRequest.current;
+    setLoading(true);
+    try {
+      const page = await api<RevisionPage>(
+        `/blocks/${block.id}/revisions${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+      );
+      if (request !== historyRequest.current) return;
+      setHistory((previous) => (cursor ? [...previous, ...page.items] : page.items));
+      setNextCursor(page.nextCursor);
+    } catch (error) {
+      if (request === historyRequest.current) throw error;
+    } finally {
+      if (request === historyRequest.current) setLoading(false);
+    }
+  };
   useEffect(() => {
+    setHistory([]);
+    setNextCursor(null);
     void api<Brane[]>('/branes')
       .then(setBranes)
       .catch((e) => setError(e.message));
     void load().catch((e) => setError(e.message));
+    return () => {
+      historyRequest.current++;
+    };
   }, [block.id]);
   async function action(work: () => Promise<unknown>, message: string) {
     try {
@@ -112,7 +139,10 @@ export function ArtifactActions({
         ))}
       </details>
       <details>
-        <summary>Saved snapshots ({history.length})</summary>
+        <summary>
+          Saved snapshots ({history.length}
+          {nextCursor ? '+' : ''})
+        </summary>
         {history.map((r) => (
           <details key={r.id}>
             <summary>{new Date(r.created_at).toLocaleString()}</summary>
@@ -127,6 +157,15 @@ export function ArtifactActions({
             )}
           </details>
         ))}
+        {nextCursor && (
+          <button
+            disabled={loading}
+            onClick={() => void load(nextCursor).catch((e) => setError(e.message))}
+          >
+            Load older snapshots
+          </button>
+        )}
+        {loading && <p role="status">Loading snapshots…</p>}
       </details>
     </section>
   );

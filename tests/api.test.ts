@@ -5,7 +5,13 @@ import { createAuth } from '../server/auth/index';
 import { createApi } from '../server/api/index';
 import { EventHub } from '../server/sse/hub';
 import type { AssetStore } from '../server/storage/assets';
-import { createBrane, createTextBlock, uid } from '../server/services/content';
+import {
+  createBrane,
+  createTextBlock,
+  revisions,
+  updateBlockLiveState,
+  uid,
+} from '../server/services/content';
 let db: DB, app: Hono, actor: string, cookie: string, hub: EventHub;
 const stored = new Map<string, Uint8Array>();
 const memoryStore: AssetStore = {
@@ -84,6 +90,7 @@ it('exposes brane and run domain operations with frozen context inspection', asy
   const inspect = await app.request(`/api/runs/${run.id}`, { headers: headers() });
   const inspected = await inspect.json();
   expect(inspected.inputs[0].content.text).toBe('Frozen from API');
+  expect(inspected.inputs[0]).not.toHaveProperty('content_json');
   const reload = await app.request(`/api/branes/${brane.id}`, { headers: headers() });
   expect((await reload.json()).runs[0].id).toBe(run.id);
 });
@@ -203,7 +210,7 @@ it('explicit snapshots and placement reuse/removal remain domain operations', as
   });
   expect(snapshot.status).toBe(201);
   const history = await app.request(`/api/blocks/${block.id}/revisions`, { headers: headers() });
-  expect(await history.json()).toHaveLength(1);
+  expect(await history.json()).toMatchObject({ items: [{ block_id: block.id }], nextCursor: null });
   const placement = await app.request('/api/placements', {
     method: 'POST',
     headers: headers(),
@@ -216,6 +223,39 @@ it('explicit snapshots and placement reuse/removal remain domain operations', as
   expect(
     (await app.request(`/api/blocks/${block.id}/revisions`, { headers: headers() })).status,
   ).toBe(200);
+});
+it('paginates immutable revision history and rejects invalid or foreign cursors', async () => {
+  const brane = createBrane(db, actor);
+  const block = createTextBlock(db, actor, brane.id);
+  for (let version = 0; version < 4; version++) {
+    updateBlockLiveState(db, actor, { blockId: block.id, text: `Version ${version}`, version });
+    revisions(db).snapshotBlock(actor, block.id);
+  }
+  const read = (query = '') =>
+    app.request(`/api/blocks/${block.id}/revisions${query}`, { headers: headers() });
+  const first = await (await read('?limit=2')).json();
+  expect(first.items).toHaveLength(2);
+  expect(first.nextCursor).toBe(first.items[1].id);
+  expect(first.items[0]).not.toHaveProperty('content_json');
+  const second = await (await read(`?limit=2&cursor=${first.nextCursor}`)).json();
+  expect(second.items).toHaveLength(2);
+  expect(second.nextCursor).toBeNull();
+  expect(new Set([...first.items, ...second.items].map((r) => r.id)).size).toBe(4);
+  const detail = await (
+    await app.request(`/api/revisions/${first.items[0].id}`, { headers: headers() })
+  ).json();
+  expect(detail).toEqual(first.items[0]);
+  for (const query of [
+    '?limit=0',
+    '?limit=51',
+    '?limit=1.5',
+    '?cursor=invalid',
+    `?cursor=${uid()}`,
+  ])
+    expect((await read(query)).status).toBe(400);
+  const foreign = revisions(db).snapshotBlock(actor, createTextBlock(db, actor, brane.id).id);
+  expect((await read(`?cursor=${foreign.id}`)).status).toBe(400);
+  expect((await app.request(`/api/blocks/${block.id}/revisions`)).status).toBe(401);
 });
 
 it('versions geometry and rejects stale or unversioned placement writes', async () => {
