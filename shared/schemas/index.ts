@@ -53,6 +53,27 @@ export const importIntent = z
   })
   .strict();
 
+export const pdfRepresentation = z.discriminatedUnion('status', [
+  z
+    .object({
+      kind: z.literal('pdf-text-v1'),
+      extractor: z.string(),
+      status: z.literal('ready'),
+      pages: z
+        .array(z.object({ number: z.number().int().positive(), text: z.string().max(20000) }))
+        .min(1)
+        .max(100),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('pdf-text-v1'),
+      extractor: z.string(),
+      status: z.literal('unavailable'),
+      reason: z.string(),
+    })
+    .strict(),
+]);
 export const content = z.discriminatedUnion('format', [
   z.object({ format: z.literal('text'), text: z.string() }).strict(),
   z
@@ -78,4 +99,23 @@ export const content = z.discriminatedUnion('format', [
       representation: z.literal('original-image-v1'),
     })
     .strict(),
+  z
+    .object({
+      format: z.literal('pdf'),
+      text: z.string(),
+      filename: z.string(),
+      assetId: id,
+      assetHash: z.string().regex(/^[a-f0-9]{64}$/),
+      mimeType: z.literal('application/pdf'),
+      pageCount: z.number().int().positive(),
+      representation: pdfRepresentation,
+    })
+    .strict()
+    .refine(
+      (content) =>
+        content.representation.status !== 'ready' ||
+        (content.representation.pages.length === content.pageCount &&
+          content.representation.pages.every((page, i) => page.number === i + 1)),
+      'PDF pages must be complete and ordered',
+    ),
 ]);

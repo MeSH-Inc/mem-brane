@@ -153,3 +153,9 @@ it('rejects malformed, empty, executable and over-pixel-limit images before stor
     'match',
   );
 });
+
+it('requires a still-image representation for animated model context', async () => {
+  const { modelCompatibility } = await import('../shared/representations');
+  const result: any = await createImports(db, store).import(actor, intent(), file());
+  expect(modelCompatibility({ ...result.content, frames: 2 })).toContain('still image');
+});

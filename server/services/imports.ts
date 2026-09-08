@@ -7,6 +7,7 @@ import { canEditBrane, DomainError } from '../domain/access.js';
 import { config } from '../app/config.js';
 import { reserveUpload } from './capacity.js';
 import { createBlock, now, uid } from './content.js';
+import { inspectPdf } from '../ingestion/pdf.js';
 import { inspectImage } from '../ingestion/image.js';
 
 interface Operation {
@@ -52,17 +53,17 @@ export function createImports(db: DB, store: AssetStore) {
       }
       if (active.size >= 4) throw new DomainError(429, 'Import capacity reached; retry shortly');
       const work = async () => {
-        const metadata = await inspectImage(bytes);
         const assetId = existing?.asset_id ?? uid();
-        const content: Content = {
-          format: 'image',
-          text: filename,
-          filename,
-          assetId,
-          assetHash,
-          ...metadata,
-          representation: 'original-image-v1',
-        };
+        const base = { text: filename, filename, assetId, assetHash };
+        const content: Content =
+          Buffer.from(bytes.subarray(0, 5)).toString('ascii') === '%PDF-'
+            ? { ...base, format: 'pdf', mimeType: 'application/pdf', ...(await inspectPdf(bytes)) }
+            : {
+                ...base,
+                format: 'image',
+                ...(await inspectImage(bytes)),
+                representation: 'original-image-v1',
+              };
         db.transaction(() => {
           if (!db.prepare('SELECT 1 FROM upload_intents WHERE id=?').get(assetId))
             reserveUpload(db, actor, assetId, bytes.length, {

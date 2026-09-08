@@ -1,3 +1,5 @@
+import { modelCompatibility } from '../../shared/representations';
+import { PdfContent } from '../components/PdfContent';
 import { imports } from '../services/imports';
 import { acceptedFiles, pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapters';
 import { ImportTray } from '../components/ImportTray';
@@ -109,6 +111,12 @@ export function BraneView({
     setTool: useInteraction((s) => s.setTool),
     tool: useInteraction((s) => s.tool),
   };
+  const compatibilityError = ui.references
+    .map((id) => state?.blocks.find((block) => block.id === id))
+    .flatMap((block) =>
+      block ? [modelCompatibility(block.content, vision[model]?.vision ?? false)] : [],
+    )
+    .find(Boolean);
   const selectedBlocks = selectedBlockIds(state?.placements ?? [], ui.selectedPlacements);
   const navigate = useNavigate();
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -489,7 +497,7 @@ export function BraneView({
     [braneId, model, refresh, mobile, focusBlock],
   );
   async function run() {
-    if (busy || pendingAttachments) return;
+    if (busy || pendingAttachments || compatibilityError) return;
     setBusy(true);
     setError('');
     try {
@@ -673,7 +681,7 @@ export function BraneView({
                 fileInput.current?.click();
               }}
             >
-              ▧ Image
+              ▧ Image / PDF
             </button>
             <button onClick={() => setWebOpen(!webOpen)}>↗ Webpage</button>
             {selectedBlocks.length > 0 && (
@@ -892,6 +900,7 @@ export function BraneView({
                 disabled={
                   busy ||
                   pendingAttachments ||
+                  !!compatibilityError ||
                   (submission.state.status !== 'uncertain' && !prompt.trim())
                 }
                 onClick={() => void run()}
@@ -905,6 +914,11 @@ export function BraneView({
             </div>
             {pendingAttachments && (
               <small>Finish or dismiss failed attachments before running.</small>
+            )}
+            {compatibilityError && (
+              <p role="alert" className="error">
+                {compatibilityError}
+              </p>
             )}
             <div className="composer-meta">
               <label>
@@ -926,7 +940,11 @@ export function BraneView({
                   {(estimate.reservedMicrousd / 1e6).toFixed(6)} reserved
                 </span>
               )}
-              <span>{vision[model]?.vision ? 'Image context supported' : 'Text-only model'}</span>
+              <span>
+                {vision[model]?.vision
+                  ? 'Image + PDF text context'
+                  : 'Text-only model · PDF text supported'}
+              </span>
               <span className="save-notice" role="status">
                 {Object.keys(ui.drafts).length || placementSaves.hasPending()
                   ? 'Unsaved edits'
@@ -1089,7 +1107,10 @@ export function BraneView({
                     </summary>
                     <code>{input.revision_id}</code>
                     <pre>{input.content.text}</pre>
-                    {input.content.assetId && (
+                    {input.content.format === 'pdf' && (
+                      <PdfContent content={input.content} showProvenance />
+                    )}
+                    {input.content.format === 'image' && (
                       <>
                         <img
                           className="context-image"

@@ -55,9 +55,11 @@ function Card({ id, data, selected }: NodeProps<CardNode>) {
             ? 'Response'
             : data.block.kind === 'webpage'
               ? 'Web clipping'
-              : data.block.kind === 'image'
-                ? 'Image'
-                : 'Thought'}
+              : data.block.kind === 'pdf'
+                ? 'PDF'
+                : data.block.kind === 'image'
+                  ? 'Image'
+                  : 'Thought'}
         </span>
         <span className="card-status">{data.status}</span>
         <button

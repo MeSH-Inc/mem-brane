@@ -1,3 +1,4 @@
+import { PdfContent } from './PdfContent';
 import { MAX_BLOCK_TEXT_CHARACTERS } from '../../shared/limits';
 import { useEffect, useRef } from 'react';
 import type { Block } from '../../shared/types/domain';
@@ -31,6 +32,7 @@ export function BlockContent({
     frame = requestAnimationFrame(focus);
     return () => cancelAnimationFrame(frame);
   }, [autoFocus]);
+  if (block.content.format === 'pdf') return <PdfContent content={block.content} />;
   if (block.kind === 'image')
     return (
       <figure className="image-content">

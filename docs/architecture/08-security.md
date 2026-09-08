@@ -4,7 +4,7 @@ Better Auth uses SQLite sessions and password authentication. Production serves 
 
 Centralized access helpers authorize read/edit/run on a brane and block/run/asset access. V1 uses owner checks inside this boundary only. Future brane membership and roles replace policy internals; userId is not permanently the only ownership model. Cross-brane reuse is permitted only after authorizing both records.
 
-Uploads accept validated image signatures with configured byte limits, store opaque generated keys, and require authentication for reads. Disallow SVG/HTML active content. R2 credentials never reach the client. Signed links should be short-lived if used; v1 proxies reads through authorization.
+Uploads enforce configured byte limits, fully decode supported raster images, and parse PDFs in a disposable worker with a deadline and heap budget. They store opaque generated keys and require authentication for reads. Original PDFs are served as downloads; extracted text is rendered as text. Disallow SVG/HTML active content. R2 credentials never reach the client. Signed links should be short-lived if used; v1 proxies reads through authorization.
 
 Web ingestion validates HTTP(S), credentials, hostname and every redirect. Resolve and reject private/internal/reserved IPv4 and IPv6 addresses; pin the validated DNS address to prevent rebinding. Enforce redirect count, timeout and streamed byte limits. No headless browser. Plain extracted text is rendered as text, never injected HTML. Manual paste remains available on fetch failure.
 

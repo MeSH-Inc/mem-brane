@@ -19,7 +19,7 @@ export function reserveUpload(
       )
       .get(actor) as { total: number; actor: number };
     if (usage.total + size > limits.totalBytes || usage.actor + size > limits.userBytes)
-      throw new DomainError(429, 'Image storage capacity reached');
+      throw new DomainError(429, 'Artifact storage capacity reached');
     db.prepare('INSERT INTO upload_intents VALUES (?,?,?,?)').run(id, actor, size, Date.now());
   }).immediate();
 }

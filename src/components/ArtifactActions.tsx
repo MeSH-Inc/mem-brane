@@ -1,3 +1,4 @@
+import { PdfContent } from './PdfContent';
 import { useEffect, useRef, useState } from 'react';
 import type { Block, Brane, Placement, Revision, Geometry } from '../../shared/types/domain';
 import type { RevisionPage } from '../../shared/types/history';
@@ -148,7 +149,8 @@ export function ArtifactActions({
             <summary>{new Date(r.created_at).toLocaleString()}</summary>
             <code>{r.id}</code>
             <pre>{r.content.text}</pre>
-            {r.content.assetId && (
+            {r.content.format === 'pdf' && <PdfContent content={r.content} showProvenance />}
+            {r.content.format === 'image' && (
               <img
                 className="context-image"
                 src={`/api/assets/${r.content.assetId}`}

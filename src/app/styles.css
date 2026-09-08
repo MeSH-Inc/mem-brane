@@ -1424,3 +1424,32 @@ a {
   outline: 2px solid #69735f;
   outline-offset: -2px;
 }
+.pdf-content {
+  padding: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font-size: 12px;
+}
+.pdf-content > strong,
+.pdf-content > small {
+  display: block;
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.pdf-content > a {
+  display: block;
+  margin-bottom: 10px;
+}
+.representation-notice {
+  color: #657057;
+  line-height: 1.5;
+}
+.pdf-page {
+  margin: 10px 0;
+}
+.pdf-page pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}

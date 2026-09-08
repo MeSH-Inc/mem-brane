@@ -1,6 +1,7 @@
+import { modelCompatibility } from '../../shared/representations.js';
 import type { DB } from '../db/index.js';
 import type { SubmitRun, RunInput } from '../../shared/types/domain.js';
-import { canRunOnBrane, requireOwned } from '../domain/access.js';
+import { canRunOnBrane, requireOwned, DomainError } from '../domain/access.js';
 import { readLineage } from './runs.js';
 import {
   budgetState,
@@ -65,6 +66,10 @@ export function estimateRun(
       price,
     ),
     budget = budgetState(db, actor, policy);
+  for (const input of inputs) {
+    const incompatible = modelCompatibility(input.content, price.vision);
+    if (incompatible) throw new DomainError(400, incompatible);
+  }
   return {
     estimatedInputTokens: tokens,
     reservedMicrousd,

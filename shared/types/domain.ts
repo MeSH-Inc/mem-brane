@@ -1,4 +1,4 @@
-export type BlockKind = 'text' | 'image' | 'webpage';
+export type BlockKind = 'text' | 'image' | 'webpage' | 'pdf';
 export type RunStatus =
   | 'queued'
   | 'claimed'
@@ -43,7 +43,27 @@ export interface ImageContent {
   status?: never;
   error?: never;
 }
-export type Content = TextContent | WebpageContent | ImageContent;
+export type PdfRepresentation = {
+  kind: 'pdf-text-v1';
+  extractor: string;
+} & (
+  | { status: 'ready'; pages: { number: number; text: string }[] }
+  | { status: 'unavailable'; reason: string }
+);
+export interface PdfContent {
+  format: 'pdf';
+  text: string;
+  filename: string;
+  assetId: string;
+  assetHash: string;
+  mimeType: 'application/pdf';
+  pageCount: number;
+  representation: PdfRepresentation;
+  url?: never;
+  status?: never;
+  error?: never;
+}
+export type Content = TextContent | WebpageContent | ImageContent | PdfContent;
 export interface Brane {
   id: string;
   title: string;

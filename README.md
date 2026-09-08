@@ -1,6 +1,6 @@
 # mem-brane
 
-A spatial workspace for thinking with artifacts and AI. Create a **brane**, arrange text, images and imported webpages, then develop an artifact or compose an exploration with explicit context. Generated artifacts retain the exact source revisions that produced them.
+A spatial workspace for thinking with artifacts and AI. Create a **brane**, arrange text, images, PDFs and imported webpages, then develop an artifact or compose an exploration with explicit context. Generated artifacts retain the exact source revisions that produced them.
 
 This is a greenfield, single-server application under active development. The default **mock** model streams deterministic text locally without provider credentials or model spend. Live OpenAI and R2 integrations are implemented, but have not been verified against live accounts.
 
@@ -36,6 +36,12 @@ Vite serves the browser on port 5173 and proxies `/api` to the Node server on po
 5. Use **Save brane** to flush pending text and placement edits and save the title. Background runs continue when you navigate away.
 
 The mock model exercises streaming and persistence but does not perform reasoning or image understanding.
+
+## Import images and PDFs
+
+Paste a screenshot, drop files onto the canvas, or use **Image / PDF**. The **+** button in the prompt attaches files as explicit context. Text paste keeps normal editor behavior. Pending imports show previews, survive navigation and can be recovered after reload; Retry reuses the original import identity.
+
+PNG, JPEG, GIF, WebP and PDF files are supported, up to 5 MiB by default. Original files are retained. PDFs expose extracted text by page and work as text context with every configured model. PDF images, diagrams and layout are not included; scanned PDFs need OCR, which is not yet supported. Documents beyond extraction limits remain downloadable without sending partial text. Animated images are stored but require a still image for model context.
 
 ## Canvas and Focus
 
@@ -195,7 +201,7 @@ Back up SQLite through the online backup script and back up image bytes separate
 
 ## Design references
 
-Start with [principles](docs/architecture/00-principles.md) and [invariants](docs/architecture/01-invariants.md). The architecture directory also covers [domain modeling](docs/architecture/02-domain-model.md), [snapshots](docs/architecture/03-snapshot-semantics.md), [run lifecycle](docs/architecture/04-run-lifecycle.md), [client state and save queues](docs/architecture/05-client-state.md), [future collaboration](docs/architecture/06-collaboration-migration.md), [costs](docs/architecture/07-cost-model.md), [security](docs/architecture/08-security.md), [non-goals](docs/architecture/09-non-goals.md), and [artifact derivation](docs/architecture/10-artifact-derivation.md).
+Start with [principles](docs/architecture/00-principles.md) and [invariants](docs/architecture/01-invariants.md). The architecture directory also covers [domain modeling](docs/architecture/02-domain-model.md), [snapshots](docs/architecture/03-snapshot-semantics.md), [run lifecycle](docs/architecture/04-run-lifecycle.md), [client state and save queues](docs/architecture/05-client-state.md), [future collaboration](docs/architecture/06-collaboration-migration.md), [costs](docs/architecture/07-cost-model.md), [security](docs/architecture/08-security.md), [non-goals](docs/architecture/09-non-goals.md), [artifact derivation](docs/architecture/10-artifact-derivation.md), and [artifact imports and representations](docs/architecture/11-artifact-imports.md).
 
 The [scaffold report](docs/scaffold-report.md) and [follow-up implementation notes](docs/follow-up-report.md) are historical implementation records. Use the current source, scripts and architecture documents for present behavior.
 

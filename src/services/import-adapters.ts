@@ -1,9 +1,10 @@
 import type { ClipboardEvent, DragEvent } from 'react';
 
-export const acceptedFiles = 'image/png,image/jpeg,image/gif,image/webp';
+export const acceptedFiles = 'image/png,image/jpeg,image/gif,image/webp,application/pdf';
 export function supportedFile(file: File) {
   return (
-    /^(image\/(png|jpeg|gif|webp))$/.test(file.type) || /\.(png|jpe?g|gif|webp)$/i.test(file.name)
+    /^(image\/(png|jpeg|gif|webp)|application\/pdf)$/.test(file.type) ||
+    /\.(png|jpe?g|gif|webp|pdf)$/i.test(file.name)
   );
 }
 export function transferFiles(transfer: DataTransfer): File[] {

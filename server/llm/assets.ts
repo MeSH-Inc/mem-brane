@@ -1,3 +1,4 @@
+import { modelCompatibility } from '../../shared/representations.js';
 import { createHash } from 'node:crypto';
 import type { DB } from '../db/index.js';
 import type { AssetStore } from '../storage/assets.js';
@@ -18,6 +19,8 @@ export async function resolveMessages(
   for (const [index, input] of inputs.entries()) {
     signal?.throwIfAborted();
     const content = input.content;
+    const incompatible = modelCompatibility(content);
+    if (incompatible) throw new DomainError(400, incompatible);
     if (!content.assetId) continue;
     const asset = requireOwned(db, 'assets', actor, content.assetId);
     if (!content.assetHash || !content.mimeType)
@@ -32,7 +35,8 @@ export async function resolveMessages(
       cache.set(content.assetId, bytes);
     }
     if (createHash('sha256').update(bytes).digest('hex') !== content.assetHash)
-      throw new DomainError(409, 'Stored image no longer matches its submitted revision');
+      throw new DomainError(409, 'Stored asset no longer matches its submitted revision');
+    if (content.format !== 'image') continue;
     const text = messages[index].content as string;
     messages[index] = {
       role: 'user',

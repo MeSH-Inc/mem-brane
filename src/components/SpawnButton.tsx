@@ -1,3 +1,4 @@
+import { modelCompatibility } from '../../shared/representations';
 import type { Block } from '../../shared/types/domain';
 export function SpawnButton({
   block,
@@ -10,10 +11,12 @@ export function SpawnButton({
   retry?: boolean;
   onSpawn: () => void;
 }) {
+  const incompatibility = modelCompatibility(block.content);
   const ready =
-    block.origin === 'generated'
+    !incompatibility &&
+    (block.origin === 'generated'
       ? Boolean(block.messageId)
-      : block.kind !== 'webpage' || block.content.status === 'ready';
+      : block.kind !== 'webpage' || block.content.status === 'ready');
   return (
     <button
       className="spawn-button"
@@ -21,7 +24,7 @@ export function SpawnButton({
       title={
         ready
           ? 'Generate a new artifact from this. Develops the selected artifact using the current model.'
-          : 'Wait for this artifact to finish before spawning.'
+          : (incompatibility ?? 'Wait for this artifact to finish before spawning.')
       }
       onClick={onSpawn}
     >

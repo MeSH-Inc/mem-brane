@@ -97,7 +97,7 @@ export function createApi(
       modelCapabilities: Object.fromEntries(
         config.models.map((m) => [
           m,
-          { vision: m === 'mock' || costPolicy.prices[m]?.vision === true },
+          { vision: m === 'mock' || costPolicy.prices[m]?.vision === true, pdfText: true },
         ]),
       ),
       budget: budgetState(db, c.get('actor'), costPolicy),
@@ -305,6 +305,8 @@ export function createApi(
   app.get('/assets/:id', async (c) => {
     const asset = requireOwned(db, 'assets', c.get('actor'), id.parse(c.req.param('id')));
     c.header('Content-Type', asset.mime);
+    if (asset.mime === 'application/pdf')
+      c.header('Content-Disposition', 'attachment; filename="document.pdf"');
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('Cache-Control', 'private, max-age=300');
     return c.body((await store.get(asset.storage_key)) as any);

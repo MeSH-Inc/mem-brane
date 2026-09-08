@@ -1,3 +1,4 @@
+import { modelCompatibility } from '../../shared/representations.js';
 import type { DB } from '../db/index.js';
 import type { RunInput } from '../../shared/types/domain.js';
 import { lifecycleLog } from '../app/logging.js';
@@ -42,7 +43,7 @@ export function estimatedInputTokens(inputs: RunInput[], price: ModelPrice) {
       n +
       Buffer.byteLength(JSON.stringify(message.content), 'utf8') +
       1024 +
-      (inputs[i].content.assetId ? price.imageTokenBound : 0),
+      (inputs[i].content.format === 'image' ? price.imageTokenBound : 0),
     1024,
   );
 }
@@ -88,8 +89,10 @@ export function reserveCost(
   policy?: CostPolicy,
 ) {
   const price = priceFor(model, policy);
-  if (inputs.some((i) => i.content.assetId) && !price.vision)
-    throw new DomainError(400, 'This model does not support image context');
+  for (const input of inputs) {
+    const incompatible = modelCompatibility(input.content, price.vision);
+    if (incompatible) throw new DomainError(400, incompatible);
+  }
   const input = estimatedInputTokens(inputs, price),
     amount = costMicro(input, outputLimit, price),
     time = Date.now(),
