@@ -1,0 +1,1 @@
+CREATE TRIGGER immutable_cost_estimate BEFORE UPDATE OF run_id,owner_id,budget_day,reserved_microusd,estimated_input_tokens,pricing_json,created_at ON run_costs BEGIN SELECT RAISE(ABORT,'immutable cost estimate'); END;

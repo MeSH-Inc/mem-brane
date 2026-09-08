@@ -1,0 +1,17 @@
+# Artifact derivation
+
+Spawn is a one-click command on every ready artifact, including generated artifacts. The initial action is Develop: answer explicit requests directly, otherwise expand the central idea into a concrete, self-contained text artifact. The server resolves the instruction and freezes it as the prompt revision. Model and action/version are recorded on the run. Spawn does not read the global composer or implicitly inherit conversation ancestors.
+
+Block kind describes content format (text, image, webpage); origin separately describes authored or generated content. Generated artifacts have no editable live state. Their checkpoints remain operational state until finalization produces an immutable revision. The origin migration converts legacy response blocks into generated text without changing existing revision IDs.
+
+POST /artifacts/spawn accepts braneId, key, ordered sourceBlockIds, anchorPlacementId, action=develop, model, and source edits with expected versions. The first source is primary; the remaining sources are additional derivation sources. Supporting context uses the existing reference input kind, distinct from source inputs and prompt instructions. The first UI slice submits a single source. Multi-source commands are supported by the service and schema.
+
+The existing submission transaction applies relevant edits, freezes sources, creates a generated child and placement, persists the run, and reserves cost. A failed check rolls back all of these. The client serializes Spawn with autosave so prior writes settle first and subsequent writes cannot race the freeze. Duplicate delivery returns the original run before applying any edits. A deliberate later spawn has a fresh key. Uncertain delivery retains the payload and key in the mounted client for Retry Spawn; this is transport resubmission, distinct from retrying a failed generation.
+
+Provenance is projected from source RunInputs joined through immutable revisions and the run's output block. Completed runs also bind the final output revision through RunOutput. No separate artifact-edge table duplicates these facts. Sources may have many children and children may have multiple sources. Newly allocated output identities ensure acyclic derivations.
+
+run_placements holds disposable UI anchors. It identifies the clicked source placement and child placement, while foreign keys become null if either placement is removed. The canvas selects a same-brane fallback instance when needed. Moving/replacing placements changes presentation, never frozen inputs or provenance. A child placed into another brane still exposes its derivation there, and gets a connector when its source is present too.
+
+The existing worker owns queuing, invocation, checkpoints, completion, cancellation, and interruptions. Incomplete outputs cannot be spawned. Retry creates another run and child, copying frozen inputs and model options rather than reading the edited source again. Source inputs use the same asset integrity and message-resolution path as supporting references.
+
+Verification covers atomic draft capture and rollback, duplicate submission and sibling placement, source authorization/readiness, multi-source order, recursive generation without inherited lineage, retry after edits, and placement-independent provenance. Browser verification uses the local mock model; no paid provider call is required.
