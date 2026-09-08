@@ -1,12 +1,16 @@
 # mem-brane
 
-A spatial thinking interface. Open a **brane**, drag on empty space to create a thought, add selected artifacts as explicit context, and run an exploration. **New brane** and **Save brane** are the product language; the domain type is `Brane`, SQL uses `branes`, and routes use `/b/:braneId`.
+A spatial workspace for thinking with artifacts and AI. Create a **brane**, arrange text, images and imported webpages, then develop an artifact or compose an exploration with explicit context. Generated artifacts retain the exact source revisions that produced them.
 
-## Run locally
+This is a greenfield, single-server application under active development. The default **mock** model streams deterministic text locally without provider credentials or model spend. Live OpenAI and R2 integrations are implemented, but have not been verified against live accounts.
 
-Requires Node.js 22.13+ (tested with Node 24), npm, and a platform supported by better-sqlite3. If a native prebuild is unavailable, install your platform's C/C++ build tools.
+## Quick start
+
+Use Node.js 22.13+ and npm. Local verification currently uses Node 24.13.1 and npm 11.18.0 on macOS. The SQLite dependency, `better-sqlite3`, needs a compatible native binary; if a prebuilt binary is unavailable, installation requires your platform's C/C++ build tools.
 
 ```sh
+git clone https://github.com/MeSH-Inc/mem-brane.git
+cd mem-brane
 npm ci
 cp .env.example .env
 npm run db:migrate
@@ -14,119 +18,183 @@ npm run db:seed
 npm run dev
 ```
 
-Open [localhost:5173](http://localhost:5173). The development seed creates `hello@mem-brane.local` with password `mem-brane-local-only`. Set `SEED_EMAIL` and `SEED_PASSWORD` to override, or create an account through the interface. Never seed production. Use `localhost`, matching `APP_ORIGIN`; if you prefer `127.0.0.1`, change `APP_ORIGIN` accordingly.
+Open [localhost:5173](http://localhost:5173). The optional development seed creates:
 
-The default model is **mock**: deterministic streaming, no provider credentials, and no model spend. To enable real invocation, configure `OPENAI_API_KEY`, add an OpenAI model ID to `MODEL_ALLOWLIST` alongside `mock`, and optionally change `MODEL_DEFAULT`. Limits are enforced on the server. Paid runs require a positive `DAILY_USER_SPEND_LIMIT` and operator-verified `MODEL_PRICING_JSON`; admission reserves a conservative usage bound atomically. A zero budget disables paid runs.
+- Email: `hello@mem-brane.local`
+- Password: `mem-brane-local-only`
+
+Set `SEED_EMAIL` and `SEED_PASSWORD` to override those credentials, or skip the seed and create an account in the interface. Never use the development seed for production.
+
+Vite serves the browser on port 5173 and proxies `/api` to the Node server on port 3001. Use `localhost` to match `APP_ORIGIN`. If you change the browser hostname, update that setting too. Run commands from the repository root: migrations, browser assets and default data paths resolve from the working directory.
+
+## First exploration
+
+1. Open the seeded brane or choose **New brane**.
+2. In Canvas, choose **Write** and drag empty space to create a thought. Type into its editor. In Focus, use the add controls instead.
+3. Choose **Spawn** on a ready artifact to develop it into a generated child. Spawn captures the source's current text and creates a new artifact with provenance; it does not read the global composer or inherit a conversation automatically.
+4. For a composed exploration, choose **Use as context**, order your references, write a prompt and submit. **Continue from here** explicitly selects a conversation's ancestor chain.
+5. Use **Save brane** to flush pending text and placement edits and save the title. Background runs continue when you navigate away.
+
+The mock model exercises streaming and persistence but does not perform reasoning or image understanding.
+
+## Canvas and Focus
+
+| Tool   | Primary drag                                    | Other behavior                                                                      |
+| ------ | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Write  | Create a thought on empty canvas                | Drag headers to move cards; resize selected cards                                   |
+| Pan    | Move the viewport, including from a card header | Editors and block actions remain interactive; card movement and resize are disabled |
+| Select | Select cards intersecting a marquee             | Shift-click toggles individual placements; drag a selected header to move the group |
+
+Middle/right mouse panning remains available across tools. Use Fit View to find offscreen cards. Editor text gestures do not move cards. Escape, tool changes, blur and pointer cancellation abort unfinished creation or marquee gestures; a cancelled marquee restores the previous selection.
+
+Selection belongs to placements: two instances of the same block can be selected independently. **Use as context** resolves that selection to unique blocks. Selection, proximity, movement and resizing never invoke a model or implicitly change context.
+
+Mobile defaults to **Focus**, with a full-width editor, horizontal block outline, tap-to-add, image picker and brane navigation. Canvas is an optional overview, with touch viewport panning. A focused link has the form `/b/:braneId?focus=:blockId&view=focus`.
+
+## Local verification and development
+
+Install Chromium once before running browser checks, and repeat after a Playwright update that requires a new browser binary:
 
 ```sh
-npm run dev:web       # Vite only
-npm run dev:server    # Hono + background workers only
-npm test             # invariant, security and authenticated API tests
-npm run typecheck
-npm run format:check
-npm run build        # browser bundle and Node server
-npm start            # serves dist + API from port 3001
+npx playwright install chromium
+npm run verify
 ```
 
-## Stack and structure
+On Linux, if browser system libraries are missing, use `npx playwright install --with-deps chromium` to install the browser and required system packages.
 
-React, TypeScript, Vite, React Flow, Zustand and TanStack Router in the browser. Hono on Node, Better Auth, better-sqlite3 in WAL mode, AI SDK Core, authenticated SSE, and filesystem or R2/S3-compatible image storage on the server. One process owns SQLite-backed background work. No Redis or distributed worker infrastructure.
+`npm run verify` stops at the first failure and runs, in order:
+
+1. Formatting checks.
+2. TypeScript checking and production builds for browser and server.
+3. Vitest unit and integration tests.
+4. Playwright browser tests in Chromium.
+
+The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests exercise the real route and canvas with intercepted APIs; they do not constitute a live-provider or full deployed-stack test.
+
+Development currently favors direct architectural improvements over compatibility scaffolding. Make focused, atomic commits directly to `main`, verify changes locally before committing, and run `npm run verify` before pushing. GitHub Actions is deferred until it provides a concrete benefit such as catching platform differences, shared verification across independent contributors, or repeatable release artifacts.
+
+| Command                | Purpose                                              |
+| ---------------------- | ---------------------------------------------------- |
+| `npm run dev`          | Browser, API and background workers in watch mode    |
+| `npm run dev:web`      | Vite only                                            |
+| `npm run dev:server`   | API and workers only                                 |
+| `npm run db:migrate`   | Apply pending SQLite migrations                      |
+| `npm run db:seed`      | Create the development account and initial brane     |
+| `npm test`             | Unit and integration tests                           |
+| `npm run test:browser` | Chromium interaction tests                           |
+| `npm run typecheck`    | TypeScript validation                                |
+| `npm run format`       | Format application code, tests and documentation     |
+| `npm run format:check` | Check formatting without writing                     |
+| `npm run build`        | Typecheck and build `dist/` and `dist-server/`       |
+| `npm run verify`       | Complete local pre-push checks                       |
+| `npm start`            | Serve the built browser, API and workers on loopback |
+
+## Configuration
+
+[.env.example](.env.example) lists defaults. Local data lives under ignored `data/`; dependencies, build outputs, browser test output and `.env` are also ignored.
+
+| Settings                                                               | Purpose                                                                          |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `PORT`, `APP_ORIGIN`                                                   | Server port and trusted browser origin                                           |
+| `BETTER_AUTH_SECRET`                                                   | Authentication secret; replace the example value for deployed use                |
+| `DATABASE_PATH`, `ASSET_DIRECTORY`                                     | SQLite database and local image bytes                                            |
+| `MODEL_ALLOWLIST`, `MODEL_DEFAULT`                                     | Comma-separated allowed models and selected default; default must be allowlisted |
+| `OPENAI_API_KEY`                                                       | Credentials for real OpenAI invocation                                           |
+| `DAILY_USER_SPEND_LIMIT`, `MODEL_PRICING_JSON`                         | Paid admission limit and verified model pricing/capabilities                     |
+| `WORKER_CONCURRENCY`, `USER_RUN_LIMIT`                                 | Global worker concurrency and per-user active-run limit                          |
+| `MAX_OUTPUT_TOKENS`, `MAX_CONTEXT_CHARACTERS`                          | Model output and context bounds                                                  |
+| `MAX_WEBPAGE_BYTES`, `MAX_UPLOAD_BYTES`                                | Import and image upload bounds                                                   |
+| `CHECKPOINT_INTERVAL_MS`, `CHECKPOINT_CHARACTERS`, `LEASE_MS`          | Streaming persistence and worker recovery timing                                 |
+| `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Optional S3-compatible object storage; absent endpoint selects local files       |
+
+To enable real models, supply `OPENAI_API_KEY`, add the model ID to `MODEL_ALLOWLIST`, configure its operator-verified entry in `MODEL_PRICING_JSON`, and set a positive `DAILY_USER_SPEND_LIMIT`. Optionally change `MODEL_DEFAULT`. A zero budget disables paid admission. Pricing entries include input/output token rates, vision capability, an image token bound, source URL and verification date; see [billing configuration](docs/deployment.md#billing-configuration-and-uncertain-requests).
+
+Paid admission atomically reserves a conservative usage bound. Recorded costs use frozen configured rates, not provider invoices. Interrupted or unmetered requests retain their reservations until explicit, audited reconciliation. Retrying never assumes the previous request was free.
+
+## Domain and persistence
+
+| Record        | Responsibility                                                         |
+| ------------- | ---------------------------------------------------------------------- |
+| Block         | Stable artifact identity, content kind and authored/generated origin   |
+| LiveState     | Current editable content for authored blocks, with version checks      |
+| BlockRevision | Immutable snapshot used by history and model inputs                    |
+| Placement     | One block instance on one brane, with independent geometry and version |
+| Run           | Execution state and an ordered set of frozen input revisions           |
+
+A block can have several placements, including across branes. Removing a placement leaves the block intact. Generated artifacts have no editable live state; streamed checkpoints become an immutable output revision only after successful completion.
+
+A run freezes context at submission. Pending source edits can be applied in the same transaction using expected versions. Workers assemble provider messages from those frozen inputs, so later edits and layout changes cannot alter the recorded request. Requests are reconstructable; real model output is not guaranteed deterministic.
+
+Spawn's **Develop** action answers explicit requests or expands an idea into a self-contained artifact. The current UI spawns from one source; the service supports ordered multiple sources. Derivation connectors project provenance from run inputs and outputs. They do not define a workflow or trigger downstream regeneration.
+
+React Flow nodes project domain records. Zustand owns transient selection, tools, text drafts and context composition. The canvas owns in-progress gesture geometry; a per-placement save queue serializes completed moves and coalesces waiting updates. Version conflicts preserve the newest local geometry and offer explicit retry or use-saved-placement actions. Delayed responses and older refreshes cannot overwrite newer acknowledged geometry.
+
+Text autosave uses version checks. IndexedDB retains recoverable drafts with their original server version, scoped by actor and block. Text conflict recovery offers server text or explicit overwrite. Placement intents are held in memory, with an unsaved-change warning; they are not durable across reloads. This is local recovery, not automatic merging or multiplayer collaboration.
+
+## Background work
+
+One server process runs SQLite-backed generation and webpage-import workers. Generation submission deduplicates per-user request keys, and workers claim queued runs atomically, maintain leases and checkpoint streamed text. Provider calls run outside database transactions.
+
+One authenticated browser SSE connection multiplexes updates. Reconnection reloads authoritative state, so final results survive missed events. Navigation does not cancel work. Explicit retry creates a new run from the original frozen inputs. Retrying an uncertain Spawn submission reuses its request key while the client remains mounted; that is separate from retrying a failed generation.
+
+Expired claims can be requeued before invocation. Expired running work becomes interrupted and is never automatically retried because provider completion and billing may be uncertain. Shutdown aborts active calls best-effort and records interruption. Run exactly one server/worker process; this is not a distributed worker system.
+
+## Stack and repository map
+
+The browser uses React, TypeScript, Vite, React Flow, Zustand and TanStack Router. The server uses Hono, Better Auth, SQLite in WAL mode, AI SDK Core, authenticated SSE, and filesystem or S3-compatible image storage. Redis is not required.
 
 ```text
-docs/architecture/   principles, invariants and migration boundaries
-src/app/            authentication, navigation, styles
-src/routes/         brane workspace, focus view, context inspector
-src/canvas/         React Flow rendering and gesture adapter
-src/components/     content editors and renderers
-src/stores/         transient Zustand interaction state
-src/services/       HTTP domain API client
+src/app/            authentication, navigation and styles
+src/routes/         workspace, Focus view and context inspector
+src/canvas/         node projection, tool policy and gesture lifetime
+src/components/     editors, artifact actions and rendering
+src/stores/         transient interaction state
+src/services/       API client, draft recovery and placement save queue
 src/lib/            responsive presentation helpers
 server/app/         configuration and process lifecycle
-server/api/         validated domain endpoints and rate-limit hook
-server/auth/        Better Auth SQLite integration
+server/api/         validated endpoints and request limits
+server/auth/        authentication integration
 server/db/          WAL connection and migration runner
-server/domain/      centralized authorization and domain errors
-server/services/    content, snapshots, placements, context and runs
-server/jobs/        atomic claiming, leases, checkpoints, finalization
-server/llm/         frozen-message assembly, mock and AI SDK invocation
-server/sse/         actor-scoped multiplexed update hub
-server/storage/     filesystem and R2/S3 adapters
-server/ingestion/   queued, bounded, DNS-pinned webpage imports
-shared/types/       framework-independent product types
-shared/schemas/     request validation
-migrations/         relational schema and immutable history guards
-scripts/            migrate, seed and consistent SQLite backup
-tests/              domain invariants, security and authenticated HTTP
+server/domain/      authorization and domain errors
+server/services/    artifacts, snapshots, placements, context, costs and runs
+server/jobs/        claiming, leases, checkpoints and finalization
+server/llm/         frozen-message assembly and provider invocation
+server/sse/         actor-scoped update hub
+server/storage/     filesystem and S3-compatible adapters
+server/ingestion/   bounded, DNS-pinned webpage imports
+shared/             domain types and request schemas
+migrations/         schema changes and immutable-history guards
+scripts/            migration, seed, backup and cost reconciliation
+tests/              unit, API, migration, recovery and invariant tests
+e2e/                Chromium fixtures and interaction tests
+docs/architecture/  design boundaries and invariants
 ```
 
-## Product model
+## Running the built application
 
-A Block has stable semantic identity. Its current editable LiveState is separate from immutable BlockRevisions. A Placement puts the Block on a brane with independent geometry. One Block can have several placements, including across branes; removing a placement leaves the artifact intact.
+For a local production-build smoke test, keep development mode and point authentication at the built application's origin:
 
-A Run freezes an explicit ordered list of revisions at submission. Pending edits can be flushed inside the submission transaction using expected versions. Later edits cannot change the recorded context. Workers assemble provider messages exclusively from frozen inputs. Historical requests are reconstructable; model output itself is not guaranteed deterministic.
-
-The following diagram is conceptual, not a strict relational direction graph:
-
-```text
-                 ┌──────────────────┐
-                 │    LiveState     │
-                 │ mutable/current  │
-                 └────────┬─────────┘
-                          │ snapshot
-                          ▼
-                 ┌──────────────────┐
-                 │     Revision     │
-                 │    immutable     │
-                 └────────┬─────────┘
-                          │
-                          ▼
-┌───────────┐    ┌──────────────────┐
-│ Placement │───▶│      Block       │
-│ geometry  │    │ stable identity  │
-└───────────┘    └──────────────────┘
-
-Revision(s)
-    │
-    ▼
-┌──────────────────┐
-│       Run        │
-│ frozen context   │
-└────────┬─────────┘
-         │
-         ▼
- output Revision
+```sh
+npm run build
+APP_ORIGIN=http://localhost:3001 npm start
 ```
 
-**Use as context** imports labeled references in user-controlled order. **Continue from here** follows one conversation's ancestor chain, including the reference material used at those points. Combining independent responses as references never invents a shared conversation history. Canvas proximity, selection, dragging and resizing do not submit models or alter context.
+Open [localhost:3001](http://localhost:3001). `/health` returns a basic process health response. Startup applies pending migrations automatically; the explicit migration command is useful during setup and before starting a new build.
 
-React Flow nodes are projections of domain records. Zustand holds selection, drafts, tools and context composition; neither owns the persistent document. Geometry persists after completed gestures. Text saves are debounced and version-checked. Save brane flushes edits and saves the title. Explicit snapshots are available through the domain/API, independently of geometric saves.
+For a hosted instance, follow the [single-VPS operations guide](docs/deployment.md): use HTTPS, `NODE_ENV=production`, the public `APP_ORIGIN`, a random authentication secret, persistent database/assets paths and one server process. The Node listener binds to `127.0.0.1`; a reverse proxy provides public access. Keep the repository's migrations and production dependencies alongside build output.
 
-## Background execution
+Back up SQLite through the online backup script and back up image bytes separately. A database backup alone does not contain uploaded images. The operations guide covers restoration, SSE proxying, storage configuration and audited cost reconciliation.
 
-Submission deduplicates per-user request keys before creating paid work. One SQLite worker atomically claims queued runs, leases and heartbeats them, and invokes the provider outside transactions. Streamed text is checkpointed in batches. Only completion creates an immutable response revision. An explicit retry creates a new Run linked to the old one and copies exact frozen inputs.
+## Current boundaries
 
-Navigation never cancels a Run. One authenticated browser SSE stream multiplexes updates; a reconnect reloads authoritative state. Final output survives lost events. Expired claims are requeued only before invocation; expired running work becomes interrupted, with uncertain provider completion/billing, and is never automatically retried. Shutdown aborts active calls best-effort and records interruption.
+- Webpage imports use lightweight text extraction, without browser rendering or a rich readability parser. HTTP(S) targets and redirects are validated, DNS is pinned, and time/byte limits apply. Failed imports permit pasted text.
+- Image context resolves authorized bytes using frozen asset IDs and SHA-256 hashes. Paid models must explicitly support vision in the pricing catalog; image requests use low detail.
+- Public signup is enabled. Invitation policy, email delivery, email verification and password recovery are not implemented in this slice.
+- Local tests cover mock execution, adapter fixtures, authenticated APIs, migrations, worker crash recovery and browser interactions. They do not establish live OpenAI/R2 behavior or production readiness.
+- Multiplayer, CRDTs, presence, rich text, embeddings, semantic retrieval, plugin frameworks, workflow execution, automatic regeneration and multi-server infrastructure are deferred.
 
-## Interaction
+## Design references
 
-Desktop: drag empty space to create a rectangle; its editor receives focus. The header moves the card. Select a card to resize it. Shift-click supports multiple selection. Choose Pan or use the middle mouse button to navigate. Use Fit View to find offscreen cards. Text selection does not move nodes.
+Start with [principles](docs/architecture/00-principles.md) and [invariants](docs/architecture/01-invariants.md). The architecture directory also covers [domain modeling](docs/architecture/02-domain-model.md), [snapshots](docs/architecture/03-snapshot-semantics.md), [run lifecycle](docs/architecture/04-run-lifecycle.md), [client state and save queues](docs/architecture/05-client-state.md), [future collaboration](docs/architecture/06-collaboration-migration.md), [costs](docs/architecture/07-cost-model.md), [security](docs/architecture/08-security.md), [non-goals](docs/architecture/09-non-goals.md), and [artifact derivation](docs/architecture/10-artifact-derivation.md).
 
-Mobile defaults to Focus: full-width editor, horizontal block outline, tap-to-add, ordinary text paste, image picker and brane navigation. Canvas is an optional overview. `/b/:braneId?focus=:blockId&view=focus` opens a focused block; viewport changes do not add history entries.
-
-## Boundaries and limitations
-
-- Real OpenAI invocation and R2 adapters are implemented but require your credentials and have not been exercised against live accounts. Mock execution and local storage need none.
-- Image context resolves authorized bytes from frozen asset IDs and SHA-256 hashes. Models must explicitly support vision in the pricing catalog; requests use low detail. The mock accepts images but does not perform visual reasoning.
-- Webpage extraction is lightweight text extraction, without a browser or rich readability parser. Failed imports permit manually pasted text. HTTP(S) destinations and redirects are validated, DNS is pinned, and time/byte bounds apply.
-- Budget reservations, usage-rated costs and uncertain liabilities are persistent and separate. Usage-rated amounts use the configured token rates; they are not provider invoices and may overestimate cached-input discounts. Interrupted or unmetered requests retain their reservations until explicit, audited reconciliation.
-- IndexedDB preserves text drafts with their original server version, scoped by actor and Block ID. Reload offers recovery; a conflict offers server text versus explicit overwrite. This is local recovery, not collaboration or an automatic merge. Browser storage failure is visible and server saves remain possible.
-- Block actions expose snapshots, reuse across branes, granular placement removal and numeric geometry controls. The context inspector shows conversation ancestry, images and run billing state.
-- Public signup is enabled; before exposing a personal VPS, decide whether to disable signup after your first account or add an invitation policy. Email delivery, verification and password recovery are outside this slice.
-
-## Architecture and operations
-
-Read [architecture principles](docs/architecture/00-principles.md), [invariants](docs/architecture/01-invariants.md), and [deployment notes](docs/deployment.md). The ten numbered architecture documents cover domain modeling, snapshots, run lifecycle, client state, collaboration migration, cost, security and non-goals. [Scaffold report](docs/scaffold-report.md) records verification and next work.
-
-Multiplayer, CRDTs, presence, WebSockets, workflow execution, rich text, embeddings, semantic retrieval, plugins, headless crawling, multi-server workers and multi-region infrastructure are deferred. Future collaboration replaces LiveState persistence behind domain mutations and snapshot materialization. Product IDs, immutable revisions, placement semantics and frozen Run context remain intact; presence stays ephemeral.
-
-See [follow-up implementation notes](docs/follow-up-report.md) for local adapter tests, draft recovery, budget semantics and the remaining operational limits.
+The [scaffold report](docs/scaffold-report.md) and [follow-up implementation notes](docs/follow-up-report.md) are historical implementation records. Use the current source, scripts and architecture documents for present behavior.
