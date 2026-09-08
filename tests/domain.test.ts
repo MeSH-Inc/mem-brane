@@ -340,13 +340,14 @@ it('enforces ownership on branes, blocks, runs and assets', () => {
   expect(() => revisions(db).snapshotBlock(other, block)).toThrow('not found');
   expect(() => cancelRun(db, other, r.id)).toThrow('not found');
   const asset = uid();
-  db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?)').run(
+  db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?,?)').run(
     asset,
     actor,
     asset,
     'image/png',
     12,
     Date.now(),
+    'a'.repeat(64),
   );
   expect(() => requireOwned(db, 'assets', other, asset)).toThrow('not found');
   expect(() => createPlacement(db, other, brane, block)).toThrow('not found');

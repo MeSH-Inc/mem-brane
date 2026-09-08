@@ -53,7 +53,7 @@ export function createImports(db: DB, store: AssetStore) {
       }
       if (active.size >= 4) throw new DomainError(429, 'Import capacity reached; retry shortly');
       const work = async () => {
-        const assetId = existing?.asset_id ?? uid();
+        let assetId = existing?.asset_id ?? uid();
         const base = { text: filename, filename, assetId, assetHash };
         const content: Content =
           Buffer.from(bytes.subarray(0, 5)).toString('ascii') === '%PDF-'
@@ -65,11 +65,21 @@ export function createImports(db: DB, store: AssetStore) {
                 representation: 'original-image-v1',
               };
         db.transaction(() => {
-          if (!db.prepare('SELECT 1 FROM upload_intents WHERE id=?').get(assetId))
+          const known = db
+            .prepare('SELECT id FROM assets WHERE owner_id=? AND digest=?')
+            .get(actor, assetHash) as { id: string } | undefined;
+          const pending = db
+            .prepare('SELECT id FROM upload_intents WHERE owner_id=? AND digest=?')
+            .get(actor, assetHash) as { id: string } | undefined;
+          assetId = known?.id ?? pending?.id ?? assetId;
+          content.assetId = assetId;
+          if (!known && !db.prepare('SELECT 1 FROM upload_intents WHERE id=?').get(assetId))
             reserveUpload(db, actor, assetId, bytes.length, {
               userBytes: config.USER_STORAGE_BYTES,
               totalBytes: config.TOTAL_STORAGE_BYTES,
             });
+          if (!known)
+            db.prepare('UPDATE upload_intents SET digest=? WHERE id=?').run(assetHash, assetId);
           if (!existing)
             db.prepare("INSERT INTO artifact_imports VALUES (?,?,?,?,?,'pending',NULL,?)").run(
               actor,
@@ -79,10 +89,16 @@ export function createImports(db: DB, store: AssetStore) {
               intent.braneId,
               now(),
             );
+          else
+            db.prepare('UPDATE artifact_imports SET asset_id=? WHERE owner_id=? AND key=?').run(
+              assetId,
+              actor,
+              intent.key,
+            );
         }).immediate();
         // A previous process may have stored the immutable object but lost the acknowledgement.
         let stored: Uint8Array | undefined;
-        if (existing) {
+        {
           try {
             stored = await store.get(assetId, AbortSignal.timeout(30000));
           } catch (error) {
@@ -93,17 +109,34 @@ export function createImports(db: DB, store: AssetStore) {
         if (stored) {
           if (hash(stored) !== assetHash)
             throw new DomainError(409, 'Import bytes failed integrity verification');
-        } else await store.put(assetId, bytes, content.mimeType!);
+        } else {
+          try {
+            await store.put(assetId, bytes, content.mimeType!);
+          } catch (error) {
+            // Only an immutable-object collision is an acknowledgement; transport errors
+            // retain the reservation so an explicit retry verifies the uncertain write.
+            const e = error as {
+              code?: string;
+              name?: string;
+              $metadata?: { httpStatusCode?: number };
+            };
+            if (
+              e.code !== 'EEXIST' &&
+              e.name !== 'PreconditionFailed' &&
+              e.$metadata?.httpStatusCode !== 412
+            )
+              throw error;
+            if (hash(await store.get(assetId, AbortSignal.timeout(30000))) !== assetHash)
+              throw new DomainError(409, 'Import bytes failed integrity verification');
+          }
+        }
         return db.transaction(() => {
           canEditBrane(db, actor, intent.braneId);
-          db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?)').run(
-            assetId,
-            actor,
-            assetId,
-            content.mimeType,
-            bytes.length,
-            now(),
-          );
+          const finished = read(actor, intent.key);
+          if (finished?.state === 'ready') return JSON.parse(finished.result_json!);
+          db.prepare(
+            'INSERT INTO assets (id,owner_id,storage_key,mime,size,created_at,digest) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING',
+          ).run(assetId, actor, assetId, content.mimeType, bytes.length, now(), assetHash);
           const result = createBlock(
             db,
             actor,

@@ -32,13 +32,14 @@ try {
   );
   const store = new FileAssetStore(join(directory, 'assets'));
   await store.put(asset, bytes);
-  db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?)').run(
+  db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?,?)').run(
     asset,
     actor,
     asset,
     'image/png',
     bytes.length,
     0,
+    createHash('sha256').update(bytes).digest('hex'),
   );
   const block = createBlock(
     db,

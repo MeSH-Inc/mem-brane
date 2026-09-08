@@ -116,13 +116,14 @@ it('checks another actor’s protected resources through HTTP', async () => {
       .status,
   ).toBe(404);
   const asset = uid();
-  db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?)').run(
+  db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?,?)').run(
     asset,
     other,
     asset,
     'image/png',
     12,
     Date.now(),
+    'a'.repeat(64),
   );
   expect((await app.request(`/api/assets/${asset}`, { headers: headers() })).status).toBe(404);
 });

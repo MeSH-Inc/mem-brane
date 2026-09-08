@@ -66,13 +66,14 @@ it('restores an online backup with image bytes and detects missing or corrupted 
       bytes = Buffer.from('frozen test image bytes');
     const store = new FileAssetStore(live);
     await store.put(asset, bytes);
-    db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?)').run(
+    db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?,?)').run(
       asset,
       actor,
       asset,
       'image/png',
       bytes.length,
       0,
+      createHash('sha256').update(bytes).digest('hex'),
     );
     const block = createBlock(
       db,

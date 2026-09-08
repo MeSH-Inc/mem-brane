@@ -20,7 +20,12 @@ export function reserveUpload(
       .get(actor) as { total: number; actor: number };
     if (usage.total + size > limits.totalBytes || usage.actor + size > limits.userBytes)
       throw new DomainError(429, 'Artifact storage capacity reached');
-    db.prepare('INSERT INTO upload_intents VALUES (?,?,?,?)').run(id, actor, size, Date.now());
+    db.prepare('INSERT INTO upload_intents (id,owner_id,size,created_at) VALUES (?,?,?,?)').run(
+      id,
+      actor,
+      size,
+      Date.now(),
+    );
   }).immediate();
 }
 export function admitImport(db: DB, actor: string, userLimit: number, totalLimit: number) {

@@ -35,13 +35,14 @@ it('AI SDK sends exact frozen text and image bytes to a local provider, then rec
     0,
     0,
   );
-  db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?)').run(
+  db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?,?)').run(
     asset,
     actor,
     asset,
     'image/png',
     bytes.length,
     0,
+    hash,
   );
   const input: RunInput = {
     position: 0,

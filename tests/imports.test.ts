@@ -3,13 +3,14 @@ import sharp from 'sharp';
 import { openDatabase, type DB } from '../server/db/index';
 import { createImports } from '../server/services/imports';
 import { createBrane, createBlock, revisions, uid } from '../server/services/content';
+import { reserveUpload } from '../server/services/capacity';
 import { resolveMessages } from '../server/llm/assets';
 import type { AssetStore } from '../server/storage/assets';
 let db: DB, actor: string, brane: string, bytes: Buffer;
 const objects = new Map<string, Uint8Array>();
 const store: AssetStore = {
   put: async (key, bytes) => {
-    if (objects.has(key)) throw new Error('immutable');
+    if (objects.has(key)) throw Object.assign(new Error('immutable'), { code: 'EEXIST' });
     objects.set(key, bytes);
   },
   get: async (key) => {
@@ -158,4 +159,71 @@ it('requires a still-image representation for animated model context', async () 
   const { modelCompatibility } = await import('../shared/representations');
   const result: any = await createImports(db, store).import(actor, intent(), file());
   expect(modelCompatibility({ ...result.content, frames: 2 })).toContain('still image');
+});
+
+it('shares immutable bytes across distinct artifacts only within an owner', async () => {
+  const imports = createImports(db, store);
+  const first: any = await imports.import(actor, intent(), file());
+  const second: any = await imports.import(actor, intent(), file());
+  expect(first.id).not.toBe(second.id);
+  expect(first.placement.id).not.toBe(second.placement.id);
+  expect(first.content.assetId).toBe(second.content.assetId);
+  expect(objects.size).toBe(1);
+  const asset = db.prepare('SELECT * FROM assets').get() as any;
+  expect(asset.digest).toBe(first.content.assetHash);
+  expect(() =>
+    db.prepare('UPDATE assets SET mime=? WHERE id=?').run('image/jpeg', asset.id),
+  ).toThrow('immutable');
+  const other = uid();
+  db.prepare('INSERT INTO "user" (id,name,email,createdAt,updatedAt) VALUES (?,?,?,?,?)').run(
+    other,
+    'B',
+    `${other}@test`,
+    0,
+    0,
+  );
+  const third: any = await imports.import(
+    other,
+    { ...intent(), braneId: createBrane(db, other).id },
+    file(),
+  );
+  expect(third.content.assetId).not.toBe(first.content.assetId);
+  expect(objects.size).toBe(2);
+});
+
+it('shares an uncertain upload reservation across different import keys', async () => {
+  const request = intent();
+  await expect(
+    createImports(db, {
+      ...store,
+      put: async (key, bytes, mime) => {
+        await store.put(key, bytes, mime);
+        throw new Error('uncertain');
+      },
+    }).import(actor, request, file()),
+  ).rejects.toThrow('uncertain');
+  const second: any = await createImports(db, store).import(actor, intent(), file());
+  const first: any = await createImports(db, store).import(actor, request, file());
+  expect(first.id).not.toBe(second.id);
+  expect(first.content.assetId).toBe(second.content.assetId);
+  expect(objects.size).toBe(1);
+  expect(db.prepare('SELECT count(*) n FROM upload_intents').get()).toEqual({ n: 0 });
+});
+
+it('counts canonical bytes once and keeps uncertain reservations in quota admission', async () => {
+  await createImports(db, store).import(actor, intent(), file());
+  await createImports(db, store).import(actor, intent(), file());
+  const limits = { userBytes: bytes.length + 10, totalBytes: bytes.length + 10 };
+  reserveUpload(db, actor, uid(), 6, limits);
+  expect(() => reserveUpload(db, actor, uid(), 5, limits)).toThrow('capacity');
+  expect(db.prepare('SELECT sum(size) n FROM assets').get()).toEqual({ n: bytes.length });
+});
+it('converges concurrent distinct deliveries across service instances', async () => {
+  const [a, b] = (await Promise.all([
+    createImports(db, store).import(actor, intent(), file()),
+    createImports(db, store).import(actor, intent(), file()),
+  ])) as any[];
+  expect(a.id).not.toBe(b.id);
+  expect(a.content.assetId).toBe(b.content.assetId);
+  expect(objects.size).toBe(1);
 });

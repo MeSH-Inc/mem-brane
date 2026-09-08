@@ -8,16 +8,19 @@ export async function verifyRestoration(db: DB, store: Pick<AssetStore, 'get'>) 
     (db.pragma('foreign_key_check') as unknown[]).length
   )
     throw new Error('Restored database integrity check failed');
-  const assets = db.prepare('SELECT id,storage_key,size FROM assets').all() as {
+  const assets = db.prepare('SELECT id,storage_key,size,digest FROM assets').all() as {
     id: string;
     storage_key: string;
     size: number;
+    digest: string;
   }[];
   const hashes = new Map<string, string>();
   for (const asset of assets) {
     const bytes = await store.get(asset.storage_key, AbortSignal.timeout(30000));
     if (bytes.length !== asset.size) throw new Error(`Asset size mismatch: ${asset.id}`);
-    hashes.set(asset.id, createHash('sha256').update(bytes).digest('hex'));
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    if (digest !== asset.digest) throw new Error(`Asset integrity mismatch: ${asset.id}`);
+    hashes.set(asset.id, digest);
   }
   let references = 0;
   for (const row of db
