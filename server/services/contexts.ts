@@ -1,4 +1,4 @@
-import { decodeContent } from './representations.js';
+import { contentReader } from './representations.js';
 import { randomUUID } from 'node:crypto';
 import type { DB } from '../db/index.js';
 import type { RunInput } from '../../shared/types/domain.js';
@@ -28,7 +28,14 @@ export function createContext(
   return id;
 }
 
-export function readLineage(db: DB, actor: string, messageId: string): ConversationMessage[] {
+type Reader = ReturnType<typeof fullReader>;
+const fullReader = (db: DB, actor: string) => contentReader(db, actor, 'full');
+export function readLineage(
+  db: DB,
+  actor: string,
+  messageId: string,
+  reader: Reader = fullReader(db, actor),
+): ConversationMessage[] {
   const rows = db
     .prepare(
       `WITH RECURSIVE lineage AS (
@@ -55,9 +62,24 @@ export function readLineage(db: DB, actor: string, messageId: string): Conversat
     throw new DomainError(404, 'Conversation point not found');
   if (rows.length > 200 || new Set(rows.map((row) => row.id)).size !== rows.length)
     throw new DomainError(400, 'Conversation lineage is too long');
-  const references = db.prepare(`SELECT e.label,e.revision_id FROM runs r
+  const references = db
+    .prepare(
+      `SELECT r.id run_id,e.label,e.revision_id FROM runs r
     JOIN context_entries e ON e.context_id=r.context_id
-    WHERE r.id=? AND e.kind IN ('source','reference') ORDER BY e.position`);
+    WHERE r.id IN (SELECT value FROM json_each(?)) AND e.kind IN ('source','reference') ORDER BY e.position`,
+    )
+    .all(JSON.stringify(rows.filter((row) => row.role === 'user').map((row) => row.run_id))) as {
+    run_id: string;
+    label: string;
+    revision_id: string;
+  }[];
+  const byRun = new Map<string, ConversationMessage['references']>();
+  for (const { run_id, ...ref } of references) {
+    const list = byRun.get(run_id) ?? [];
+    list.push(ref);
+    byRun.set(run_id, list);
+  }
+  reader.prefetch(rows.map((row) => row.content_json));
   return rows.map((row) => ({
     id: row.id,
     parent_id: row.parent_id,
@@ -67,26 +89,29 @@ export function readLineage(db: DB, actor: string, messageId: string): Conversat
     revision_id: row.revision_id,
     created_at: row.created_at,
     block_id: row.block_id,
-    content: decodeContent(db, row.content_json),
-    references:
-      row.role === 'user' ? (references.all(row.run_id) as ConversationMessage['references']) : [],
+    content: reader.read(row.content_json),
+    references: row.role === 'user' ? (byRun.get(row.run_id) ?? []) : [],
   }));
 }
 
-export function lineageInputs(db: DB, messages: ConversationMessage[]): RunInput[] {
+export function lineageInputs(
+  db: DB,
+  actor: string,
+  messages: ConversationMessage[],
+  reader: Reader = fullReader(db, actor),
+): RunInput[] {
   const inputs: RunInput[] = [];
-  const content = new Map<string, RunInput['content']>();
-  const revision = db.prepare('SELECT content_json FROM block_revisions WHERE id=?');
+  const ids = [...new Set(messages.flatMap((m) => m.references.map((r) => r.revision_id)))];
+  const rows = db
+    .prepare(
+      `SELECT v.id,v.content_json FROM block_revisions v JOIN blocks b ON b.id=v.block_id WHERE v.id IN (SELECT value FROM json_each(?)) AND b.owner_id=?`,
+    )
+    .all(JSON.stringify(ids), actor) as { id: string; content_json: string }[];
+  if (rows.length !== ids.length) throw new DomainError(404, 'Revision not found');
+  reader.prefetch(rows.map((row) => row.content_json));
+  const content = new Map(rows.map((row) => [row.id, reader.read(row.content_json)]));
   for (const message of messages) {
     for (const ref of message.references) {
-      if (!content.has(ref.revision_id))
-        content.set(
-          ref.revision_id,
-          decodeContent(
-            db,
-            (revision.get(ref.revision_id) as { content_json: string }).content_json,
-          ),
-        );
       inputs.push({
         ...ref,
         content: content.get(ref.revision_id)!,
@@ -114,8 +139,14 @@ export function readInputs(db: DB, runId: string): RunInput[] {
     )
     .get(runId) as { id: string; owner_id: string; parent_message_id: string | null } | undefined;
   if (!context) throw new DomainError(404, 'Run context not found');
+  const reader = fullReader(db, context.owner_id);
   const inputs = context.parent_message_id
-    ? lineageInputs(db, readLineage(db, context.owner_id, context.parent_message_id))
+    ? lineageInputs(
+        db,
+        context.owner_id,
+        readLineage(db, context.owner_id, context.parent_message_id, reader),
+        reader,
+      )
     : [];
   const local = db
     .prepare(
@@ -128,6 +159,7 @@ export function readInputs(db: DB, runId: string): RunInput[] {
     revision_id: string;
     content_json: string;
   }[];
+  reader.prefetch(local.map((row) => row.content_json));
   for (const row of local)
     inputs.push({
       position: inputs.length,
@@ -135,7 +167,7 @@ export function readInputs(db: DB, runId: string): RunInput[] {
       label: row.label,
       role: row.role,
       revision_id: row.revision_id,
-      content: decodeContent(db, row.content_json),
+      content: reader.read(row.content_json),
     });
   return inputs;
 }

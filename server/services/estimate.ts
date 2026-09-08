@@ -1,4 +1,4 @@
-import { decodeContent } from './representations.js';
+import { contentReader } from './representations.js';
 import { modelCompatibility } from '../../shared/representations.js';
 import type { DB } from '../db/index.js';
 import type { SubmitRun, RunInput } from '../../shared/types/domain.js';
@@ -20,6 +20,7 @@ export function estimateRun(
 ) {
   canRunOnBrane(db, actor, input.braneId);
   const inputs: RunInput[] = [];
+  const reader = contentReader(db, actor, 'full');
   const add = (
     content: RunInput['content'],
     kind: RunInput['kind'],
@@ -28,19 +29,26 @@ export function estimateRun(
     revision_id = '00000000-0000-0000-0000-000000000000',
   ) => inputs.push({ position: inputs.length, kind, label, role, revision_id, content });
   if (input.continueFrom)
-    inputs.push(...lineageInputs(db, readLineage(db, actor, input.continueFrom)));
-  for (const [i, blockId] of input.references.entries()) {
-    requireOwned(db, 'blocks', actor, blockId);
-    const row = (db
-      .prepare('SELECT content_json FROM block_live_state WHERE block_id=?')
-      .get(blockId) ??
-      db
-        .prepare(
-          'SELECT content_json FROM block_revisions WHERE block_id=? ORDER BY created_at DESC LIMIT 1',
-        )
-        .get(blockId)) as any;
-    if (!row) continue;
-    const content = decodeContent(db, row.content_json),
+    inputs.push(
+      ...lineageInputs(db, actor, readLineage(db, actor, input.continueFrom, reader), reader),
+    );
+  const local = input.references
+    .map((blockId, i) => {
+      requireOwned(db, 'blocks', actor, blockId);
+      const row = (db
+        .prepare('SELECT content_json FROM block_live_state WHERE block_id=?')
+        .get(blockId) ??
+        db
+          .prepare(
+            'SELECT content_json FROM block_revisions WHERE block_id=? ORDER BY created_at DESC LIMIT 1',
+          )
+          .get(blockId)) as any;
+      return { row, blockId, i };
+    })
+    .filter((item) => item.row);
+  reader.prefetch(local.map((item) => item.row.content_json));
+  for (const { row, blockId, i } of local) {
+    const content = reader.read(row.content_json),
       edit = input.edits.find((e) => e.blockId === blockId);
     if (edit) content.text = edit.text;
     add(content, 'reference', `Reference ${i + 1}`);

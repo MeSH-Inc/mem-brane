@@ -167,3 +167,72 @@ it('keeps large PDF pages off workspace reads and authorizes exact representatio
   expect(() => readPdfPages(db, uid(), summary.representationId)).toThrow('not found');
   expect(() => readPdfPages(db, actor, 'f'.repeat(64))).toThrow('not found');
 });
+
+it('batches hundreds of shared identities and context references without changing provider messages', async () => {
+  const { contentReader } = await import('../server/services/representations');
+  const { lineageInputs } = await import('../server/services/contexts');
+  const { buildMessages } = await import('../server/llm/model');
+  const a = await upload();
+  const refs = [];
+  brane = createBrane(db, actor).id;
+  for (let i = 0; i < 200; i++) {
+    const block = createBlock(db, actor, 'pdf', { ...a.content, text: `Caption ${i}` }, brane);
+    refs.push(revisions(db).snapshotBlock(actor, block.id));
+  }
+  const { vi } = await import('vitest');
+  const prepare = db.prepare.bind(db),
+    queries: string[] = [];
+  const spy = vi.spyOn(db, 'prepare').mockImplementation(((sql: string) => {
+    queries.push(sql);
+    return prepare(sql);
+  }) as typeof db.prepare);
+  try {
+    const state = readBrane(db, actor, brane);
+    expect(state.blocks).toHaveLength(200);
+    expect(queries.filter((sql) => sql.includes('FROM asset_representations'))).toHaveLength(1);
+    queries.length = 0;
+    const messages: any[] = [
+      {
+        id: uid(),
+        role: 'user',
+        revision_id: uid(),
+        content: { format: 'text', text: 'Prompt' },
+        references: refs.map((r) => ({ label: 'Evidence', revision_id: r.id })),
+      },
+    ];
+    const expanded = lineageInputs(db, actor, messages);
+    expect(queries.filter((sql) => sql.includes('FROM asset_representations'))).toHaveLength(1);
+    expect(queries.filter((sql) => sql.includes('FROM block_revisions'))).toHaveLength(1);
+    expect(buildMessages(expanded)).toEqual(
+      buildMessages([
+        ...refs.map((r, position) => ({
+          position,
+          kind: 'lineage_reference' as const,
+          role: 'user' as const,
+          label: 'Evidence',
+          revision_id: r.id,
+          content: r.content,
+        })),
+        {
+          position: 200,
+          kind: 'lineage' as const,
+          role: 'user' as const,
+          label: 'Conversation',
+          revision_id: messages[0].revision_id,
+          content: messages[0].content,
+        },
+      ]),
+    );
+    expect((expanded[0].content as any).representation).toBe(
+      (expanded[199].content as any).representation,
+    );
+    const json = (
+      db.prepare('SELECT content_json FROM block_live_state WHERE block_id=?').get(a.id) as {
+        content_json: string;
+      }
+    ).content_json;
+    expect(() => contentReader(db, uid(), 'full').prefetch([json])).toThrow('not found');
+  } finally {
+    spy.mockRestore();
+  }
+});

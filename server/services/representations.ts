@@ -57,29 +57,6 @@ export function decodeContent(db: DB, json: string): Content {
   });
 }
 
-export function decodeWorkspaceContent(db: DB, json: string): WorkspaceContent {
-  const stored = JSON.parse(json);
-  if (stored.format !== 'pdf') return decodeContent(db, json) as WorkspaceContent;
-  const row = db
-    .prepare(
-      `SELECT s.summary_json,a.id asset_id,a.digest,a.mime FROM representation_summaries s
-    JOIN asset_representations r ON r.id=s.representation_id JOIN assets a ON a.id=r.asset_id
-    WHERE r.id=? AND r.format='pdf'`,
-    )
-    .get(stored.representationId) as
-    { summary_json: string; asset_id: string; digest: string; mime: 'application/pdf' } | undefined;
-  if (!row) throw new Error('Missing PDF summary');
-  return {
-    format: 'pdf',
-    text: stored.text,
-    filename: stored.filename,
-    representationId: stored.representationId,
-    assetId: row.asset_id,
-    assetHash: row.digest,
-    mimeType: row.mime,
-    ...JSON.parse(row.summary_json),
-  } as PdfSummary;
-}
 export function readPdfPages(db: DB, actor: string, id: string): PdfRepresentation {
   const row = db
     .prepare(
@@ -89,4 +66,88 @@ export function readPdfPages(db: DB, actor: string, id: string): PdfRepresentati
     .get(id, actor) as { payload_json: string } | undefined;
   if (!row) throw new DomainError(404, 'PDF representation not found');
   return JSON.parse(row.payload_json).representation;
+}
+
+// Request-scoped: reuse immutable payloads without retaining them across requests.
+export function contentReader(
+  db: DB,
+  actor: string,
+  projection: 'full',
+): {
+  prefetch(jsons: string[]): void;
+  read(json: string): Content;
+};
+export function contentReader(
+  db: DB,
+  actor: string,
+  projection: 'workspace',
+): {
+  prefetch(jsons: string[]): void;
+  read(json: string): WorkspaceContent;
+};
+export function contentReader(db: DB, actor: string, projection: 'full' | 'workspace') {
+  const payloads = new Map<string, Content | WorkspaceContent>();
+  const parsed = new Map<string, Record<string, any>>();
+  const parse = (json: string) => {
+    let value = parsed.get(json);
+    if (!value) {
+      value = JSON.parse(json);
+      parsed.set(json, value!);
+    }
+    return value!;
+  };
+  const prefetch = (jsons: string[]) => {
+    const ids = [
+      ...new Set(
+        jsons
+          .map(parse)
+          .filter((c) => c.format === 'image' || c.format === 'pdf')
+          .map((c) => c.representationId as string),
+      ),
+    ].filter((id) => !payloads.has(id));
+    if (!ids.length) return;
+    const rows = db
+      .prepare(
+        `SELECT r.id,r.format,${projection === 'full' ? 'r.payload_json' : 's.summary_json'} payload_json,a.id asset_id,a.digest,a.mime
+      FROM asset_representations r ${projection === 'workspace' ? 'JOIN representation_summaries s ON s.representation_id=r.id' : ''}
+      JOIN assets a ON a.id=r.asset_id WHERE r.id IN (SELECT value FROM json_each(?)) AND a.owner_id=?`,
+      )
+      .all(JSON.stringify(ids), actor) as {
+      id: string;
+      format: 'image' | 'pdf';
+      payload_json: string;
+      asset_id: string;
+      digest: string;
+      mime: string;
+    }[];
+    for (const row of rows) {
+      const base = {
+        format: row.format,
+        text: '',
+        filename: '',
+        assetId: row.asset_id,
+        assetHash: row.digest,
+        mimeType: row.mime,
+        ...JSON.parse(row.payload_json),
+      };
+      payloads.set(
+        row.id,
+        projection === 'workspace' && row.format === 'pdf'
+          ? ({ ...base, representationId: row.id } as PdfSummary)
+          : contentSchema.parse(base),
+      );
+    }
+    if (ids.some((id) => !payloads.has(id))) throw new DomainError(404, 'Representation not found');
+  };
+  return {
+    prefetch,
+    read(json: string) {
+      const stored = parse(json);
+      if (stored.format !== 'image' && stored.format !== 'pdf') return stored as Content;
+      prefetch([json]);
+      const payload = payloads.get(stored.representationId)!;
+      if (payload.format !== stored.format) throw new Error('Mismatched content representation');
+      return { ...payload, text: stored.text, filename: stored.filename };
+    },
+  };
 }

@@ -1,4 +1,4 @@
-import { encodeContent, decodeContent, decodeWorkspaceContent } from './representations.js';
+import { encodeContent, decodeContent, contentReader } from './representations.js';
 import { readWorkspaceRuns, readVisibleDerivations } from './run-reads.js';
 import {
   MAX_BRANE_PLACEMENTS,
@@ -261,28 +261,27 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
       'SELECT id,brane_id,block_id,x,y,width,height,z_index,version FROM placements WHERE brane_id=? ORDER BY z_index,updated_at',
     )
     .all(id) as Placement[];
-  const blocks = (
-    db
-      .prepare(
-        `SELECT b.id,b.kind,b.origin,l.content_json,l.version,v.content_json final_content,o.message_id
+  const blockRows = db
+    .prepare(
+      `SELECT b.id,b.kind,b.origin,l.content_json,l.version,v.content_json final_content,o.message_id
         FROM blocks b LEFT JOIN block_live_state l ON l.block_id=b.id
         LEFT JOIN runs r ON r.output_block_id=b.id
         LEFT JOIN run_outputs o ON o.run_id=r.id
         LEFT JOIN block_revisions v ON v.id=o.revision_id
         WHERE b.id IN (SELECT block_id FROM placements WHERE brane_id=?)
         ORDER BY b.created_at,b.id`,
-      )
-      .all(id) as any[]
-  ).map((b): Block => {
+    )
+    .all(id) as any[];
+  const reader = contentReader(db, actor, 'workspace');
+  const jsonOf = (b: any) => b.content_json ?? b.final_content ?? '{"format":"text","text":""}';
+  reader.prefetch(blockRows.map(jsonOf));
+  const blocks = blockRows.map((b): Block => {
     return {
       id: b.id,
       kind: b.kind,
       origin: b.origin,
       version: b.version ?? 0,
-      content: decodeWorkspaceContent(
-        db,
-        b.content_json ?? b.final_content ?? '{"format":"text","text":""}',
-      ),
+      content: reader.read(jsonOf(b)),
       messageId: b.message_id,
     };
   });
