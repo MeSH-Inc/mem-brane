@@ -69,7 +69,7 @@ On Linux, if browser system libraries are missing, use `npx playwright install -
 3. Vitest unit and integration tests.
 4. Playwright browser tests in Chromium.
 
-The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests exercise the real route and canvas with intercepted APIs; they do not constitute a live-provider or full deployed-stack test.
+The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests include intercepted canvas APIs and an isolated built-server flow through authentication, text saving, generation, SSE reconciliation and session expiration. They do not exercise live provider accounts. Ports 4179 and 4181 must be available.
 
 Development currently favors direct architectural improvements over compatibility scaffolding. Make focused, atomic commits directly to `main`, verify changes locally before committing, and run `npm run verify` before pushing. GitHub Actions is deferred until it provides a concrete benefit such as catching platform differences, shared verification across independent contributors, or repeatable release artifacts.
 
@@ -107,7 +107,7 @@ Development currently favors direct architectural improvements over compatibilit
 | `CHECKPOINT_INTERVAL_MS`, `CHECKPOINT_CHARACTERS`, `LEASE_MS`          | Streaming persistence and worker recovery timing                                 |
 | `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Optional S3-compatible object storage; absent endpoint selects local files       |
 
-To enable real models, supply `OPENAI_API_KEY`, add the model ID to `MODEL_ALLOWLIST`, configure its operator-verified entry in `MODEL_PRICING_JSON`, and set a positive `DAILY_USER_SPEND_LIMIT`. Optionally change `MODEL_DEFAULT`. A zero budget disables paid admission. Pricing entries include input/output token rates, vision capability, an image token bound, source URL and verification date; see [billing configuration](docs/deployment.md#billing-configuration-and-uncertain-requests).
+To enable real models, supply `OPENAI_API_KEY`, add the model ID to `MODEL_ALLOWLIST`, configure its operator-verified entry in `MODEL_PRICING_JSON`, and set positive `DAILY_USER_SPEND_LIMIT` and `GLOBAL_DAILY_SPEND_LIMIT` values. Optionally change `MODEL_DEFAULT`. A zero budget disables paid admission. Pricing entries include input/output token rates, vision capability, an image token bound, source URL and verification date; see [billing configuration](docs/deployment.md#billing-configuration-and-uncertain-requests).
 
 Paid admission atomically reserves a conservative usage bound. Recorded costs use frozen configured rates, not provider invoices. Interrupted or unmetered requests retain their reservations until explicit, audited reconciliation. Retrying never assumes the previous request was free.
 
@@ -198,3 +198,5 @@ Back up SQLite through the online backup script and back up image bytes separate
 Start with [principles](docs/architecture/00-principles.md) and [invariants](docs/architecture/01-invariants.md). The architecture directory also covers [domain modeling](docs/architecture/02-domain-model.md), [snapshots](docs/architecture/03-snapshot-semantics.md), [run lifecycle](docs/architecture/04-run-lifecycle.md), [client state and save queues](docs/architecture/05-client-state.md), [future collaboration](docs/architecture/06-collaboration-migration.md), [costs](docs/architecture/07-cost-model.md), [security](docs/architecture/08-security.md), [non-goals](docs/architecture/09-non-goals.md), and [artifact derivation](docs/architecture/10-artifact-derivation.md).
 
 The [scaffold report](docs/scaffold-report.md) and [follow-up implementation notes](docs/follow-up-report.md) are historical implementation records. Use the current source, scripts and architecture documents for present behavior.
+
+Operational limits, durable upload reconciliation, run deadlines, and the database-plus-assets restore verifier are documented in [the operations guide](docs/deployment.md#admission-and-restoration-controls).

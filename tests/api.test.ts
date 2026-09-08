@@ -251,3 +251,26 @@ it('does not expose another actor’s placement through read or versioned write'
     ).status,
   ).toBe(404);
 });
+
+it('retains upload recovery intent when bytes succeed but metadata commit fails', async () => {
+  const brane = createBrane(db, actor);
+  db.exec(
+    "CREATE TRIGGER fail_asset_insert BEFORE INSERT ON assets BEGIN SELECT RAISE(ABORT, 'fixture storage metadata failure'); END",
+  );
+  const form = new FormData();
+  form.set('braneId', brane.id);
+  form.set(
+    'file',
+    new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0])], 'test.png'),
+  );
+  const response = await app.request('/api/assets', {
+    method: 'POST',
+    headers: { cookie, origin: 'http://localhost:5173' },
+    body: form,
+  });
+  expect(response.status).toBe(500);
+  expect((db.prepare('SELECT count(*) n FROM assets').get() as any).n).toBe(0);
+  const intent = db.prepare('SELECT * FROM upload_intents').get() as any;
+  expect(intent.size).toBe(12);
+  expect(stored.has(intent.id)).toBe(true);
+});

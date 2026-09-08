@@ -373,3 +373,12 @@ it('supervises claim failures instead of throwing from the scheduling timer', as
   expect(failures).toBe(1);
   await worker.stop();
 });
+
+it('rejects queue saturation without leaving output artifacts', () => {
+  submit();
+  const before = (db.prepare('SELECT count(*) n FROM blocks').get() as any).n;
+  expect(() => submitRun(db, revisions(db), actor, input(), { ...limits, queueLimit: 1 })).toThrow(
+    'queue capacity',
+  );
+  expect((db.prepare('SELECT count(*) n FROM blocks').get() as any).n).toBe(before);
+});

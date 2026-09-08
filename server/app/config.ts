@@ -13,6 +13,12 @@ const env = z
     MAX_CONTEXT_CHARACTERS: positive(100000),
     MAX_WEBPAGE_BYTES: positive(1048576),
     MAX_UPLOAD_BYTES: positive(5242880),
+    USER_STORAGE_BYTES: positive(104857600),
+    TOTAL_STORAGE_BYTES: positive(1073741824),
+    USER_IMPORT_LIMIT: positive(10),
+    IMPORT_QUEUE_LIMIT: positive(100),
+    RUN_QUEUE_LIMIT: positive(100),
+    GLOBAL_DAILY_SPEND_LIMIT: z.coerce.number().nonnegative().default(0),
     CHECKPOINT_INTERVAL_MS: positive(1000),
     CHECKPOINT_CHARACTERS: positive(256),
     LEASE_MS: positive(30000),
@@ -45,6 +51,7 @@ const priceSchema = z
   );
 export const costPolicy = {
   dailyLimitUsd: config.DAILY_USER_SPEND_LIMIT,
+  globalDailyLimitUsd: config.GLOBAL_DAILY_SPEND_LIMIT,
   prices: z
     .record(z.string(), priceSchema)
     .parse(JSON.parse(process.env.MODEL_PRICING_JSON || '{}')),

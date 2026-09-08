@@ -12,6 +12,11 @@ import { canEditBrane, canReadBrane, DomainError, requireOwned } from '../domain
 export const uid = () => randomUUID();
 export const now = () => Date.now();
 export function createBrane(db: DB, actor: string, title = 'Untitled brane') {
+  if (
+    (db.prepare('SELECT count(*) n FROM branes WHERE owner_id=?').get(actor) as { n: number }).n >=
+    100
+  )
+    throw new DomainError(429, 'Workspace capacity reached');
   const id = uid(),
     time = now();
   db.prepare('INSERT INTO branes VALUES (?,?,?,?,?)').run(id, actor, title, time, time);
@@ -26,6 +31,11 @@ export function createPlacement(
 ) {
   canEditBrane(db, actor, braneId);
   requireOwned(db, 'blocks', actor, blockId);
+  if (
+    (db.prepare('SELECT count(*) n FROM placements WHERE brane_id=?').get(braneId) as { n: number })
+      .n >= 500
+  )
+    throw new DomainError(429, 'Brane placement capacity reached');
   const id = uid();
   db.prepare(
     'INSERT INTO placements (id,brane_id,block_id,x,y,width,height,z_index,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
@@ -167,29 +177,24 @@ export function readBrane(db: DB, actor: string, id: string) {
   const blocks = (
     db
       .prepare(
-        `SELECT DISTINCT b.*, l.content_json, l.version FROM blocks b JOIN placements p ON p.block_id=b.id LEFT JOIN block_live_state l ON l.block_id=b.id WHERE p.brane_id=?`,
+        `SELECT DISTINCT b.*, l.content_json, l.version, v.content_json final_content, o.message_id FROM blocks b JOIN placements p ON p.block_id=b.id LEFT JOIN block_live_state l ON l.block_id=b.id LEFT JOIN block_revisions v ON v.block_id=b.id AND b.origin='generated' LEFT JOIN run_outputs o ON o.revision_id=v.id WHERE p.brane_id=?`,
       )
       .all(id) as any[]
   ).map((b) => {
-    const final = db
-      .prepare(
-        'SELECT r.content_json,o.message_id FROM block_revisions r JOIN run_outputs o ON o.revision_id=r.id WHERE r.block_id=?',
-      )
-      .get(b.id) as any;
     return {
       id: b.id,
       kind: b.kind,
       origin: b.origin,
       version: b.version ?? 0,
-      content: JSON.parse(b.content_json ?? final?.content_json ?? '{"text":""}'),
-      messageId: final?.message_id,
+      content: JSON.parse(b.content_json ?? b.final_content ?? '{"text":""}'),
+      messageId: b.message_id,
     };
   });
   const runs = db
     .prepare(
-      "SELECT r.*,COALESCE(c.text,'') partial FROM runs r LEFT JOIN run_checkpoints c ON c.run_id=r.id WHERE r.brane_id=? ORDER BY r.created_at",
+      "SELECT r.*,COALESCE(c.text,'') partial FROM runs r LEFT JOIN run_checkpoints c ON c.run_id=r.id WHERE r.brane_id=? AND (r.output_block_id IN (SELECT block_id FROM placements WHERE brane_id=?) OR r.status IN ('queued','claimed','running','cancel_requested') OR r.id IN (SELECT id FROM runs WHERE brane_id=? ORDER BY created_at DESC LIMIT 100)) ORDER BY r.created_at",
     )
-    .all(id);
+    .all(id, id, id);
   const derivations = db
     .prepare(
       `

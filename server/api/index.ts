@@ -1,3 +1,4 @@
+import { reserveUpload, admitImport } from '../services/capacity.js';
 import { Hono } from 'hono';
 import { createRateLimit } from './rate-limit.js';
 import { streamSSE } from 'hono/streaming';
@@ -80,6 +81,7 @@ export function createApi(
     models: config.models,
     maxTokens: config.MAX_OUTPUT_TOKENS,
     userConcurrency: config.USER_RUN_LIMIT,
+    queueLimit: config.RUN_QUEUE_LIMIT,
     maxContextCharacters: config.MAX_CONTEXT_CHARACTERS,
   };
   app.get('/config', (c) =>
@@ -303,30 +305,31 @@ export function createApi(
     if (!mime) throw new DomainError(400, 'Only PNG, JPEG, GIF and WebP images are supported');
     const assetId = uid();
     const assetHash = createHash('sha256').update(bytes).digest('hex');
+    reserveUpload(db, c.get('actor'), assetId, bytes.length, {
+      userBytes: config.USER_STORAGE_BYTES,
+      totalBytes: config.TOTAL_STORAGE_BYTES,
+    });
     await store.put(assetId, bytes, mime);
-    try {
-      const block = db.transaction(() => {
-        db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?)').run(
-          assetId,
-          c.get('actor'),
-          assetId,
-          mime,
-          bytes.length,
-          now(),
-        );
-        return createBlock(
-          db,
-          c.get('actor'),
-          'image',
-          { text: file.name.slice(0, 200), assetId, assetHash, mimeType: mime },
-          braneId,
-        );
-      })();
-      return c.json(block, 201);
-    } catch (error) {
-      await store.delete(assetId);
-      throw error;
-    }
+    // Metadata commit consumes the intent; failures retain it for offline reconciliation.
+    const block = db.transaction(() => {
+      db.prepare('DELETE FROM upload_intents WHERE id=?').run(assetId);
+      db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?)').run(
+        assetId,
+        c.get('actor'),
+        assetId,
+        mime,
+        bytes.length,
+        now(),
+      );
+      return createBlock(
+        db,
+        c.get('actor'),
+        'image',
+        { text: file.name.slice(0, 200), assetId, assetHash, mimeType: mime },
+        braneId,
+      );
+    })();
+    return c.json(block, 201);
   });
   app.get('/assets/:id', async (c) => {
     const asset = requireOwned(db, 'assets', c.get('actor'), id.parse(c.req.param('id')));
@@ -345,6 +348,8 @@ export function createApi(
       .parse(await c.req.json());
     canEditBrane(db, c.get('actor'), body.braneId);
     const block = db.transaction(() => {
+      if (!body.text)
+        admitImport(db, c.get('actor'), config.USER_IMPORT_LIMIT, config.IMPORT_QUEUE_LIMIT);
       const b = createBlock(
         db,
         c.get('actor'),

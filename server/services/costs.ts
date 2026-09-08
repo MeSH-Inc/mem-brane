@@ -13,6 +13,7 @@ export interface ModelPrice {
 }
 export interface CostPolicy {
   dailyLimitUsd: number;
+  globalDailyLimitUsd?: number;
   prices: Record<string, ModelPrice>;
 }
 export const freePrice: ModelPrice = {
@@ -56,11 +57,25 @@ export function budgetState(db: DB, actor: string, policy?: CostPolicy, time = D
     )
     .get(day, actor) as { committed: number };
   const limit = Math.floor((policy?.dailyLimitUsd ?? 0) * 1e6);
+  const global =
+    policy?.globalDailyLimitUsd === undefined
+      ? Infinity
+      : Math.max(
+          0,
+          Math.floor(policy.globalDailyLimitUsd * 1e6) -
+            (
+              db
+                .prepare(
+                  `SELECT COALESCE(SUM(CASE WHEN status IN ('reserved','uncertain') THEN reserved_microusd WHEN status='confirmed' AND budget_day=? THEN confirmed_microusd ELSE 0 END),0) committed FROM run_costs`,
+                )
+                .get(day) as { committed: number }
+            ).committed,
+        );
   return {
     day,
     limitMicrousd: limit,
     committedMicrousd: row.committed,
-    availableMicrousd: Math.max(0, limit - row.committed),
+    availableMicrousd: Math.min(global, Math.max(0, limit - row.committed)),
   };
 }
 export function reserveCost(
@@ -79,6 +94,18 @@ export function reserveCost(
     amount = costMicro(input, outputLimit, price),
     time = Date.now(),
     budget = budgetState(db, actor, policy, time);
+  if (model !== 'mock' && policy?.globalDailyLimitUsd !== undefined) {
+    const global = db
+      .prepare(
+        `SELECT COALESCE(SUM(CASE WHEN status IN ('reserved','uncertain') THEN reserved_microusd WHEN status='confirmed' AND budget_day=? THEN confirmed_microusd ELSE 0 END),0) committed FROM run_costs`,
+      )
+      .get(budget.day) as { committed: number };
+    if (
+      global.committed + amount > Math.floor(policy.globalDailyLimitUsd * 1e6) ||
+      policy.globalDailyLimitUsd <= 0
+    )
+      throw new DomainError(429, 'Operator model budget is fully committed');
+  }
   if (amount > budget.availableMicrousd)
     throw new DomainError(
       429,

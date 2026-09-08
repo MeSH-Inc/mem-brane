@@ -77,3 +77,41 @@ node --import tsx --env-file-if-exists=.env scripts/reconcile-cost.ts --run RUN_
 ```
 
 One USD equals 1,000,000 micro-USD. Use zero only when provider evidence confirms no charge. The reconciliation record is immutable. Do not use this command merely to bypass an exhausted budget. Structured lifecycle logs and authenticated `/api/operations` expose run state, attempts, leases and accounting status without content or provider secrets.
+
+## Admission and restoration controls
+
+Paid admission now requires a positive `GLOBAL_DAILY_SPEND_LIMIT` as well as the
+per-user limit. Outstanding and uncertain liabilities across all actors count toward
+this operator budget. Defaults keep paid execution disabled.
+
+`RUN_QUEUE_LIMIT` caps active/queued generations (default 100). Imports have global
+and actor limits (`IMPORT_QUEUE_LIMIT=100`, `USER_IMPORT_LIMIT=10`). Image bytes,
+including outstanding upload intents, are reserved against `USER_STORAGE_BYTES`
+(default 100 MiB) and `TOTAL_STORAGE_BYTES` (default 1 GiB) before object writes.
+Each actor can create 100 branes; each brane supports 500 placements. Workspace reads
+retain runs for visible output blocks, active work, and the latest 100 runs. These
+bounds do not delete historical records.
+
+Uncommitted uploads keep durable intents even after a crash or ambiguous storage
+failure. To release them, stop the server, wait for outstanding object writes to
+settle, and run:
+
+```sh
+node --import tsx scripts/reconcile-uploads.ts --offline
+```
+
+This deletes only keys recorded in upload intents and releases their reservations;
+committed assets are protected. Do not run concurrently with the application.
+
+Verify an isolated restored SQLite backup and its copied local image directory:
+
+```sh
+node --import tsx scripts/verify-restore.ts /restore/mem-brane.sqlite /restore/assets
+```
+
+The verifier opens SQL read-only, checks database and foreign-key integrity, reads
+every committed asset, and verifies sizes and hashes referenced by live content and
+immutable revisions. Pending uploads are reported separately. For R2, export the
+matching object keys into that directory first. The local test suite performs an
+online backup, copies images, removes the original image directory, validates the
+restore, then confirms that missing and corrupted bytes are detected.

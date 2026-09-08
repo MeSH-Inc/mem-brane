@@ -9,6 +9,7 @@ export interface RunLimits {
   models: string[];
   maxTokens: number;
   userConcurrency: number;
+  queueLimit?: number;
   maxContextCharacters: number;
 }
 export function readInputs(db: DB, runId: string): RunInput[] {
@@ -47,6 +48,13 @@ function checkLimits(db: DB, actor: string, model: string, limits: RunLimits) {
       "SELECT count(*) n FROM runs WHERE owner_id=? AND status IN ('queued','claimed','running','cancel_requested')",
     )
     .get(actor) as any;
+  const queued = db
+    .prepare(
+      "SELECT count(*) n FROM runs WHERE status IN ('queued','claimed','running','cancel_requested')",
+    )
+    .get() as { n: number };
+  if (queued.n >= (limits.queueLimit ?? 100))
+    throw new DomainError(429, 'Run queue capacity reached');
   if (active.n >= limits.userConcurrency)
     throw new DomainError(429, 'Concurrent run limit reached');
 }

@@ -156,3 +156,32 @@ it('known preflight failure releases the reservation while provider failures ret
   ).toBe('released');
   expect(budgetState(db, actor, policy).committedMicrousd).toBe(0);
 });
+
+it('enforces operator liability across actors and includes it in available budget', () => {
+  const globalPolicy = { ...policy, globalDailyLimitUsd: 0.003 };
+  const first = submitRun(db, revisions(db), actor, input(), {
+    ...limits,
+    costPolicy: globalPolicy,
+  });
+  holdUncertainCost(db, first.id);
+  const secondActor = uid();
+  db.prepare('INSERT INTO "user" (id,name,email,createdAt,updatedAt) VALUES (?,?,?,?,?)').run(
+    secondActor,
+    'Other',
+    `${secondActor}@example.com`,
+    0,
+    0,
+  );
+  const secondBrane = createBrane(db, secondActor).id;
+  expect(budgetState(db, secondActor, globalPolicy).availableMicrousd).toBeLessThan(1000);
+  expect(() =>
+    submitRun(
+      db,
+      revisions(db),
+      secondActor,
+      { ...input(), braneId: secondBrane },
+      { ...limits, costPolicy: globalPolicy },
+    ),
+  ).toThrow('budget');
+  expect((db.prepare('SELECT count(*) n FROM runs').get() as any).n).toBe(1);
+});
