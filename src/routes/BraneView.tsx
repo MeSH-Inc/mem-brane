@@ -1,3 +1,4 @@
+import { useWorkspaceDraft } from '../services/workspace-drafts';
 import { modelCompatibility } from '../../shared/representations';
 import { PdfContent } from '../components/PdfContent';
 import { imports } from '../services/imports';
@@ -9,6 +10,7 @@ import { canvasTools } from '../canvas/tools';
 import { selectedBlockIds } from '../canvas/selection';
 import {
   useCallback,
+  useLayoutEffect,
   useEffect,
   useMemo,
   useRef,
@@ -40,15 +42,14 @@ const BraneCanvas = lazy(() =>
   import('../canvas/BraneCanvas').then((module) => ({ default: module.BraneCanvas })),
 );
 
-export function BraneView({
-  braneId,
-  focus,
-  view,
-}: {
-  braneId: string;
-  focus?: string;
-  view?: 'canvas' | 'focus';
-}) {
+type BraneViewProps = { braneId: string; focus?: string; view?: 'canvas' | 'focus' };
+
+export function BraneView(props: BraneViewProps) {
+  const actor = useInteraction((s) => s.actor);
+  return <BraneWorkspace key={JSON.stringify([actor, props.braneId])} {...props} />;
+}
+
+function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   const [serverState, setState] = useState<BraneState>();
   const [placementSaves] = useState(
     () =>
@@ -76,8 +77,6 @@ export function BraneView({
     [notice, setNotice] = useState(''),
     [newBlock, setNewBlock] = useState<string>(),
     [revealedBlock, setRevealedBlock] = useState<string>(),
-    [prompt, setPrompt] = useState(''),
-    [model, setModel] = useState('mock'),
     [models, setModels] = useState<string[]>(['mock']),
     [busy, setBusy] = useState(false),
     [inspected, setInspected] = useState<{
@@ -92,7 +91,28 @@ export function BraneView({
     [lineage, setLineage] = useState<ConversationMessage[]>([]),
     [budget, setBudget] = useState<{ availableMicrousd: number; limitMicrousd: number }>(),
     [vision, setVision] = useState<Record<string, { vision: boolean }>>({});
-  const [titleDraft, setTitleDraft] = useState<string>();
+  const actor = useInteraction((s) => s.actor);
+  const workspace = useWorkspaceDraft(actor, braneId);
+  const prompt = workspace.draft.prompt ?? '';
+  const model = workspace.draft.model ?? 'mock';
+  const titleDraft = workspace.draft.title;
+  const setPrompt = (value: string | ((current: string) => string)) =>
+    workspace.update({
+      prompt: typeof value === 'function' ? value(workspace.current.current.prompt ?? '') : value,
+    });
+  const setModel = (model: string) => workspace.update({ model });
+  const setTitleDraft = (title: string | undefined) => workspace.update({ title });
+  useLayoutEffect(() => {
+    useInteraction.setState({
+      references: workspace.current.current.references ?? [],
+      continueFrom: workspace.current.current.continueFrom,
+      selectedPlacements: [],
+    });
+    return useInteraction.subscribe((next, previous) => {
+      if (next.references !== previous.references || next.continueFrom !== previous.continueFrom)
+        workspace.update({ references: next.references, continueFrom: next.continueFrom });
+    });
+  }, []);
   const mobile = useMobile();
   const ui = {
     addReferences: useInteraction((s) => s.addReferences),
@@ -105,7 +125,6 @@ export function BraneView({
     recovered: useInteraction((s) => s.recovered),
     recoveryError: useInteraction((s) => s.recoveryError),
     references: useInteraction((s) => s.references),
-    resetContext: useInteraction((s) => s.resetContext),
     selectedPlacements: useInteraction((s) => s.selectedPlacements),
     setContinue: useInteraction((s) => s.setContinue),
     setInspector: useInteraction((s) => s.setInspector),
@@ -197,10 +216,9 @@ export function BraneView({
         setBudget(c.budget);
         setVision(c.modelCapabilities);
         imports.maxBytes = c.imports?.maxBytes ?? imports.maxBytes;
-        setModel(c.defaultModel);
+        if (!workspace.current.current.model) setModel(c.defaultModel);
       })
       .catch((e) => setError(e.message));
-    ui.resetContext();
     setInspected(undefined);
     setError('');
     setNotice('');
@@ -405,16 +423,13 @@ export function BraneView({
     [braneId, navigate],
   );
   async function save() {
+    const savedTitle = titleDraft ?? stateRef.current!.brane.title;
     try {
       await placementSaves.flush();
       await flush();
-      await api(
-        `/branes/${braneId}`,
-        { title: titleDraft ?? stateRef.current!.brane.title },
-        'PATCH',
-      );
+      await api(`/branes/${braneId}`, { title: savedTitle }, 'PATCH');
       await refresh();
-      setTitleDraft(undefined);
+      if (workspace.current.current.title === savedTitle) setTitleDraft(undefined);
       setNotice('Brane saved');
     } catch (e) {
       setError((e as Error).message);
@@ -542,6 +557,9 @@ export function BraneView({
             value={titleDraft ?? state.brane.title}
             onChange={(e) => setTitleDraft(e.target.value)}
           />
+          {titleDraft !== undefined && titleDraft !== state.brane.title && (
+            <small className="muted">Unsaved title · choose Save brane to publish this edit</small>
+          )}
         </div>
         <div className="toolbar-actions">
           <div className="view-toggle">
@@ -731,9 +749,9 @@ export function BraneView({
               <button>Import webpage</button>
             </form>
           )}
-          {error && (
+          {(error || workspace.error) && (
             <div role="alert" className="error-banner">
-              {error}
+              {error || workspace.error}
               <button
                 onClick={() => {
                   setError('');
@@ -1035,7 +1053,8 @@ export function BraneView({
               </div>
             )}
             <div className="snapshot-note">
-              ◎ At Run, this context becomes an immutable snapshot. Keep editing freely.
+              Drafts stay in this tab across reloads. At Run, current reference content becomes an
+              immutable snapshot.
             </div>
             <div className="section-label">
               VISIBLE / ACTIVE EXPLORATIONS <span>{state.runs.length}</span>
