@@ -70,9 +70,17 @@ export async function executeWithModel(
     onError: () => {},
   });
   let text = '';
-  for await (const chunk of result.textStream) {
-    text += chunk;
-    onChunk(chunk);
+  let completed = false;
+  for await (const part of result.fullStream) {
+    if (part.type === 'error') throw part.error;
+    if (part.type === 'abort') throw new Error('Provider stream aborted');
+    if (part.type === 'text-delta') {
+      text += part.text;
+      onChunk(part.text);
+    }
+    if (part.type === 'finish') completed = part.finishReason === 'stop';
   }
+  request.signal.throwIfAborted();
+  if (!completed) throw new Error('Provider did not confirm successful completion');
   return { text, usage: await result.usage };
 }

@@ -213,3 +213,62 @@ it('production Responses protocol streams locally and never retries provider fai
     await server.close();
   }
 });
+
+it.each(['eof', 'failed', 'incomplete'])(
+  'rejects partial Responses output ending with %s',
+  async (ending) => {
+    const server = await localServer(async (req, res) => {
+      for await (const _ of req) {
+      }
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const events: unknown[] = [
+        {
+          type: 'response.created',
+          response: { id: 'resp_partial', created_at: 0, model: 'test-model' },
+        },
+        {
+          type: 'response.output_item.added',
+          output_index: 0,
+          item: { type: 'message', id: 'msg_partial' },
+        },
+        { type: 'response.output_text.delta', item_id: 'msg_partial', delta: 'Partial answer' },
+      ];
+      if (ending === 'failed')
+        events.push({
+          type: 'error',
+          code: 'server_error',
+          message: 'Fixture failure',
+          param: null,
+        });
+      if (ending === 'incomplete')
+        events.push({
+          type: 'response.incomplete',
+          response: {
+            incomplete_details: { reason: 'max_output_tokens' },
+            usage: { input_tokens: 8, output_tokens: 4, total_tokens: 12 },
+          },
+        });
+      for (const event of events) res.write(`data: ${JSON.stringify(event)}\n\n`);
+      res.end();
+    });
+    try {
+      const chunks: string[] = [];
+      await expect(
+        executeWithModel(
+          {
+            model: 'test-model',
+            maxOutputTokens: 30,
+            inputs: [],
+            messages: [{ role: 'user', content: 'Test' }],
+            signal: AbortSignal.timeout(3000),
+          },
+          (chunk) => chunks.push(chunk),
+          createOpenAI({ apiKey: 'fixture', baseURL: server.url })('test-model'),
+        ),
+      ).rejects.toThrow();
+      expect(chunks.join('')).toBe('Partial answer');
+    } finally {
+      await server.close();
+    }
+  },
+);
