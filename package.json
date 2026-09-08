@@ -15,8 +15,8 @@
     "start": "node --env-file-if-exists=.env dist-server/main.js",
     "format": "prettier --write src server shared scripts tests docs *.md *.json *.ts *.html",
     "format:check": "prettier --check src server shared scripts tests docs *.md *.json *.ts *.html",
-    "test:browser": "playwright test",
-    "verify": "npm run format:check && npm run build && npm test && npm run test:browser"
+    "test:browser": "npm run build && playwright test",
+    "verify": "npm run format:check && npm run build && npm test && playwright test"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",

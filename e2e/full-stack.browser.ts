@@ -50,6 +50,24 @@ test('built app saves through navigation, corrects rejected submissions, reconci
       await page.request.post(`${origin}/api/blocks/text`, { data: { braneId: brane.id } })
     ).json();
     await page.goto(`${origin}/b/${brane.id}?view=focus`);
+    await expect(page.getByRole('textbox', { name: 'Block text', exact: true })).toBeVisible();
+    let captured = false;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(
+      `**/api/branes/${brane.id}`,
+      async (route) => {
+        const old = await (await route.fetch()).json();
+        captured = true;
+        await gate;
+        await route.fulfill({ json: old });
+      },
+      { times: 1 },
+    );
+    await page.evaluate(() => window.dispatchEvent(new Event('brane:reconcile')));
+    await expect.poll(() => captured).toBe(true);
     await page
       .getByRole('textbox', { name: 'Block text', exact: true })
       .fill('Saved across navigation');
@@ -61,6 +79,19 @@ test('built app saves through navigation, corrects rejected submissions, reconci
           ).content.text,
       )
       .toBe('Saved across navigation');
+    await expect(page.getByRole('status')).not.toContainText('Unsaved edits');
+    const late = page.waitForResponse(`${origin}/api/branes/${brane.id}`);
+    release();
+    await late;
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(page.getByRole('textbox', { name: 'Block text', exact: true })).toHaveValue(
+      'Saved across navigation',
+    );
     await page.goto(origin);
     await page.goto(`${origin}/b/${brane.id}?view=focus`);
     await expect(page.getByRole('textbox', { name: 'Block text', exact: true })).toHaveValue(
