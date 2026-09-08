@@ -1,3 +1,4 @@
+import { decodeContent } from './representations.js';
 import { modelCompatibility } from '../../shared/representations.js';
 import type { DB } from '../db/index.js';
 import type { SubmitRun, RunInput } from '../../shared/types/domain.js';
@@ -39,7 +40,7 @@ export function estimateRun(
         )
         .get(blockId)) as any;
     if (!row) continue;
-    const content = JSON.parse(row.content_json),
+    const content = decodeContent(db, row.content_json),
       edit = input.edits.find((e) => e.blockId === blockId);
     if (edit) content.text = edit.text;
     add(content, 'reference', `Reference ${i + 1}`);

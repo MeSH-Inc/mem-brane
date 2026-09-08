@@ -1,3 +1,4 @@
+import { canonicalJson, representationId } from '../domain/canonical.js';
 import Database from 'better-sqlite3';
 import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -6,6 +7,12 @@ export function openDatabase(path: string): DB {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
   try {
+    db.function('canonical_json', { deterministic: true }, (json) =>
+      canonicalJson(JSON.parse(String(json))),
+    );
+    db.function('representation_id', { deterministic: true }, (asset, format, payload) =>
+      representationId(String(asset), String(format), String(payload)),
+    );
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.pragma('busy_timeout = 5000');

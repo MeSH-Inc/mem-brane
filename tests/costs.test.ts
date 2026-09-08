@@ -120,6 +120,16 @@ it('preview does not materialize history and immutable estimates cannot be rewri
   ).toThrow('immutable');
 });
 it('vision capability is enforced before queueing any paid work', async () => {
+  const asset = uid();
+  db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?,?)').run(
+    asset,
+    actor,
+    asset,
+    'image/png',
+    1,
+    0,
+    'a'.repeat(64),
+  );
   const { createBlock } = await import('../server/services/content');
   const image = createBlock(
     db,
@@ -130,7 +140,7 @@ it('vision capability is enforced before queueing any paid work', async () => {
       filename: 'image',
       representation: 'original-image-v1',
       text: 'image',
-      assetId: uid(),
+      assetId: asset,
       assetHash: 'a'.repeat(64),
       mimeType: 'image/png',
     },

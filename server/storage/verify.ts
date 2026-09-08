@@ -1,3 +1,5 @@
+import { decodeContent } from '../services/representations.js';
+import { representationId } from '../domain/canonical.js';
 import { createHash } from 'node:crypto';
 import type { DB } from '../db/index.js';
 import type { AssetStore } from './assets.js';
@@ -22,13 +24,33 @@ export async function verifyRestoration(db: DB, store: Pick<AssetStore, 'get'>) 
     if (digest !== asset.digest) throw new Error(`Asset integrity mismatch: ${asset.id}`);
     hashes.set(asset.id, digest);
   }
+  for (const row of db.prepare('SELECT * FROM asset_representations').iterate() as Iterable<{
+    id: string;
+    asset_id: string;
+    format: string;
+    payload_json: string;
+  }>) {
+    if (row.id !== representationId(row.asset_id, row.format, row.payload_json))
+      throw new Error(`Representation integrity mismatch: ${row.id}`);
+  }
+  if (
+    db
+      .prepare(
+        `SELECT 1 FROM (
+    SELECT block_id,representation_id FROM block_live_state UNION ALL SELECT block_id,representation_id FROM block_revisions
+  ) c JOIN blocks b ON b.id=c.block_id JOIN asset_representations r ON r.id=c.representation_id
+  JOIN assets a ON a.id=r.asset_id WHERE a.owner_id!=b.owner_id OR r.format!=b.kind LIMIT 1`,
+      )
+      .get()
+  )
+    throw new Error('Representation ownership or format mismatch');
   let references = 0;
   for (const row of db
     .prepare(
       'SELECT content_json FROM block_live_state UNION ALL SELECT content_json FROM block_revisions',
     )
     .iterate() as Iterable<{ content_json: string }>) {
-    const content = JSON.parse(row.content_json);
+    const content = decodeContent(db, row.content_json);
     if (!content.assetId) continue;
     if (!content.assetHash || hashes.get(content.assetId) !== content.assetHash)
       throw new Error(`Asset integrity mismatch: ${content.assetId}`);

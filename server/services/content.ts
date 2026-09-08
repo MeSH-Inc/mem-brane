@@ -1,3 +1,4 @@
+import { encodeContent, decodeContent } from './representations.js';
 import { readWorkspaceRuns, readVisibleDerivations } from './run-reads.js';
 import {
   MAX_BRANE_PLACEMENTS,
@@ -77,7 +78,7 @@ export function createBlock(
     if (origin === 'authored')
       db.prepare('INSERT INTO block_live_state VALUES (?,?,0,?)').run(
         id,
-        JSON.stringify(content),
+        encodeContent(db, actor, content),
         now(),
       );
     const placement = braneId ? createPlacement(db, actor, braneId, id, geometry) : undefined;
@@ -140,15 +141,15 @@ export function revisions(db: DB): RevisionService {
           .get(blockId) as any;
         if (!existing)
           throw new DomainError(409, 'Only finalized responses can be used as context');
-        return revisionDto(existing);
+        return revisionDto(db, existing);
       }
-      const content: Content = JSON.parse(live.content_json);
+      const content: Content = decodeContent(db, live.content_json);
       if (block.kind === 'webpage' && content.status !== 'ready')
         throw new DomainError(409, 'Webpage is not ready; paste content or wait for import');
       const existing = db
         .prepare('SELECT * FROM block_revisions WHERE block_id=? AND source_version=?')
         .get(blockId, live.version) as RevisionRow | undefined;
-      if (existing) return revisionDto(existing);
+      if (existing) return revisionDto(db, existing);
       const revision = { id: uid(), block_id: blockId, content, created_at: now() };
       db.prepare(
         'INSERT INTO block_revisions (id,block_id,content_json,created_at,source_version) VALUES (?,?,?,?,?)',
@@ -163,11 +164,11 @@ interface RevisionRow {
   content_json: string;
   created_at: number;
 }
-function revisionDto(row: RevisionRow): Revision {
+function revisionDto(db: DB, row: RevisionRow): Revision {
   return {
     id: row.id,
     block_id: row.block_id,
-    content: JSON.parse(row.content_json),
+    content: decodeContent(db, row.content_json),
     created_at: row.created_at,
   };
 }
@@ -177,7 +178,7 @@ export function readRevision(db: DB, actor: string, id: string): Revision {
     .get(id) as RevisionRow | undefined;
   if (!row) throw new DomainError(404, 'Revision not found');
   requireOwned(db, 'blocks', actor, row.block_id);
-  return revisionDto(row);
+  return revisionDto(db, row);
 }
 export function readRevisionPage(
   db: DB,
@@ -209,7 +210,7 @@ export function readRevisionPage(
           .all(blockId, limit + 1)
   ) as RevisionRow[];
   return {
-    items: rows.slice(0, limit).map(revisionDto),
+    items: rows.slice(0, limit).map((row) => revisionDto(db, row)),
     nextCursor: rows.length > limit ? rows[limit - 1].id : null,
   };
 }
@@ -278,7 +279,10 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
       kind: b.kind,
       origin: b.origin,
       version: b.version ?? 0,
-      content: JSON.parse(b.content_json ?? b.final_content ?? '{"format":"text","text":""}'),
+      content: decodeContent(
+        db,
+        b.content_json ?? b.final_content ?? '{"format":"text","text":""}',
+      ),
       messageId: b.message_id,
     };
   });

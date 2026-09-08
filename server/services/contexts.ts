@@ -1,3 +1,4 @@
+import { decodeContent } from './representations.js';
 import { randomUUID } from 'node:crypto';
 import type { DB } from '../db/index.js';
 import type { RunInput } from '../../shared/types/domain.js';
@@ -66,7 +67,7 @@ export function readLineage(db: DB, actor: string, messageId: string): Conversat
     revision_id: row.revision_id,
     created_at: row.created_at,
     block_id: row.block_id,
-    content: JSON.parse(row.content_json),
+    content: decodeContent(db, row.content_json),
     references:
       row.role === 'user' ? (references.all(row.run_id) as ConversationMessage['references']) : [],
   }));
@@ -81,7 +82,10 @@ export function lineageInputs(db: DB, messages: ConversationMessage[]): RunInput
       if (!content.has(ref.revision_id))
         content.set(
           ref.revision_id,
-          JSON.parse((revision.get(ref.revision_id) as { content_json: string }).content_json),
+          decodeContent(
+            db,
+            (revision.get(ref.revision_id) as { content_json: string }).content_json,
+          ),
         );
       inputs.push({
         ...ref,
@@ -131,7 +135,7 @@ export function readInputs(db: DB, runId: string): RunInput[] {
       label: row.label,
       role: row.role,
       revision_id: row.revision_id,
-      content: JSON.parse(row.content_json),
+      content: decodeContent(db, row.content_json),
     });
   return inputs;
 }

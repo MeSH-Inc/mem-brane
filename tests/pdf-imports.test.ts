@@ -1,3 +1,4 @@
+import { encodeContent } from '../server/services/representations';
 import { beforeEach, afterEach, expect, it } from 'vitest';
 import { openDatabase, type DB } from '../server/db/index';
 import { createImports } from '../server/services/imports';
@@ -93,11 +94,11 @@ it('retains original PDF bytes and freezes page-aware text with an explicit extr
     ...result.content,
     representation: {
       ...result.content.representation,
-      pages: [{ number: 1, text: 'Later extraction' }],
+      pages: [1, 2, 3].map((number) => ({ number, text: 'Later extraction' })),
     },
   };
   db.prepare('UPDATE block_live_state SET content_json=?,version=version+1 WHERE block_id=?').run(
-    JSON.stringify(edited),
+    encodeContent(db, actor, edited),
     result.id,
   );
   const inputs = readInputs(db, run.id);

@@ -145,9 +145,8 @@ export function submitRun(
         output.placement.id,
       );
     const inputs = readInputs(db, runId);
-    const contentSize = db.prepare('SELECT length(content_json) n FROM block_revisions WHERE id=?');
     const characters = inputs.reduce(
-      (total, input) => total + (contentSize.get(input.revision_id) as { n: number }).n,
+      (total, input) => total + JSON.stringify(input.content).length,
       0,
     );
     if (characters > limits.maxContextCharacters)
