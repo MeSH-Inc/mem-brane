@@ -93,6 +93,11 @@ it('exposes brane and run domain operations with frozen context inspection', asy
   expect(inspected.inputs[0]).not.toHaveProperty('content_json');
   const reload = await app.request(`/api/branes/${brane.id}`, { headers: headers() });
   expect((await reload.json()).runs[0].id).toBe(run.id);
+  const history = await app.request(`/api/branes/${brane.id}/runs?limit=1`, { headers: headers() });
+  expect(await history.json()).toMatchObject({ items: [{ id: run.id }], nextCursor: null });
+  expect(
+    (await app.request(`/api/branes/${brane.id}/runs?limit=51`, { headers: headers() })).status,
+  ).toBe(400);
 });
 it('checks another actor’s protected resources through HTTP', async () => {
   const other = uid();

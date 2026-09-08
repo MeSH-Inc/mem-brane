@@ -1,3 +1,4 @@
+import { readWorkspaceRuns, readVisibleDerivations } from './run-reads.js';
 import {
   MAX_BRANE_PLACEMENTS,
   MAX_BLOCK_TEXT_CHARACTERS,
@@ -15,8 +16,6 @@ import type {
   Geometry,
   BraneState,
   Block,
-  Run,
-  Derivation,
 } from '../../shared/types/domain.js';
 import type { RevisionPage } from '../../shared/types/history.js';
 import { canEditBrane, canReadBrane, DomainError, requireOwned } from '../domain/access.js';
@@ -283,24 +282,7 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
       messageId: b.message_id,
     };
   });
-  const runs = db
-    .prepare(
-      "SELECT r.id,r.brane_id,r.status,r.model,r.provider,r.output_block_id,COALESCE(c.text,'') partial,r.error,r.usage_json,r.retry_of,r.created_at FROM runs r LEFT JOIN run_checkpoints c ON c.run_id=r.id AND r.status!='completed' WHERE r.brane_id=? AND (r.output_block_id IN (SELECT block_id FROM placements WHERE brane_id=?) OR r.status IN ('queued','claimed','running','cancel_requested') OR r.id IN (SELECT id FROM runs WHERE brane_id=? ORDER BY created_at DESC,id DESC LIMIT 100)) ORDER BY r.created_at,r.id",
-    )
-    .all(id, id, id) as Run[];
-  const derivations = db
-    .prepare(
-      `
-    SELECT i.run_id runId, v.block_id sourceBlockId, i.revision_id sourceRevisionId,
-      r.output_block_id outputBlockId, i.position,
-      l.anchor_placement_id anchorPlacementId, l.output_placement_id outputPlacementId
-    FROM run_inputs i JOIN block_revisions v ON v.id=i.revision_id
-    JOIN runs r ON r.id=i.run_id LEFT JOIN run_placements l ON l.run_id=r.id
-    WHERE i.kind='source' AND r.owner_id=? AND r.output_block_id IN (
-      SELECT block_id FROM placements WHERE brane_id=?
-    ) ORDER BY r.created_at,i.position
-  `,
-    )
-    .all(actor, id) as Derivation[];
+  const runs = readWorkspaceRuns(db, actor, id);
+  const derivations = readVisibleDerivations(db, actor, id);
   return { brane, placements, blocks, runs, derivations };
 }

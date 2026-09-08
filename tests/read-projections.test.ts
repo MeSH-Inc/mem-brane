@@ -9,8 +9,10 @@ import {
   revisions,
   updateBlockLiveState,
   uid,
+  removePlacement,
 } from '../server/services/content';
-import { submitRun } from '../server/services/runs';
+import { submitRun, cancelRun } from '../server/services/runs';
+import { readRunPage } from '../server/services/run-reads';
 import { RunWorker } from '../server/jobs/worker';
 import { EventHub } from '../server/sse/hub';
 
@@ -125,4 +127,62 @@ it('projects completed content once and retains failed partials and duplicate pl
   expect(db.prepare('SELECT text FROM run_checkpoints WHERE run_id=?').get(completed.id)).toEqual({
     text: 'Final output only once',
   });
+});
+
+it('separates removed history from active and cross-brane placed outputs', () => {
+  const submit = () =>
+    submitRun(
+      db,
+      revisions(db),
+      actor,
+      { braneId: brane, key: uid(), model: 'mock', prompt: 'Test', references: [], edits: [] },
+      { models: ['mock'], maxTokens: 100, userConcurrency: 3, maxContextCharacters: 10000 },
+    );
+  const active = submit();
+  const old = submit();
+  cancelRun(db, actor, old.id);
+  for (const run of [active, old]) {
+    const p = db.prepare('SELECT id FROM placements WHERE block_id=?').get(run.output_block_id) as {
+      id: string;
+    };
+    removePlacement(db, actor, p.id);
+  }
+  expect(readBrane(db, actor, brane).runs.map((run) => run.id)).toEqual([active.id]);
+  expect(
+    readRunPage(db, actor, brane)
+      .items.map((run) => run.id)
+      .sort(),
+  ).toEqual([active.id, old.id].sort());
+  const other = createBrane(db, actor).id;
+  createPlacement(db, actor, other, active.output_block_id);
+  createPlacement(db, actor, other, active.output_block_id);
+  expect(readBrane(db, actor, other).runs.map((run) => run.id)).toEqual([active.id]);
+  expect(readRunPage(db, actor, other).items).toEqual([]);
+  expect(() => readRunPage(db, uid(), brane)).toThrow('not found');
+});
+
+it('pages run history across equal timestamps without depending on status', () => {
+  vi.spyOn(Date, 'now').mockReturnValue(1000);
+  const ids = [];
+  for (let i = 0; i < 5; i++) {
+    const run = submitRun(
+      db,
+      revisions(db),
+      actor,
+      { braneId: brane, key: uid(), model: 'mock', prompt: 'Page', references: [], edits: [] },
+      { models: ['mock'], maxTokens: 100, userConcurrency: 1, maxContextCharacters: 10000 },
+    );
+    cancelRun(db, actor, run.id);
+    ids.push(run.id);
+  }
+  const first = readRunPage(db, actor, brane, 2);
+  const second = readRunPage(db, actor, brane, 2, first.nextCursor!);
+  const last = readRunPage(db, actor, brane, 2, second.nextCursor!);
+  expect([...first.items, ...second.items, ...last.items].map((run) => run.id)).toEqual(
+    ids.sort().reverse(),
+  );
+  expect(last.nextCursor).toBeNull();
+  expect(first.items[0]).not.toHaveProperty('partial');
+  expect(() => readRunPage(db, actor, brane, 51)).toThrow('limit');
+  expect(() => readRunPage(db, actor, brane, 2, uid())).toThrow('cursor');
 });

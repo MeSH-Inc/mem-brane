@@ -1,5 +1,6 @@
 import { MAX_BLOCK_TEXT_CHARACTERS } from '../../shared/limits.js';
 import { admitImport } from '../services/capacity.js';
+import { readRunPage } from '../services/run-reads.js';
 import { Hono } from 'hono';
 import { createRateLimit } from './rate-limit.js';
 import { streamSSE } from 'hono/streaming';
@@ -119,6 +120,14 @@ export function createApi(
     return c.json(createBrane(db, c.get('actor'), title), 201);
   });
   app.get('/branes/:id', (c) => c.json(readBrane(db, c.get('actor'), id.parse(c.req.param('id')))));
+  app.get('/branes/:id/runs', (c) => {
+    const query = z
+      .object({ limit: z.coerce.number().int().min(1).max(50).default(25), cursor: id.optional() })
+      .parse(c.req.query());
+    return c.json(
+      readRunPage(db, c.get('actor'), id.parse(c.req.param('id')), query.limit, query.cursor),
+    );
+  });
   app.patch('/branes/:id', async (c) => {
     const braneId = id.parse(c.req.param('id'));
     canEditBrane(db, c.get('actor'), braneId);

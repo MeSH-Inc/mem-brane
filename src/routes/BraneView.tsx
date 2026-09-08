@@ -32,6 +32,7 @@ import { useInteraction } from '../stores/interaction';
 import { BlockContent } from '../components/BlockContent';
 import { SpawnButton } from '../components/SpawnButton';
 import { ArtifactActions } from '../components/ArtifactActions';
+import { RunHistory } from '../components/RunHistory';
 import { draftDisposition } from '../services/drafts';
 import { useMobile } from '../lib/useMobile';
 const BraneCanvas = lazy(() =>
@@ -268,7 +269,8 @@ export function BraneView({
     };
     const onRun = (event: Event) => {
       const data = (event as CustomEvent).detail;
-      if (data.braneId !== braneId) return;
+      if (data.braneId !== braneId && !stateRef.current?.runs.some((run) => run.id === data.runId))
+        return;
       if (data.status) {
         reconcile();
       } else if (data.text !== undefined)
@@ -1035,7 +1037,7 @@ export function BraneView({
               ◎ At Run, this context becomes an immutable snapshot. Keep editing freely.
             </div>
             <div className="section-label">
-              EXPLORATIONS <span>{state.runs.length}</span>
+              VISIBLE / ACTIVE EXPLORATIONS <span>{state.runs.length}</span>
             </div>
             <div className="run-list">
               {[...state.runs].reverse().map((r, i) => (
@@ -1088,6 +1090,13 @@ export function BraneView({
                 </div>
               ))}
             </div>
+            <RunHistory
+              key={braneId}
+              braneId={braneId}
+              onInspect={async (id) => {
+                setInspected(await api(`/runs/${id}`));
+              }}
+            />
             {inspected && (
               <div className="frozen-inspector">
                 <div className="section-label">

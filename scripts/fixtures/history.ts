@@ -22,7 +22,13 @@ export function databaseFootprint(db: DB) {
 
 // Exercise history through real domain submission and finalization, without a provider.
 // Call only on a disposable fixture database before its HTTP server starts.
-export async function seedHistory(db: DB, actor: string, braneId: string, characters: number) {
+export async function seedHistory(
+  db: DB,
+  actor: string,
+  braneId: string,
+  characters: number,
+  independentRuns = 250,
+) {
   const initial = databaseFootprint(db);
   const source = createBlock(db, actor, 'text', { format: 'text', text: 's'.repeat(characters) });
   const snapshots = revisions(db);
@@ -94,7 +100,6 @@ export async function seedHistory(db: DB, actor: string, braneId: string, charac
     ).message_id;
   };
   const chainTurns = 80;
-  const independentRuns = 250;
   try {
     for (let turn = 1; turn <= chainTurns; turn++) {
       continueFrom = await finish(turn === 1 ? [source.id] : [], `Continue ${turn}`, continueFrom);
