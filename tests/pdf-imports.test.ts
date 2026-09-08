@@ -183,3 +183,26 @@ it('starts and tears down independent parser workers under concurrent load', asy
     expect(results.every((result) => result.representation.status === 'unavailable')).toBe(true);
   }
 });
+
+it('reuses parsed PDF pages across concurrent keys and service restarts', async () => {
+  const { inspectPdf } = await import('../server/ingestion/pdf');
+  const { inspectImage } = await import('../server/ingestion/image');
+  let calls = 0;
+  const parsers = {
+    image: inspectImage,
+    pdf: async (bytes: Uint8Array) => {
+      calls++;
+      return inspectPdf(bytes);
+    },
+  };
+  const send = () =>
+    createImports(db, store, parsers).import(
+      actor,
+      intent(),
+      new File([pdfFixture(['Cached evidence'])], 'Paper.pdf'),
+    );
+  await Promise.all([send(), send(), send()]);
+  await send();
+  expect(calls).toBe(1);
+  expect(db.prepare('SELECT count(*) n FROM extraction_results').get()).toEqual({ n: 1 });
+});

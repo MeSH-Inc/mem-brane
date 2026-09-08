@@ -268,3 +268,38 @@ it('converges concurrent same-key deliveries across service instances', async ()
   expect(results[0]).toEqual(results[1]);
   expect(db.prepare('SELECT count(*) n FROM blocks').get()).toEqual({ n: 1 });
 });
+
+it('parses repeated and concurrent uploads once per explicit policy, retaining integrity checks', async () => {
+  const { inspectImage } = await import('../server/ingestion/image');
+  const { inspectPdf } = await import('../server/ingestion/pdf');
+  const { extractionPolicies } = await import('../server/ingestion/policy');
+  let calls = 0;
+  const parsers = {
+    pdf: inspectPdf,
+    image: async (bytes: Uint8Array) => {
+      calls++;
+      return inspectImage(bytes);
+    },
+  };
+  const [a, b] = await Promise.all([
+    createImports(db, store, parsers).import(actor, intent(), file()),
+    createImports(db, store, parsers).import(actor, intent(), file()),
+  ]);
+  await createImports(db, store, parsers).import(actor, intent(), file());
+  expect(calls).toBe(1);
+  const old = revisions(db).snapshotBlock(actor, a.blockId);
+  const changed = {
+    ...extractionPolicies,
+    image: { ...extractionPolicies.image, implementation: 'original-image-v2' },
+  };
+  const next = await createImports(db, store, parsers, changed).import(actor, intent(), file());
+  expect(calls).toBe(2);
+  expect(contentOf(next).extractionPolicy).not.toBe(contentOf(a).extractionPolicy);
+  expect(revisions(db).snapshotBlock(actor, a.blockId)).toEqual(old);
+  expect(db.prepare('SELECT count(*) n FROM asset_representations').get()).toEqual({ n: 2 });
+  objects.set(contentOf(b).assetId, Buffer.from('corrupt'));
+  await expect(createImports(db, store, parsers).import(actor, intent(), file())).rejects.toThrow(
+    'integrity',
+  );
+  expect(calls).toBe(2);
+});

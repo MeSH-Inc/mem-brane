@@ -1,3 +1,5 @@
+import { extractionPolicies, policyIdentity } from '../ingestion/policy.js';
+import { decodeContent } from './representations.js';
 import type { ImportReceipt } from '../../shared/types/imports.js';
 import { createHash } from 'node:crypto';
 import type { DB } from '../db/index.js';
@@ -20,7 +22,19 @@ interface Operation {
   placement_id: string | null;
 }
 const hash = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
-export function createImports(db: DB, store: AssetStore) {
+const workByDatabase = new WeakMap<DB, Map<string, Promise<unknown>>>();
+export function createImports(
+  db: DB,
+  store: AssetStore,
+  parsers = { pdf: inspectPdf, image: inspectImage },
+  policies = extractionPolicies,
+) {
+  let serialized = workByDatabase.get(db);
+  if (!serialized) {
+    serialized = new Map();
+    workByDatabase.set(db, serialized);
+  }
+
   const active = new Map<string, { hash: string; promise: Promise<ImportReceipt> }>();
   const read = (actor: string, key: string) =>
     db.prepare('SELECT * FROM artifact_imports WHERE owner_id=? AND key=?').get(actor, key) as
@@ -57,17 +71,41 @@ export function createImports(db: DB, store: AssetStore) {
         return running.promise;
       }
       if (active.size >= 4) throw new DomainError(429, 'Import capacity reached; retry shortly');
+      const format =
+        Buffer.from(bytes.subarray(0, 5)).toString('ascii') === '%PDF-' ? 'pdf' : 'image';
+      const policy = policyIdentity(policies[format]);
       const work = async () => {
         let assetId = existing?.asset_id ?? uid();
         const base = { text: filename, filename, assetId, assetHash };
-        const content: Content =
-          Buffer.from(bytes.subarray(0, 5)).toString('ascii') === '%PDF-'
-            ? { ...base, format: 'pdf', mimeType: 'application/pdf', ...(await inspectPdf(bytes)) }
+        const cached = db
+          .prepare(
+            `SELECT e.representation_id FROM assets a JOIN extraction_results e ON e.asset_id=a.id WHERE a.owner_id=? AND a.digest=? AND e.policy_id=?`,
+          )
+          .get(actor, assetHash, policy.id) as { representation_id: string } | undefined;
+        const content: Content = cached
+          ? decodeContent(
+              db,
+              JSON.stringify({
+                format,
+                text: filename,
+                filename,
+                representationId: cached.representation_id,
+              }),
+            )
+          : format === 'pdf'
+            ? {
+                ...base,
+                format: 'pdf',
+                mimeType: 'application/pdf',
+                ...(await parsers.pdf(bytes)),
+                extractionPolicy: policy.id,
+              }
             : {
                 ...base,
                 format: 'image',
-                ...(await inspectImage(bytes)),
+                ...(await parsers.image(bytes)),
                 representation: 'original-image-v1',
+                extractionPolicy: policy.id,
               };
         db.transaction(() => {
           const current = read(actor, intent.key);
@@ -152,6 +190,16 @@ export function createImports(db: DB, store: AssetStore) {
             intent.braneId,
             intent.geometry,
           );
+          db.prepare('INSERT INTO extraction_policies VALUES (?,?) ON CONFLICT(id) DO NOTHING').run(
+            policy.id,
+            policy.json,
+          );
+          const representation = db
+            .prepare('SELECT representation_id FROM block_live_state WHERE block_id=?')
+            .get(result.id) as { representation_id: string };
+          db.prepare(
+            'INSERT INTO extraction_results VALUES (?,?,?) ON CONFLICT(asset_id,policy_id) DO NOTHING',
+          ).run(assetId, policy.id, representation.representation_id);
           db.prepare('DELETE FROM upload_intents WHERE id=?').run(assetId);
           db.prepare(
             "UPDATE artifact_imports SET state='ready',block_id=?,placement_id=? WHERE owner_id=? AND key=?",
@@ -159,12 +207,16 @@ export function createImports(db: DB, store: AssetStore) {
           return { blockId: result.id, placementId: result.placement.id, braneId: intent.braneId };
         })();
       };
-      const promise = work();
+      const extractionKey = `${actor}:${assetHash}:${policy.id}`;
+      const previous = serialized!.get(extractionKey);
+      const promise = (previous ?? Promise.resolve()).catch(() => {}).then(work);
+      serialized!.set(extractionKey, promise);
       active.set(identity, { hash: requestHash, promise });
       try {
         return await promise;
       } finally {
         active.delete(identity);
+        if (serialized!.get(extractionKey) === promise) serialized!.delete(extractionKey);
       }
     },
   };

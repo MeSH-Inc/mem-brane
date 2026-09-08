@@ -1,3 +1,4 @@
+import { imageLimits } from './policy.js';
 import sharp from 'sharp';
 import { DomainError } from '../domain/access.js';
 import type { ImageContent } from '../../shared/types/domain.js';
@@ -7,7 +8,7 @@ export async function inspectImage(bytes: Uint8Array) {
     const decoder = sharp(bytes, {
       animated: true,
       failOn: 'warning',
-      limitInputPixels: 20_000_000,
+      limitInputPixels: imageLimits.pixels,
     });
     const info = await decoder.metadata();
     const formats: Record<string, ImageContent['mimeType']> = {
@@ -17,7 +18,7 @@ export async function inspectImage(bytes: Uint8Array) {
       webp: 'image/webp',
     };
     const mimeType = formats[info.format ?? ''];
-    if (!mimeType || !info.width || !info.height || (info.pages ?? 1) > 100)
+    if (!mimeType || !info.width || !info.height || (info.pages ?? 1) > imageLimits.frames)
       throw new Error('Unsupported image');
     // Metadata alone accepts truncated files. Decode every frame before publishing bytes.
     await decoder.raw().toBuffer();

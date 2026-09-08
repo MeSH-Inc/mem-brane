@@ -38,6 +38,7 @@ export interface ImageContent {
   width?: number;
   height?: number;
   frames?: number;
+  extractionPolicy?: string;
   representation: 'original-image-v1';
   url?: never;
   status?: never;
@@ -58,6 +59,7 @@ export interface PdfContent {
   assetHash: string;
   mimeType: 'application/pdf';
   pageCount: number;
+  extractionPolicy?: string;
   representation: PdfRepresentation;
   url?: never;
   status?: never;

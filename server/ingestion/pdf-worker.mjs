@@ -1,19 +1,13 @@
 // Parse untrusted PDF data in a disposable isolate. No rendering, scripts, links or remote fetches.
 import { parentPort } from 'node:worker_threads';
 import { getDocument, version } from 'pdfjs-dist/legacy/build/pdf.mjs';
-async function extract(bytes) {
+async function extract(bytes, policy) {
   let loadingTask;
   const extractor = `pdfjs-${version}`;
   try {
     loadingTask = getDocument({
       data: bytes,
-      isEvalSupported: false,
-      disableFontFace: true,
-      useSystemFonts: true,
-      useWorkerFetch: false,
-      stopAtErrors: true,
-      enableXfa: false,
-      verbosity: 0,
+      ...policy.options,
     });
     const document = await loadingTask.promise;
     const pageCount = document.numPages;
@@ -21,7 +15,7 @@ async function extract(bytes) {
       pageCount,
       representation: { kind: 'pdf-text-v1', extractor, status: 'unavailable', reason },
     });
-    if (pageCount > 100) {
+    if (pageCount > policy.limits.pages) {
       return unavailable('Text extraction is limited to 100 pages. The original PDF is retained.');
     }
     const pages = [];
@@ -40,7 +34,7 @@ async function extract(bytes) {
           characters += part.length;
           // Include JSON escaping in the representation budget, not just raw UTF-8 bytes.
           textBytes += Buffer.byteLength(JSON.stringify(part));
-          if (characters > 20000 || textBytes > 24000) {
+          if (characters > policy.limits.characters || textBytes > policy.limits.textBytes) {
             await reader.cancel(new Error('Extraction size limit reached'));
             return unavailable(
               'Extracted text exceeds the supported size. The original PDF is retained; no partial text will be sent.',
@@ -65,10 +59,10 @@ async function extract(bytes) {
     await loadingTask?.destroy();
   }
 }
-parentPort.once('message', async (bytes) => {
+parentPort.once('message', async ({ bytes, policy }) => {
   let result;
   try {
-    result = await extract(bytes);
+    result = await extract(bytes, policy);
   } catch (error) {
     result = {
       error:

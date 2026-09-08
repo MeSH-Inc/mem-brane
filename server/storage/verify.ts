@@ -1,3 +1,4 @@
+import { policyIdentity } from '../ingestion/policy.js';
 import { decodeContent } from '../services/representations.js';
 import { representationId } from '../domain/canonical.js';
 import { createHash } from 'node:crypto';
@@ -44,6 +45,20 @@ export async function verifyRestoration(db: DB, store: Pick<AssetStore, 'get'>) 
       .get()
   )
     throw new Error('Representation ownership or format mismatch');
+  for (const row of db
+    .prepare('SELECT id,policy_json FROM extraction_policies')
+    .iterate() as Iterable<{ id: string; policy_json: string }>)
+    if (policyIdentity(JSON.parse(row.policy_json)).id !== row.id)
+      throw new Error('Extraction policy integrity mismatch');
+  if (
+    db
+      .prepare(
+        `SELECT 1 FROM extraction_results e JOIN asset_representations r ON r.id=e.representation_id
+    WHERE e.asset_id!=r.asset_id OR e.policy_id IS NOT json_extract(r.payload_json,'$.extractionPolicy') LIMIT 1`,
+      )
+      .get()
+  )
+    throw new Error('Extraction result integrity mismatch');
   let references = 0;
   for (const row of db
     .prepare(

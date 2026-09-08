@@ -96,6 +96,10 @@ export const content = z.discriminatedUnion('format', [
       width: z.number().int().positive().optional(),
       height: z.number().int().positive().optional(),
       frames: z.number().int().positive().optional(),
+      extractionPolicy: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       representation: z.literal('original-image-v1'),
     })
     .strict(),
@@ -108,6 +112,10 @@ export const content = z.discriminatedUnion('format', [
       assetHash: z.string().regex(/^[a-f0-9]{64}$/),
       mimeType: z.literal('application/pdf'),
       pageCount: z.number().int().positive(),
+      extractionPolicy: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       representation: pdfRepresentation,
     })
     .strict()
