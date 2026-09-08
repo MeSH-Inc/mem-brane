@@ -1,7 +1,14 @@
-import type { Revision, Run } from './domain';
+import type { BlockKind, Run } from './domain';
 
+export interface RevisionSummary {
+  id: string;
+  block_id: string;
+  created_at: number;
+  format: BlockKind;
+  preview: string;
+}
 export interface RevisionPage {
-  items: Revision[];
+  items: RevisionSummary[];
   nextCursor: string | null;
 }
 export interface RunPage {

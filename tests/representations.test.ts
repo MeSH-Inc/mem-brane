@@ -236,3 +236,32 @@ it('batches hundreds of shared identities and context references without changin
     spy.mockRestore();
   }
 });
+
+it('bounds PDF history pages to summaries and expands only a requested revision', async () => {
+  const { readRevisionPage } = await import('../server/services/content');
+  const lines = Array.from({ length: 30 }, () => 'Frozen history evidence '.repeat(3)).join('\n');
+  const receipt = await createImports(db, store).import(
+    actor,
+    {
+      key: uid(),
+      braneId: brane,
+      target: 'canvas',
+      geometry: { x: 0, y: 0, width: 320, height: 300 },
+    },
+    new File([pdfFixture(Array.from({ length: 4 }, () => lines))], 'History.pdf'),
+  );
+  for (let i = 0; i < 60; i++) {
+    db.prepare(
+      "UPDATE block_live_state SET content_json=json_set(content_json,'$.text',?),version=version+1 WHERE block_id=?",
+    ).run(`Revision ${i} ` + 'caption '.repeat(40), receipt.blockId);
+    revisions(db).snapshotBlock(actor, receipt.blockId);
+  }
+  const page = readRevisionPage(db, actor, receipt.blockId);
+  expect(page.items).toHaveLength(25);
+  expect(JSON.stringify(page).length).toBeLessThan(10000);
+  expect(page.items.every((r) => r.preview.length <= 160 && !('content' in r))).toBe(true);
+  const exact = readRevision(db, actor, page.items[0].id);
+  expect(exact.content.text).toContain('Revision 59');
+  expect(JSON.stringify(exact.content)).toContain('Frozen history evidence');
+  expect(JSON.stringify(exact.content).length).toBeGreaterThan(6000);
+});

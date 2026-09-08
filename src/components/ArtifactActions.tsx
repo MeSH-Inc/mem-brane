@@ -1,7 +1,7 @@
 import { PdfContent } from './PdfContent';
 import { useEffect, useRef, useState } from 'react';
 import type { Block, Brane, Placement, Revision, Geometry } from '../../shared/types/domain';
-import type { RevisionPage } from '../../shared/types/history';
+import type { RevisionPage, RevisionSummary } from '../../shared/types/history';
 import { api } from '../services/api';
 export function ArtifactActions({
   block,
@@ -20,11 +20,31 @@ export function ArtifactActions({
 }) {
   const [branes, setBranes] = useState<Brane[]>([]),
     [target, setTarget] = useState(''),
-    [history, setHistory] = useState<Revision[]>([]),
+    [history, setHistory] = useState<RevisionSummary[]>([]),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selectedId, setSelectedId] = useState<string>();
+  const [selected, setSelected] = useState<Revision>();
+  const [revisionError, setRevisionError] = useState('');
+  const revisionRequest = useRef(0);
+  const inspect = async (id: string) => {
+    const request = ++revisionRequest.current;
+    setSelected(undefined);
+    setRevisionError('');
+    if (selectedId === id && !revisionError) {
+      setSelectedId(undefined);
+      return;
+    }
+    setSelectedId(id);
+    try {
+      const revision = await api<Revision>(`/revisions/${id}`);
+      if (request === revisionRequest.current) setSelected(revision);
+    } catch (error) {
+      if (request === revisionRequest.current) setRevisionError((error as Error).message);
+    }
+  };
   const historyRequest = useRef(0);
   const activeBlock = useRef(block.id);
   activeBlock.current = block.id;
@@ -47,6 +67,9 @@ export function ArtifactActions({
   };
   useEffect(() => {
     setHistory([]);
+    setSelectedId(undefined);
+    setSelected(undefined);
+    setRevisionError('');
     setNextCursor(null);
     void api<Brane[]>('/branes')
       .then(setBranes)
@@ -54,6 +77,7 @@ export function ArtifactActions({
     void load().catch((e) => setError(e.message));
     return () => {
       historyRequest.current++;
+      revisionRequest.current++;
     };
   }, [block.id]);
   async function action(work: () => Promise<unknown>, message: string) {
@@ -145,19 +169,42 @@ export function ArtifactActions({
           {nextCursor ? '+' : ''})
         </summary>
         {history.map((r) => (
-          <details key={r.id}>
-            <summary>{new Date(r.created_at).toLocaleString()}</summary>
-            <code>{r.id}</code>
-            <pre>{r.content.text}</pre>
-            {r.content.format === 'pdf' && <PdfContent content={r.content} showProvenance />}
-            {r.content.format === 'image' && (
-              <img
-                className="context-image"
-                src={`/api/assets/${r.content.assetId}`}
-                alt="Frozen image snapshot"
-              />
+          <div key={r.id}>
+            <button
+              type="button"
+              aria-expanded={selectedId === r.id}
+              onClick={() => void inspect(r.id)}
+            >
+              {new Date(r.created_at).toLocaleString()} · {r.preview || r.format}
+            </button>
+            {selectedId === r.id && (
+              <div>
+                <code>{r.id}</code>
+                {revisionError ? (
+                  <>
+                    <p role="alert">{revisionError}</p>
+                    <button onClick={() => void inspect(r.id)}>Retry snapshot</button>
+                  </>
+                ) : !selected ? (
+                  <p role="status">Loading snapshot…</p>
+                ) : (
+                  <>
+                    <pre>{selected.content.text}</pre>
+                    {selected.content.format === 'pdf' && (
+                      <PdfContent content={selected.content} showProvenance />
+                    )}
+                    {selected.content.format === 'image' && (
+                      <img
+                        className="context-image"
+                        src={`/api/assets/${selected.content.assetId}`}
+                        alt="Frozen image snapshot"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
             )}
-          </details>
+          </div>
         ))}
         {nextCursor && (
           <button

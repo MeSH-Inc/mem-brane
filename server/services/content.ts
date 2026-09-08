@@ -18,7 +18,7 @@ import type {
   BraneState,
   Block,
 } from '../../shared/types/domain.js';
-import type { RevisionPage } from '../../shared/types/history.js';
+import type { RevisionPage, RevisionSummary } from '../../shared/types/history.js';
 import { canEditBrane, canReadBrane, DomainError, requireOwned } from '../domain/access.js';
 export const uid = () => randomUUID();
 export const now = () => Date.now();
@@ -200,17 +200,17 @@ export function readRevisionPage(
     anchor
       ? db
           .prepare(
-            'SELECT id,block_id,content_json,created_at FROM block_revisions WHERE block_id=? AND (created_at,id)<(?,?) ORDER BY created_at DESC,id DESC LIMIT ?',
+            `SELECT id,block_id,created_at,json_extract(content_json,'$.format') format,substr(json_extract(content_json,'$.text'),1,160) preview FROM block_revisions WHERE block_id=? AND (created_at,id)<(?,?) ORDER BY created_at DESC,id DESC LIMIT ?`,
           )
           .all(blockId, anchor.created_at, anchor.id, limit + 1)
       : db
           .prepare(
-            'SELECT id,block_id,content_json,created_at FROM block_revisions WHERE block_id=? ORDER BY created_at DESC,id DESC LIMIT ?',
+            `SELECT id,block_id,created_at,json_extract(content_json,'$.format') format,substr(json_extract(content_json,'$.text'),1,160) preview FROM block_revisions WHERE block_id=? ORDER BY created_at DESC,id DESC LIMIT ?`,
           )
           .all(blockId, limit + 1)
-  ) as RevisionRow[];
+  ) as RevisionSummary[];
   return {
-    items: rows.slice(0, limit).map((row) => revisionDto(db, row)),
+    items: rows.slice(0, limit),
     nextCursor: rows.length > limit ? rows[limit - 1].id : null,
   };
 }
