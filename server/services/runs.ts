@@ -1,7 +1,8 @@
+import { createContext, readInputs, type ContextEntry } from './contexts.js';
 import { reserveCost, releaseUninvokedCost, type CostPolicy } from './costs.js';
 import { createHash } from 'node:crypto';
 import type { DB } from '../db/index.js';
-import type { RunInput, SubmitRun, SpawnArtifact } from '../../shared/types/domain.js';
+import type { SubmitRun, SpawnArtifact } from '../../shared/types/domain.js';
 import { canRunOnBrane, DomainError, requireOwned } from '../domain/access.js';
 import { createBlock, now, uid, updateBlockLiveState, type RevisionService } from './content.js';
 export interface RunLimits {
@@ -11,42 +12,6 @@ export interface RunLimits {
   userConcurrency: number;
   queueLimit?: number;
   maxContextCharacters: number;
-}
-export function readInputs(db: DB, runId: string): RunInput[] {
-  return (
-    db
-      .prepare(
-        'SELECT i.position,i.kind,i.label,i.role,i.revision_id,r.content_json FROM run_inputs i JOIN block_revisions r ON r.id=i.revision_id WHERE run_id=? ORDER BY position',
-      )
-      .all(runId) as any[]
-  ).map((i) => ({
-    position: i.position,
-    kind: i.kind,
-    label: i.label,
-    role: i.role,
-    revision_id: i.revision_id,
-    content: JSON.parse(i.content_json),
-  }));
-}
-export function readLineage(db: DB, actor: string, messageId: string): any[] {
-  const result: any[] = [];
-  let current: string | null = messageId;
-  const seen = new Set<string>();
-  while (current) {
-    if (seen.has(current) || result.length >= 200)
-      throw new DomainError(400, 'Conversation lineage is too long');
-    seen.add(current);
-    const m = db
-      .prepare(
-        'SELECT m.*,r.content_json,r.block_id FROM conversation_messages m JOIN block_revisions r ON r.id=m.revision_id WHERE m.id=?',
-      )
-      .get(current) as any;
-    if (!m) throw new DomainError(404, 'Conversation point not found');
-    requireOwned(db, 'conversations', actor, m.conversation_id);
-    result.unshift(m);
-    current = m.parent_id;
-  }
-  return result;
 }
 function checkLimits(db: DB, actor: string, model: string, limits: RunLimits) {
   if (!limits.models.includes(model)) throw new DomainError(400, 'Model is not allowed');
@@ -91,23 +56,16 @@ export function submitRun(
     }
     checkLimits(db, actor, input.model, limits);
     for (const edit of input.edits) updateBlockLiveState(db, actor, edit);
-    const frozen: { kind: string; label: string; role: string; revisionId: string }[] = [];
-    const lineage = input.continueFrom ? readLineage(db, actor, input.continueFrom) : [];
-    for (const m of lineage) {
-      for (const ref of JSON.parse(m.context_json ?? '[]'))
-        frozen.push({
-          kind: 'lineage_reference',
-          label: ref.label,
-          role: 'user',
-          revisionId: ref.revisionId,
-        });
-      frozen.push({
-        kind: 'lineage',
-        label: 'Conversation',
-        role: m.role,
-        revisionId: m.revision_id,
-      });
-    }
+    const frozen: ContextEntry[] = [];
+    const continuation = input.continueFrom
+      ? (db
+          .prepare(
+            'SELECT m.conversation_id FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id WHERE m.id=? AND c.owner_id=?',
+          )
+          .get(input.continueFrom, actor) as { conversation_id: string } | undefined)
+      : undefined;
+    if (input.continueFrom && !continuation)
+      throw new DomainError(404, 'Conversation point not found');
     for (const [index, blockId] of (derivation?.sources ?? []).entries()) {
       const r = snapshots.snapshotBlock(actor, blockId);
       frozen.push({
@@ -133,14 +91,6 @@ export function submitRun(
       role: 'user',
       revisionId: snapshots.snapshotBlock(actor, prompt.id).id,
     });
-    let chars = 0;
-    for (const f of frozen)
-      chars += (
-        db
-          .prepare('SELECT length(content_json) n FROM block_revisions WHERE id=?')
-          .get(f.revisionId) as any
-      ).n;
-    if (chars > limits.maxContextCharacters) throw new DomainError(400, 'Context is too large');
     const anchor = derivation
       ? readAnchor(db, actor, input.braneId, derivation.anchorPlacementId, derivation.sources[0])
       : undefined;
@@ -164,12 +114,13 @@ export function submitRun(
           },
       'generated',
     );
-    const conversationId = lineage.at(-1)?.conversation_id ?? uid();
-    if (!lineage.length)
+    const conversationId = continuation?.conversation_id ?? uid();
+    if (!continuation)
       db.prepare('INSERT INTO conversations VALUES (?,?,?)').run(conversationId, actor, now());
+    const contextId = createContext(db, actor, input.continueFrom, frozen);
     const runId = uid();
     db.prepare(
-      `INSERT INTO runs (id,owner_id,brane_id,submission_key,request_hash,status,provider,model,options_json,output_block_id,conversation_id,continue_from,created_at) VALUES (?,?,?,?,?,'queued',?,?,?,?,?,?,?)`,
+      `INSERT INTO runs (id,owner_id,brane_id,submission_key,request_hash,status,provider,model,options_json,output_block_id,conversation_id,context_id,created_at) VALUES (?,?,?,?,?,'queued',?,?,?,?,?,?,?)`,
     ).run(
       runId,
       actor,
@@ -184,7 +135,7 @@ export function submitRun(
       }),
       output.id,
       conversationId,
-      input.continueFrom ?? null,
+      contextId,
       now(),
     );
     if (anchor)
@@ -193,14 +144,20 @@ export function submitRun(
         anchor.id,
         output.placement.id,
       );
-    const stmt = db.prepare('INSERT INTO run_inputs VALUES (?,?,?,?,?,?)');
-    frozen.forEach((f, index) => stmt.run(runId, index, f.kind, f.label, f.role, f.revisionId));
+    const inputs = readInputs(db, runId);
+    const contentSize = db.prepare('SELECT length(content_json) n FROM block_revisions WHERE id=?');
+    const characters = inputs.reduce(
+      (total, input) => total + (contentSize.get(input.revision_id) as { n: number }).n,
+      0,
+    );
+    if (characters > limits.maxContextCharacters)
+      throw new DomainError(400, 'Context is too large');
     reserveCost(
       db,
       actor,
       runId,
       input.model,
-      readInputs(db, runId),
+      inputs,
       Math.min(input.maxOutputTokens ?? limits.maxTokens, limits.maxTokens),
       limits.costPolicy,
     );
@@ -255,7 +212,7 @@ export function retryRun(db: DB, actor: string, id: string, key: string, limits:
       ),
       newId = uid();
     db.prepare(
-      `INSERT INTO runs (id,owner_id,brane_id,submission_key,request_hash,status,provider,model,options_json,output_block_id,conversation_id,continue_from,retry_of,created_at) VALUES (?,?,?,?,?,'queued',?,?,?,?,?,?,?,?)`,
+      `INSERT INTO runs (id,owner_id,brane_id,submission_key,request_hash,status,provider,model,options_json,output_block_id,conversation_id,context_id,retry_of,created_at) VALUES (?,?,?,?,?,'queued',?,?,?,?,?,?,?,?)`,
     ).run(
       newId,
       actor,
@@ -267,7 +224,7 @@ export function retryRun(db: DB, actor: string, id: string, key: string, limits:
       old.options_json,
       output.id,
       old.conversation_id,
-      old.continue_from,
+      old.context_id,
       id,
       now(),
     );
@@ -277,9 +234,6 @@ export function retryRun(db: DB, actor: string, id: string, key: string, limits:
         anchor?.id ?? null,
         output.placement.id,
       );
-    db.prepare(
-      'INSERT INTO run_inputs SELECT ?,position,kind,label,role,revision_id FROM run_inputs WHERE run_id=?',
-    ).run(newId, id);
     reserveCost(
       db,
       actor,

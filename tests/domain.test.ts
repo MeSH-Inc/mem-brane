@@ -11,7 +11,8 @@ import {
   readBrane,
   uid,
 } from '../server/services/content';
-import { submitRun, readInputs, retryRun, cancelRun } from '../server/services/runs';
+import { submitRun, retryRun, cancelRun } from '../server/services/runs';
+import { readInputs } from '../server/services/contexts';
 import { claimRun, recoverStale, RunWorker } from '../server/jobs/worker';
 import { EventHub } from '../server/sse/hub';
 import { buildMessages } from '../server/llm/model';
@@ -158,7 +159,9 @@ describe('immutable content boundary', () => {
   it('rejects mutated frozen inputs and request parameters', () => {
     const run = submit();
     expect(() =>
-      db.prepare('UPDATE run_inputs SET label=? WHERE run_id=?').run('changed', run.id),
+      db
+        .prepare('UPDATE context_entries SET label=? WHERE context_id=?')
+        .run('changed', run.context_id),
     ).toThrow('immutable');
     expect(() => db.prepare('UPDATE runs SET model=? WHERE id=?').run('new', run.id)).toThrow(
       'immutable',

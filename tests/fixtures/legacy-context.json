@@ -1,0 +1,1320 @@
+{
+  "actor": "fe40f3d6-9784-426f-9b12-67e96238572e",
+  "brane": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+  "tables": {
+    "user": [
+      {
+        "id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "name": "Migration fixture",
+        "email": "fixture@example.invalid",
+        "emailVerified": 0,
+        "image": null,
+        "createdAt": 0,
+        "updatedAt": 0
+      }
+    ],
+    "branes": [
+      {
+        "id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "title": "Untitled brane",
+        "created_at": 1788882313844,
+        "updated_at": 1788882313844
+      }
+    ],
+    "blocks": [
+      {
+        "id": "5d9fc80a-2947-423f-8737-b166a6672c8e",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313845,
+        "origin": "authored"
+      },
+      {
+        "id": "ad6b3f8d-f693-4229-97eb-313bef602043",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "image",
+        "created_at": 1788882313845,
+        "origin": "authored"
+      },
+      {
+        "id": "f31de5ea-4b50-4524-a522-e804b82a574b",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313846,
+        "origin": "authored"
+      },
+      {
+        "id": "c081c5b3-24f6-49d7-a64a-567b71a7706c",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313846,
+        "origin": "generated"
+      },
+      {
+        "id": "304c18c4-b97b-48b1-8199-0573a37663b9",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313850,
+        "origin": "authored"
+      },
+      {
+        "id": "281093e9-9179-4f8a-b42b-09c5d5d4aca0",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313850,
+        "origin": "generated"
+      },
+      {
+        "id": "0d729c93-d967-4acb-ac90-dec9130b2dc1",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313851,
+        "origin": "authored"
+      },
+      {
+        "id": "f87d5fc4-f952-45a0-afa2-6af2cbe2ce53",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313851,
+        "origin": "generated"
+      },
+      {
+        "id": "4d971e05-a97c-4e65-9b2b-c56349fe3699",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313851,
+        "origin": "authored"
+      },
+      {
+        "id": "2615cc52-00a1-4097-9337-eefcd104795b",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313851,
+        "origin": "generated"
+      },
+      {
+        "id": "d77c5774-db47-4402-beba-d61179e60847",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313852,
+        "origin": "authored"
+      },
+      {
+        "id": "6b5ac4a1-2dbb-4ad5-a739-32a3372c28ae",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313852,
+        "origin": "generated"
+      },
+      {
+        "id": "98d7731c-de35-47d6-b567-c0579d5dcc1b",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313853,
+        "origin": "authored"
+      },
+      {
+        "id": "65c71a3d-2b0a-48b5-baab-5576032f3474",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313853,
+        "origin": "generated"
+      },
+      {
+        "id": "31a005cd-cfff-4dc8-b77e-3e435008e2c6",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313854,
+        "origin": "authored"
+      },
+      {
+        "id": "e6d51846-e500-45d1-b67d-8a2a578e84da",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313854,
+        "origin": "generated"
+      },
+      {
+        "id": "3825f6cf-99f0-4c8e-ac1a-6b7cf6621ad0",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "kind": "text",
+        "created_at": 1788882313855,
+        "origin": "generated"
+      }
+    ],
+    "block_live_state": [
+      {
+        "block_id": "5d9fc80a-2947-423f-8737-b166a6672c8e",
+        "content_json": "{\"format\":\"text\",\"text\":\"Later source\"}",
+        "version": 1,
+        "updated_at": 1788882313849
+      },
+      {
+        "block_id": "ad6b3f8d-f693-4229-97eb-313bef602043",
+        "content_json": "{\"format\":\"image\",\"text\":\"Picture\",\"filename\":\"picture.png\",\"assetId\":\"6b9290af-7b38-40bc-8381-6ff51104c480\",\"assetHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"mimeType\":\"image/png\",\"width\":20,\"height\":20,\"representation\":\"original-image-v1\"}",
+        "version": 0,
+        "updated_at": 1788882313845
+      },
+      {
+        "block_id": "f31de5ea-4b50-4524-a522-e804b82a574b",
+        "content_json": "{\"format\":\"text\",\"text\":\"Base\"}",
+        "version": 0,
+        "updated_at": 1788882313846
+      },
+      {
+        "block_id": "304c18c4-b97b-48b1-8199-0573a37663b9",
+        "content_json": "{\"format\":\"text\",\"text\":\"Branch A\"}",
+        "version": 0,
+        "updated_at": 1788882313850
+      },
+      {
+        "block_id": "0d729c93-d967-4acb-ac90-dec9130b2dc1",
+        "content_json": "{\"format\":\"text\",\"text\":\"Branch B\"}",
+        "version": 0,
+        "updated_at": 1788882313851
+      },
+      {
+        "block_id": "4d971e05-a97c-4e65-9b2b-c56349fe3699",
+        "content_json": "{\"format\":\"text\",\"text\":\"Continue user\"}",
+        "version": 0,
+        "updated_at": 1788882313851
+      },
+      {
+        "block_id": "d77c5774-db47-4402-beba-d61179e60847",
+        "content_json": "{\"format\":\"text\",\"text\":\"Develop this artifact into a useful next artifact. Answer explicit requests directly; otherwise expand the central idea into a concrete, self-contained result. Return only the resulting artifact.\"}",
+        "version": 0,
+        "updated_at": 1788882313852
+      },
+      {
+        "block_id": "98d7731c-de35-47d6-b567-c0579d5dcc1b",
+        "content_json": "{\"format\":\"text\",\"text\":\"Continue derived\"}",
+        "version": 0,
+        "updated_at": 1788882313853
+      },
+      {
+        "block_id": "31a005cd-cfff-4dc8-b77e-3e435008e2c6",
+        "content_json": "{\"format\":\"text\",\"text\":\"Retry branch\"}",
+        "version": 0,
+        "updated_at": 1788882313854
+      }
+    ],
+    "block_revisions": [
+      {
+        "id": "39e5f62c-bb76-4e0c-8566-1cec177cfbd2",
+        "block_id": "5d9fc80a-2947-423f-8737-b166a6672c8e",
+        "content_json": "{\"format\":\"text\",\"text\":\"Original source\"}",
+        "created_at": 1788882313846,
+        "source_version": 0
+      },
+      {
+        "id": "79f8dc6c-a954-43ca-ade4-3ee0c24dec7b",
+        "block_id": "ad6b3f8d-f693-4229-97eb-313bef602043",
+        "content_json": "{\"format\":\"image\",\"text\":\"Picture\",\"filename\":\"picture.png\",\"assetId\":\"6b9290af-7b38-40bc-8381-6ff51104c480\",\"assetHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"mimeType\":\"image/png\",\"width\":20,\"height\":20,\"representation\":\"original-image-v1\"}",
+        "created_at": 1788882313846,
+        "source_version": 0
+      },
+      {
+        "id": "3904b95c-8c7c-4886-b2fa-353f24a4cfc6",
+        "block_id": "f31de5ea-4b50-4524-a522-e804b82a574b",
+        "content_json": "{\"format\":\"text\",\"text\":\"Base\"}",
+        "created_at": 1788882313846,
+        "source_version": 0
+      },
+      {
+        "id": "d6540dde-e5e8-4285-ad35-6228d76080ac",
+        "block_id": "c081c5b3-24f6-49d7-a64a-567b71a7706c",
+        "content_json": "{\"format\":\"text\",\"text\":\"Completed artifact\"}",
+        "created_at": 1788882313848,
+        "source_version": null
+      },
+      {
+        "id": "d4d1f18c-dddd-4038-9bf6-b115a6e1c125",
+        "block_id": "5d9fc80a-2947-423f-8737-b166a6672c8e",
+        "content_json": "{\"format\":\"text\",\"text\":\"Later source\"}",
+        "created_at": 1788882313850,
+        "source_version": 1
+      },
+      {
+        "id": "b9aeb53d-246f-49f8-b1e1-0ef8a08168e0",
+        "block_id": "304c18c4-b97b-48b1-8199-0573a37663b9",
+        "content_json": "{\"format\":\"text\",\"text\":\"Branch A\"}",
+        "created_at": 1788882313850,
+        "source_version": 0
+      },
+      {
+        "id": "16edb146-101a-4212-896a-4f4c3272faaf",
+        "block_id": "281093e9-9179-4f8a-b42b-09c5d5d4aca0",
+        "content_json": "{\"format\":\"text\",\"text\":\"Completed artifact\"}",
+        "created_at": 1788882313850,
+        "source_version": null
+      },
+      {
+        "id": "c72c7a32-a351-4fa3-88d0-2a41d40bd7ce",
+        "block_id": "0d729c93-d967-4acb-ac90-dec9130b2dc1",
+        "content_json": "{\"format\":\"text\",\"text\":\"Branch B\"}",
+        "created_at": 1788882313851,
+        "source_version": 0
+      },
+      {
+        "id": "8085d7fb-f75f-45c2-961c-b628871e1661",
+        "block_id": "f87d5fc4-f952-45a0-afa2-6af2cbe2ce53",
+        "content_json": "{\"format\":\"text\",\"text\":\"Completed artifact\"}",
+        "created_at": 1788882313851,
+        "source_version": null
+      },
+      {
+        "id": "d3bcac0e-91a9-404d-9b81-16f377312999",
+        "block_id": "4d971e05-a97c-4e65-9b2b-c56349fe3699",
+        "content_json": "{\"format\":\"text\",\"text\":\"Continue user\"}",
+        "created_at": 1788882313851,
+        "source_version": 0
+      },
+      {
+        "id": "b0e32aeb-8126-4b9e-8ba3-a7c35d87da85",
+        "block_id": "2615cc52-00a1-4097-9337-eefcd104795b",
+        "content_json": "{\"format\":\"text\",\"text\":\"Completed artifact\"}",
+        "created_at": 1788882313852,
+        "source_version": null
+      },
+      {
+        "id": "66285e83-6c75-4448-836a-709a9a135db3",
+        "block_id": "d77c5774-db47-4402-beba-d61179e60847",
+        "content_json": "{\"format\":\"text\",\"text\":\"Develop this artifact into a useful next artifact. Answer explicit requests directly; otherwise expand the central idea into a concrete, self-contained result. Return only the resulting artifact.\"}",
+        "created_at": 1788882313852,
+        "source_version": 0
+      },
+      {
+        "id": "a1f729c7-fb62-49bb-93a5-c7e467f53c5d",
+        "block_id": "6b5ac4a1-2dbb-4ad5-a739-32a3372c28ae",
+        "content_json": "{\"format\":\"text\",\"text\":\"Completed artifact\"}",
+        "created_at": 1788882313853,
+        "source_version": null
+      },
+      {
+        "id": "be5e4edd-1331-4bad-8fd8-97cde6969f6c",
+        "block_id": "98d7731c-de35-47d6-b567-c0579d5dcc1b",
+        "content_json": "{\"format\":\"text\",\"text\":\"Continue derived\"}",
+        "created_at": 1788882313853,
+        "source_version": 0
+      },
+      {
+        "id": "5945a0eb-9d11-4c1d-8bb3-22fde6d778b7",
+        "block_id": "65c71a3d-2b0a-48b5-baab-5576032f3474",
+        "content_json": "{\"format\":\"text\",\"text\":\"Completed artifact\"}",
+        "created_at": 1788882313854,
+        "source_version": null
+      },
+      {
+        "id": "47cf8313-708a-4bb2-a68e-39d37af1970e",
+        "block_id": "31a005cd-cfff-4dc8-b77e-3e435008e2c6",
+        "content_json": "{\"format\":\"text\",\"text\":\"Retry branch\"}",
+        "created_at": 1788882313854,
+        "source_version": 0
+      },
+      {
+        "id": "6584b22e-0cf3-4f46-a9e5-d311e4dc5651",
+        "block_id": "3825f6cf-99f0-4c8e-ac1a-6b7cf6621ad0",
+        "content_json": "{\"format\":\"text\",\"text\":\"Completed artifact\"}",
+        "created_at": 1788882313856,
+        "source_version": null
+      }
+    ],
+    "assets": [
+      {
+        "id": "6b9290af-7b38-40bc-8381-6ff51104c480",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "storage_key": "6b9290af-7b38-40bc-8381-6ff51104c480",
+        "mime": "image/png",
+        "size": 10,
+        "created_at": 0
+      }
+    ],
+    "conversations": [
+      {
+        "id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "created_at": 1788882313846
+      },
+      {
+        "id": "96563d42-652f-4277-8e16-7ef743097fc9",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "created_at": 1788882313852
+      }
+    ],
+    "conversation_messages": [
+      {
+        "id": "91ef7e5a-945c-453b-894b-cb8487cc2d3c",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "parent_id": null,
+        "role": "user",
+        "revision_id": "3904b95c-8c7c-4886-b2fa-353f24a4cfc6",
+        "created_at": 1788882313848,
+        "context_json": "[{\"revisionId\":\"39e5f62c-bb76-4e0c-8566-1cec177cfbd2\",\"label\":\"Reference 1\"},{\"revisionId\":\"79f8dc6c-a954-43ca-ade4-3ee0c24dec7b\",\"label\":\"Reference 2\"}]"
+      },
+      {
+        "id": "3a9707d4-afaf-4b35-82fb-a388a6de06c4",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "parent_id": "91ef7e5a-945c-453b-894b-cb8487cc2d3c",
+        "role": "assistant",
+        "revision_id": "d6540dde-e5e8-4285-ad35-6228d76080ac",
+        "created_at": 1788882313848,
+        "context_json": "[]"
+      },
+      {
+        "id": "49dfc889-5a47-4c3a-b2f9-01cdf50d0159",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "parent_id": "3a9707d4-afaf-4b35-82fb-a388a6de06c4",
+        "role": "user",
+        "revision_id": "b9aeb53d-246f-49f8-b1e1-0ef8a08168e0",
+        "created_at": 1788882313850,
+        "context_json": "[{\"revisionId\":\"d4d1f18c-dddd-4038-9bf6-b115a6e1c125\",\"label\":\"Reference 1\"}]"
+      },
+      {
+        "id": "60b06aad-e964-47f6-abbe-fa0f98986036",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "parent_id": "49dfc889-5a47-4c3a-b2f9-01cdf50d0159",
+        "role": "assistant",
+        "revision_id": "16edb146-101a-4212-896a-4f4c3272faaf",
+        "created_at": 1788882313850,
+        "context_json": "[]"
+      },
+      {
+        "id": "4e8afe84-eac1-489d-8d68-38015b5d5870",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "parent_id": "3a9707d4-afaf-4b35-82fb-a388a6de06c4",
+        "role": "user",
+        "revision_id": "c72c7a32-a351-4fa3-88d0-2a41d40bd7ce",
+        "created_at": 1788882313851,
+        "context_json": "[]"
+      },
+      {
+        "id": "333e26b1-e453-4651-b55b-67630cf85020",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "parent_id": "4e8afe84-eac1-489d-8d68-38015b5d5870",
+        "role": "assistant",
+        "revision_id": "8085d7fb-f75f-45c2-961c-b628871e1661",
+        "created_at": 1788882313851,
+        "context_json": "[]"
+      },
+      {
+        "id": "0b5e42b3-bc7f-4d70-b157-588d3d55da41",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "parent_id": "91ef7e5a-945c-453b-894b-cb8487cc2d3c",
+        "role": "user",
+        "revision_id": "d3bcac0e-91a9-404d-9b81-16f377312999",
+        "created_at": 1788882313852,
+        "context_json": "[]"
+      },
+      {
+        "id": "6406a553-93fe-49e0-bc6f-bd3b9c1168ae",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "parent_id": "0b5e42b3-bc7f-4d70-b157-588d3d55da41",
+        "role": "assistant",
+        "revision_id": "b0e32aeb-8126-4b9e-8ba3-a7c35d87da85",
+        "created_at": 1788882313852,
+        "context_json": "[]"
+      },
+      {
+        "id": "a141ebf7-30e6-4a68-9ad1-dc45bc8559b2",
+        "conversation_id": "96563d42-652f-4277-8e16-7ef743097fc9",
+        "parent_id": null,
+        "role": "user",
+        "revision_id": "66285e83-6c75-4448-836a-709a9a135db3",
+        "created_at": 1788882313853,
+        "context_json": "[{\"revisionId\":\"d6540dde-e5e8-4285-ad35-6228d76080ac\",\"label\":\"Primary source\"},{\"revisionId\":\"d4d1f18c-dddd-4038-9bf6-b115a6e1c125\",\"label\":\"Source 2\"}]"
+      },
+      {
+        "id": "91898f07-9d04-4189-92c2-88ba55e487f4",
+        "conversation_id": "96563d42-652f-4277-8e16-7ef743097fc9",
+        "parent_id": "a141ebf7-30e6-4a68-9ad1-dc45bc8559b2",
+        "role": "assistant",
+        "revision_id": "a1f729c7-fb62-49bb-93a5-c7e467f53c5d",
+        "created_at": 1788882313853,
+        "context_json": "[]"
+      },
+      {
+        "id": "1e372bb8-54a2-47e7-95ce-eeba38e72bd0",
+        "conversation_id": "96563d42-652f-4277-8e16-7ef743097fc9",
+        "parent_id": "91898f07-9d04-4189-92c2-88ba55e487f4",
+        "role": "user",
+        "revision_id": "be5e4edd-1331-4bad-8fd8-97cde6969f6c",
+        "created_at": 1788882313854,
+        "context_json": "[]"
+      },
+      {
+        "id": "d6fdc41b-542d-43a5-9956-cbbfdb8b5ad7",
+        "conversation_id": "96563d42-652f-4277-8e16-7ef743097fc9",
+        "parent_id": "1e372bb8-54a2-47e7-95ce-eeba38e72bd0",
+        "role": "assistant",
+        "revision_id": "5945a0eb-9d11-4c1d-8bb3-22fde6d778b7",
+        "created_at": 1788882313854,
+        "context_json": "[]"
+      },
+      {
+        "id": "04c2e9d4-3c26-46f2-a09b-b2dcec4022ea",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "parent_id": "60b06aad-e964-47f6-abbe-fa0f98986036",
+        "role": "user",
+        "revision_id": "47cf8313-708a-4bb2-a68e-39d37af1970e",
+        "created_at": 1788882313856,
+        "context_json": "[{\"revisionId\":\"79f8dc6c-a954-43ca-ade4-3ee0c24dec7b\",\"label\":\"Reference 1\"}]"
+      },
+      {
+        "id": "7a935aac-2c49-408a-a61a-2755477f56a0",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "parent_id": "04c2e9d4-3c26-46f2-a09b-b2dcec4022ea",
+        "role": "assistant",
+        "revision_id": "6584b22e-0cf3-4f46-a9e5-d311e4dc5651",
+        "created_at": 1788882313856,
+        "context_json": "[]"
+      }
+    ],
+    "runs": [
+      {
+        "id": "5912d289-7fe2-46d1-a9e2-f49ffcaa2582",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "submission_key": "2ab19977-2b86-407f-bb0c-9b9b7a172adb",
+        "request_hash": "1148a81887c91f6a9c0ea971d4ce0f8d238ddd26bf0123bc7924f34ccbfc0262",
+        "status": "completed",
+        "provider": "mock",
+        "model": "mock",
+        "options_json": "{\"maxOutputTokens\":100}",
+        "output_block_id": "c081c5b3-24f6-49d7-a64a-567b71a7706c",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "continue_from": null,
+        "retry_of": null,
+        "lease_owner": null,
+        "lease_until": null,
+        "usage_json": null,
+        "estimated_usage_json": "{\"inputTokens\":4378,\"maxOutputTokens\":100,\"reservedMicrousd\":0,\"method\":\"conservative byte bound\"}",
+        "error": null,
+        "created_at": 1788882313846,
+        "started_at": 1788882313848,
+        "finished_at": 1788882313848
+      },
+      {
+        "id": "2d3f646e-d77f-4afb-892a-808fc5b0907e",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "submission_key": "bf3e64ae-17ec-4e79-b7b2-267634460f99",
+        "request_hash": "fd6eb3af42ba44993aea1df373368566ed34a044b8b2de3af65c16d95e683bfd",
+        "status": "completed",
+        "provider": "mock",
+        "model": "mock",
+        "options_json": "{\"maxOutputTokens\":100}",
+        "output_block_id": "281093e9-9179-4f8a-b42b-09c5d5d4aca0",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "continue_from": "3a9707d4-afaf-4b35-82fb-a388a6de06c4",
+        "retry_of": null,
+        "lease_owner": null,
+        "lease_until": null,
+        "usage_json": null,
+        "estimated_usage_json": "{\"inputTokens\":7593,\"maxOutputTokens\":100,\"reservedMicrousd\":0,\"method\":\"conservative byte bound\"}",
+        "error": null,
+        "created_at": 1788882313850,
+        "started_at": 1788882313850,
+        "finished_at": 1788882313850
+      },
+      {
+        "id": "0e807449-b9dc-4530-a0a1-dacd80d03c63",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "submission_key": "0c92f1fc-d2d7-4091-969b-2e7426b1c75d",
+        "request_hash": "f87e36f0fb9b2c8fe93101098a9f10d11672f20d5e4b2ab3b73ac4ec8093a18b",
+        "status": "completed",
+        "provider": "mock",
+        "model": "mock",
+        "options_json": "{\"maxOutputTokens\":100}",
+        "output_block_id": "f87d5fc4-f952-45a0-afa2-6af2cbe2ce53",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "continue_from": "3a9707d4-afaf-4b35-82fb-a388a6de06c4",
+        "retry_of": null,
+        "lease_owner": null,
+        "lease_until": null,
+        "usage_json": null,
+        "estimated_usage_json": "{\"inputTokens\":6456,\"maxOutputTokens\":100,\"reservedMicrousd\":0,\"method\":\"conservative byte bound\"}",
+        "error": null,
+        "created_at": 1788882313851,
+        "started_at": 1788882313851,
+        "finished_at": 1788882313851
+      },
+      {
+        "id": "a5fe61a7-274c-4138-8c40-a996b431e296",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "submission_key": "fa26ea02-fe71-420a-9ca4-017e2f99375d",
+        "request_hash": "a7f1b274e42be15a860578187b65bbf42b04625d8dcb533ba026c67700676277",
+        "status": "completed",
+        "provider": "mock",
+        "model": "mock",
+        "options_json": "{\"maxOutputTokens\":100}",
+        "output_block_id": "2615cc52-00a1-4097-9337-eefcd104795b",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "continue_from": "91ef7e5a-945c-453b-894b-cb8487cc2d3c",
+        "retry_of": null,
+        "lease_owner": null,
+        "lease_until": null,
+        "usage_json": null,
+        "estimated_usage_json": "{\"inputTokens\":5417,\"maxOutputTokens\":100,\"reservedMicrousd\":0,\"method\":\"conservative byte bound\"}",
+        "error": null,
+        "created_at": 1788882313851,
+        "started_at": 1788882313852,
+        "finished_at": 1788882313852
+      },
+      {
+        "id": "5e637216-a5f5-461c-ab15-c560a59d1bf1",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "submission_key": "e26de8ca-4f1a-4c6d-ad83-73f5ab76fc74",
+        "request_hash": "a5115b7258bb68645536b92683e243287483c13da5faf587e90b3f6310daf30d",
+        "status": "completed",
+        "provider": "mock",
+        "model": "mock",
+        "options_json": "{\"action\":\"develop\",\"actionVersion\":1,\"maxOutputTokens\":100}",
+        "output_block_id": "6b5ac4a1-2dbb-4ad5-a739-32a3372c28ae",
+        "conversation_id": "96563d42-652f-4277-8e16-7ef743097fc9",
+        "continue_from": null,
+        "retry_of": null,
+        "lease_owner": null,
+        "lease_until": null,
+        "usage_json": null,
+        "estimated_usage_json": "{\"inputTokens\":4525,\"maxOutputTokens\":100,\"reservedMicrousd\":0,\"method\":\"conservative byte bound\"}",
+        "error": null,
+        "created_at": 1788882313852,
+        "started_at": 1788882313852,
+        "finished_at": 1788882313853
+      },
+      {
+        "id": "741bf668-4825-4f2c-b92d-765a81f12629",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "submission_key": "cad3fb9d-bb0e-499e-9626-26377ca012d7",
+        "request_hash": "40653d8424825ebccc92bf1a2c9174ecb7cc2ff9ba2026eb94e8e3627f711c1c",
+        "status": "completed",
+        "provider": "mock",
+        "model": "mock",
+        "options_json": "{\"maxOutputTokens\":100}",
+        "output_block_id": "65c71a3d-2b0a-48b5-baab-5576032f3474",
+        "conversation_id": "96563d42-652f-4277-8e16-7ef743097fc9",
+        "continue_from": "91898f07-9d04-4189-92c2-88ba55e487f4",
+        "retry_of": null,
+        "lease_owner": null,
+        "lease_until": null,
+        "usage_json": null,
+        "estimated_usage_json": "{\"inputTokens\":6611,\"maxOutputTokens\":100,\"reservedMicrousd\":0,\"method\":\"conservative byte bound\"}",
+        "error": null,
+        "created_at": 1788882313853,
+        "started_at": 1788882313853,
+        "finished_at": 1788882313854
+      },
+      {
+        "id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "submission_key": "18c1aeb3-502e-4f9d-abbc-f1e6127c65bf",
+        "request_hash": "e846c1876ec7a543552b82a210dc7b543ef350ea15d1685ca028f04963ab1c65",
+        "status": "failed",
+        "provider": "mock",
+        "model": "mock",
+        "options_json": "{\"maxOutputTokens\":100}",
+        "output_block_id": "e6d51846-e500-45d1-b67d-8a2a578e84da",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "continue_from": "60b06aad-e964-47f6-abbe-fa0f98986036",
+        "retry_of": null,
+        "lease_owner": null,
+        "lease_until": null,
+        "usage_json": null,
+        "estimated_usage_json": "{\"inputTokens\":10859,\"maxOutputTokens\":100,\"reservedMicrousd\":0,\"method\":\"conservative byte bound\"}",
+        "error": "Model request failed; completion or billing may be uncertain",
+        "created_at": 1788882313854,
+        "started_at": 1788882313854,
+        "finished_at": 1788882313855
+      },
+      {
+        "id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "submission_key": "75b1857c-a740-40dd-bd5f-835b7bbb9397",
+        "request_hash": "e846c1876ec7a543552b82a210dc7b543ef350ea15d1685ca028f04963ab1c65",
+        "status": "completed",
+        "provider": "mock",
+        "model": "mock",
+        "options_json": "{\"maxOutputTokens\":100}",
+        "output_block_id": "3825f6cf-99f0-4c8e-ac1a-6b7cf6621ad0",
+        "conversation_id": "2456b5fc-e304-4bf8-9c1d-82a58e4c4a0e",
+        "continue_from": "60b06aad-e964-47f6-abbe-fa0f98986036",
+        "retry_of": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "lease_owner": null,
+        "lease_until": null,
+        "usage_json": null,
+        "estimated_usage_json": "{\"inputTokens\":10859,\"maxOutputTokens\":100,\"reservedMicrousd\":0,\"method\":\"conservative byte bound\"}",
+        "error": null,
+        "created_at": 1788882313855,
+        "started_at": 1788882313856,
+        "finished_at": 1788882313856
+      }
+    ],
+    "run_inputs": [
+      {
+        "run_id": "5912d289-7fe2-46d1-a9e2-f49ffcaa2582",
+        "position": 0,
+        "kind": "reference",
+        "label": "Reference 1",
+        "role": "user",
+        "revision_id": "39e5f62c-bb76-4e0c-8566-1cec177cfbd2"
+      },
+      {
+        "run_id": "5912d289-7fe2-46d1-a9e2-f49ffcaa2582",
+        "position": 1,
+        "kind": "reference",
+        "label": "Reference 2",
+        "role": "user",
+        "revision_id": "79f8dc6c-a954-43ca-ade4-3ee0c24dec7b"
+      },
+      {
+        "run_id": "5912d289-7fe2-46d1-a9e2-f49ffcaa2582",
+        "position": 2,
+        "kind": "prompt",
+        "label": "Prompt",
+        "role": "user",
+        "revision_id": "3904b95c-8c7c-4886-b2fa-353f24a4cfc6"
+      },
+      {
+        "run_id": "2d3f646e-d77f-4afb-892a-808fc5b0907e",
+        "position": 0,
+        "kind": "lineage_reference",
+        "label": "Reference 1",
+        "role": "user",
+        "revision_id": "39e5f62c-bb76-4e0c-8566-1cec177cfbd2"
+      },
+      {
+        "run_id": "2d3f646e-d77f-4afb-892a-808fc5b0907e",
+        "position": 1,
+        "kind": "lineage_reference",
+        "label": "Reference 2",
+        "role": "user",
+        "revision_id": "79f8dc6c-a954-43ca-ade4-3ee0c24dec7b"
+      },
+      {
+        "run_id": "2d3f646e-d77f-4afb-892a-808fc5b0907e",
+        "position": 2,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "user",
+        "revision_id": "3904b95c-8c7c-4886-b2fa-353f24a4cfc6"
+      },
+      {
+        "run_id": "2d3f646e-d77f-4afb-892a-808fc5b0907e",
+        "position": 3,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "assistant",
+        "revision_id": "d6540dde-e5e8-4285-ad35-6228d76080ac"
+      },
+      {
+        "run_id": "2d3f646e-d77f-4afb-892a-808fc5b0907e",
+        "position": 4,
+        "kind": "reference",
+        "label": "Reference 1",
+        "role": "user",
+        "revision_id": "d4d1f18c-dddd-4038-9bf6-b115a6e1c125"
+      },
+      {
+        "run_id": "2d3f646e-d77f-4afb-892a-808fc5b0907e",
+        "position": 5,
+        "kind": "prompt",
+        "label": "Prompt",
+        "role": "user",
+        "revision_id": "b9aeb53d-246f-49f8-b1e1-0ef8a08168e0"
+      },
+      {
+        "run_id": "0e807449-b9dc-4530-a0a1-dacd80d03c63",
+        "position": 0,
+        "kind": "lineage_reference",
+        "label": "Reference 1",
+        "role": "user",
+        "revision_id": "39e5f62c-bb76-4e0c-8566-1cec177cfbd2"
+      },
+      {
+        "run_id": "0e807449-b9dc-4530-a0a1-dacd80d03c63",
+        "position": 1,
+        "kind": "lineage_reference",
+        "label": "Reference 2",
+        "role": "user",
+        "revision_id": "79f8dc6c-a954-43ca-ade4-3ee0c24dec7b"
+      },
+      {
+        "run_id": "0e807449-b9dc-4530-a0a1-dacd80d03c63",
+        "position": 2,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "user",
+        "revision_id": "3904b95c-8c7c-4886-b2fa-353f24a4cfc6"
+      },
+      {
+        "run_id": "0e807449-b9dc-4530-a0a1-dacd80d03c63",
+        "position": 3,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "assistant",
+        "revision_id": "d6540dde-e5e8-4285-ad35-6228d76080ac"
+      },
+      {
+        "run_id": "0e807449-b9dc-4530-a0a1-dacd80d03c63",
+        "position": 4,
+        "kind": "prompt",
+        "label": "Prompt",
+        "role": "user",
+        "revision_id": "c72c7a32-a351-4fa3-88d0-2a41d40bd7ce"
+      },
+      {
+        "run_id": "a5fe61a7-274c-4138-8c40-a996b431e296",
+        "position": 0,
+        "kind": "lineage_reference",
+        "label": "Reference 1",
+        "role": "user",
+        "revision_id": "39e5f62c-bb76-4e0c-8566-1cec177cfbd2"
+      },
+      {
+        "run_id": "a5fe61a7-274c-4138-8c40-a996b431e296",
+        "position": 1,
+        "kind": "lineage_reference",
+        "label": "Reference 2",
+        "role": "user",
+        "revision_id": "79f8dc6c-a954-43ca-ade4-3ee0c24dec7b"
+      },
+      {
+        "run_id": "a5fe61a7-274c-4138-8c40-a996b431e296",
+        "position": 2,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "user",
+        "revision_id": "3904b95c-8c7c-4886-b2fa-353f24a4cfc6"
+      },
+      {
+        "run_id": "a5fe61a7-274c-4138-8c40-a996b431e296",
+        "position": 3,
+        "kind": "prompt",
+        "label": "Prompt",
+        "role": "user",
+        "revision_id": "d3bcac0e-91a9-404d-9b81-16f377312999"
+      },
+      {
+        "run_id": "5e637216-a5f5-461c-ab15-c560a59d1bf1",
+        "position": 0,
+        "kind": "source",
+        "label": "Primary source",
+        "role": "user",
+        "revision_id": "d6540dde-e5e8-4285-ad35-6228d76080ac"
+      },
+      {
+        "run_id": "5e637216-a5f5-461c-ab15-c560a59d1bf1",
+        "position": 1,
+        "kind": "source",
+        "label": "Source 2",
+        "role": "user",
+        "revision_id": "d4d1f18c-dddd-4038-9bf6-b115a6e1c125"
+      },
+      {
+        "run_id": "5e637216-a5f5-461c-ab15-c560a59d1bf1",
+        "position": 2,
+        "kind": "prompt",
+        "label": "Prompt",
+        "role": "user",
+        "revision_id": "66285e83-6c75-4448-836a-709a9a135db3"
+      },
+      {
+        "run_id": "741bf668-4825-4f2c-b92d-765a81f12629",
+        "position": 0,
+        "kind": "lineage_reference",
+        "label": "Primary source",
+        "role": "user",
+        "revision_id": "d6540dde-e5e8-4285-ad35-6228d76080ac"
+      },
+      {
+        "run_id": "741bf668-4825-4f2c-b92d-765a81f12629",
+        "position": 1,
+        "kind": "lineage_reference",
+        "label": "Source 2",
+        "role": "user",
+        "revision_id": "d4d1f18c-dddd-4038-9bf6-b115a6e1c125"
+      },
+      {
+        "run_id": "741bf668-4825-4f2c-b92d-765a81f12629",
+        "position": 2,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "user",
+        "revision_id": "66285e83-6c75-4448-836a-709a9a135db3"
+      },
+      {
+        "run_id": "741bf668-4825-4f2c-b92d-765a81f12629",
+        "position": 3,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "assistant",
+        "revision_id": "a1f729c7-fb62-49bb-93a5-c7e467f53c5d"
+      },
+      {
+        "run_id": "741bf668-4825-4f2c-b92d-765a81f12629",
+        "position": 4,
+        "kind": "prompt",
+        "label": "Prompt",
+        "role": "user",
+        "revision_id": "be5e4edd-1331-4bad-8fd8-97cde6969f6c"
+      },
+      {
+        "run_id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "position": 0,
+        "kind": "lineage_reference",
+        "label": "Reference 1",
+        "role": "user",
+        "revision_id": "39e5f62c-bb76-4e0c-8566-1cec177cfbd2"
+      },
+      {
+        "run_id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "position": 1,
+        "kind": "lineage_reference",
+        "label": "Reference 2",
+        "role": "user",
+        "revision_id": "79f8dc6c-a954-43ca-ade4-3ee0c24dec7b"
+      },
+      {
+        "run_id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "position": 2,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "user",
+        "revision_id": "3904b95c-8c7c-4886-b2fa-353f24a4cfc6"
+      },
+      {
+        "run_id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "position": 3,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "assistant",
+        "revision_id": "d6540dde-e5e8-4285-ad35-6228d76080ac"
+      },
+      {
+        "run_id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "position": 4,
+        "kind": "lineage_reference",
+        "label": "Reference 1",
+        "role": "user",
+        "revision_id": "d4d1f18c-dddd-4038-9bf6-b115a6e1c125"
+      },
+      {
+        "run_id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "position": 5,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "user",
+        "revision_id": "b9aeb53d-246f-49f8-b1e1-0ef8a08168e0"
+      },
+      {
+        "run_id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "position": 6,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "assistant",
+        "revision_id": "16edb146-101a-4212-896a-4f4c3272faaf"
+      },
+      {
+        "run_id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "position": 7,
+        "kind": "reference",
+        "label": "Reference 1",
+        "role": "user",
+        "revision_id": "79f8dc6c-a954-43ca-ade4-3ee0c24dec7b"
+      },
+      {
+        "run_id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "position": 8,
+        "kind": "prompt",
+        "label": "Prompt",
+        "role": "user",
+        "revision_id": "47cf8313-708a-4bb2-a68e-39d37af1970e"
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "position": 0,
+        "kind": "lineage_reference",
+        "label": "Reference 1",
+        "role": "user",
+        "revision_id": "39e5f62c-bb76-4e0c-8566-1cec177cfbd2"
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "position": 1,
+        "kind": "lineage_reference",
+        "label": "Reference 2",
+        "role": "user",
+        "revision_id": "79f8dc6c-a954-43ca-ade4-3ee0c24dec7b"
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "position": 2,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "user",
+        "revision_id": "3904b95c-8c7c-4886-b2fa-353f24a4cfc6"
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "position": 3,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "assistant",
+        "revision_id": "d6540dde-e5e8-4285-ad35-6228d76080ac"
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "position": 4,
+        "kind": "lineage_reference",
+        "label": "Reference 1",
+        "role": "user",
+        "revision_id": "d4d1f18c-dddd-4038-9bf6-b115a6e1c125"
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "position": 5,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "user",
+        "revision_id": "b9aeb53d-246f-49f8-b1e1-0ef8a08168e0"
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "position": 6,
+        "kind": "lineage",
+        "label": "Conversation",
+        "role": "assistant",
+        "revision_id": "16edb146-101a-4212-896a-4f4c3272faaf"
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "position": 7,
+        "kind": "reference",
+        "label": "Reference 1",
+        "role": "user",
+        "revision_id": "79f8dc6c-a954-43ca-ade4-3ee0c24dec7b"
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "position": 8,
+        "kind": "prompt",
+        "label": "Prompt",
+        "role": "user",
+        "revision_id": "47cf8313-708a-4bb2-a68e-39d37af1970e"
+      }
+    ],
+    "run_outputs": [
+      {
+        "run_id": "5912d289-7fe2-46d1-a9e2-f49ffcaa2582",
+        "revision_id": "d6540dde-e5e8-4285-ad35-6228d76080ac",
+        "message_id": "3a9707d4-afaf-4b35-82fb-a388a6de06c4"
+      },
+      {
+        "run_id": "2d3f646e-d77f-4afb-892a-808fc5b0907e",
+        "revision_id": "16edb146-101a-4212-896a-4f4c3272faaf",
+        "message_id": "60b06aad-e964-47f6-abbe-fa0f98986036"
+      },
+      {
+        "run_id": "0e807449-b9dc-4530-a0a1-dacd80d03c63",
+        "revision_id": "8085d7fb-f75f-45c2-961c-b628871e1661",
+        "message_id": "333e26b1-e453-4651-b55b-67630cf85020"
+      },
+      {
+        "run_id": "a5fe61a7-274c-4138-8c40-a996b431e296",
+        "revision_id": "b0e32aeb-8126-4b9e-8ba3-a7c35d87da85",
+        "message_id": "6406a553-93fe-49e0-bc6f-bd3b9c1168ae"
+      },
+      {
+        "run_id": "5e637216-a5f5-461c-ab15-c560a59d1bf1",
+        "revision_id": "a1f729c7-fb62-49bb-93a5-c7e467f53c5d",
+        "message_id": "91898f07-9d04-4189-92c2-88ba55e487f4"
+      },
+      {
+        "run_id": "741bf668-4825-4f2c-b92d-765a81f12629",
+        "revision_id": "5945a0eb-9d11-4c1d-8bb3-22fde6d778b7",
+        "message_id": "d6fdc41b-542d-43a5-9956-cbbfdb8b5ad7"
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "revision_id": "6584b22e-0cf3-4f46-a9e5-d311e4dc5651",
+        "message_id": "7a935aac-2c49-408a-a61a-2755477f56a0"
+      }
+    ],
+    "run_checkpoints": [
+      {
+        "run_id": "5912d289-7fe2-46d1-a9e2-f49ffcaa2582",
+        "text": "Completed artifact",
+        "updated_at": 1788882313848
+      },
+      {
+        "run_id": "2d3f646e-d77f-4afb-892a-808fc5b0907e",
+        "text": "Completed artifact",
+        "updated_at": 1788882313850
+      },
+      {
+        "run_id": "0e807449-b9dc-4530-a0a1-dacd80d03c63",
+        "text": "Completed artifact",
+        "updated_at": 1788882313851
+      },
+      {
+        "run_id": "a5fe61a7-274c-4138-8c40-a996b431e296",
+        "text": "Completed artifact",
+        "updated_at": 1788882313852
+      },
+      {
+        "run_id": "5e637216-a5f5-461c-ab15-c560a59d1bf1",
+        "text": "Completed artifact",
+        "updated_at": 1788882313853
+      },
+      {
+        "run_id": "741bf668-4825-4f2c-b92d-765a81f12629",
+        "text": "Completed artifact",
+        "updated_at": 1788882313854
+      },
+      {
+        "run_id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "text": "Retained partial",
+        "updated_at": 1788882313855
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "text": "Completed artifact",
+        "updated_at": 1788882313856
+      }
+    ],
+    "run_costs": [
+      {
+        "run_id": "5912d289-7fe2-46d1-a9e2-f49ffcaa2582",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "budget_day": "2026-09-08",
+        "status": "confirmed",
+        "reserved_microusd": 0,
+        "estimated_input_tokens": 4378,
+        "confirmed_microusd": 0,
+        "pricing_json": "{\"inputUsdPerMillion\":0,\"outputUsdPerMillion\":0,\"vision\":true,\"imageTokenBound\":0,\"source\":\"local mock\",\"verifiedAt\":\"2026-09-08\"}",
+        "created_at": 1788882313846,
+        "updated_at": 1788882313848
+      },
+      {
+        "run_id": "2d3f646e-d77f-4afb-892a-808fc5b0907e",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "budget_day": "2026-09-08",
+        "status": "confirmed",
+        "reserved_microusd": 0,
+        "estimated_input_tokens": 7593,
+        "confirmed_microusd": 0,
+        "pricing_json": "{\"inputUsdPerMillion\":0,\"outputUsdPerMillion\":0,\"vision\":true,\"imageTokenBound\":0,\"source\":\"local mock\",\"verifiedAt\":\"2026-09-08\"}",
+        "created_at": 1788882313850,
+        "updated_at": 1788882313850
+      },
+      {
+        "run_id": "0e807449-b9dc-4530-a0a1-dacd80d03c63",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "budget_day": "2026-09-08",
+        "status": "confirmed",
+        "reserved_microusd": 0,
+        "estimated_input_tokens": 6456,
+        "confirmed_microusd": 0,
+        "pricing_json": "{\"inputUsdPerMillion\":0,\"outputUsdPerMillion\":0,\"vision\":true,\"imageTokenBound\":0,\"source\":\"local mock\",\"verifiedAt\":\"2026-09-08\"}",
+        "created_at": 1788882313851,
+        "updated_at": 1788882313851
+      },
+      {
+        "run_id": "a5fe61a7-274c-4138-8c40-a996b431e296",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "budget_day": "2026-09-08",
+        "status": "confirmed",
+        "reserved_microusd": 0,
+        "estimated_input_tokens": 5417,
+        "confirmed_microusd": 0,
+        "pricing_json": "{\"inputUsdPerMillion\":0,\"outputUsdPerMillion\":0,\"vision\":true,\"imageTokenBound\":0,\"source\":\"local mock\",\"verifiedAt\":\"2026-09-08\"}",
+        "created_at": 1788882313852,
+        "updated_at": 1788882313852
+      },
+      {
+        "run_id": "5e637216-a5f5-461c-ab15-c560a59d1bf1",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "budget_day": "2026-09-08",
+        "status": "confirmed",
+        "reserved_microusd": 0,
+        "estimated_input_tokens": 4525,
+        "confirmed_microusd": 0,
+        "pricing_json": "{\"inputUsdPerMillion\":0,\"outputUsdPerMillion\":0,\"vision\":true,\"imageTokenBound\":0,\"source\":\"local mock\",\"verifiedAt\":\"2026-09-08\"}",
+        "created_at": 1788882313852,
+        "updated_at": 1788882313853
+      },
+      {
+        "run_id": "741bf668-4825-4f2c-b92d-765a81f12629",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "budget_day": "2026-09-08",
+        "status": "confirmed",
+        "reserved_microusd": 0,
+        "estimated_input_tokens": 6611,
+        "confirmed_microusd": 0,
+        "pricing_json": "{\"inputUsdPerMillion\":0,\"outputUsdPerMillion\":0,\"vision\":true,\"imageTokenBound\":0,\"source\":\"local mock\",\"verifiedAt\":\"2026-09-08\"}",
+        "created_at": 1788882313853,
+        "updated_at": 1788882313854
+      },
+      {
+        "run_id": "13a9db1b-7743-4756-a911-6c61d9c2db68",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "budget_day": "2026-09-08",
+        "status": "uncertain",
+        "reserved_microusd": 0,
+        "estimated_input_tokens": 10859,
+        "confirmed_microusd": null,
+        "pricing_json": "{\"inputUsdPerMillion\":0,\"outputUsdPerMillion\":0,\"vision\":true,\"imageTokenBound\":0,\"source\":\"local mock\",\"verifiedAt\":\"2026-09-08\"}",
+        "created_at": 1788882313854,
+        "updated_at": 1788882313855
+      },
+      {
+        "run_id": "b46bac8d-e13f-4e58-ba6d-070d912ccd36",
+        "owner_id": "fe40f3d6-9784-426f-9b12-67e96238572e",
+        "budget_day": "2026-09-08",
+        "status": "confirmed",
+        "reserved_microusd": 0,
+        "estimated_input_tokens": 10859,
+        "confirmed_microusd": 0,
+        "pricing_json": "{\"inputUsdPerMillion\":0,\"outputUsdPerMillion\":0,\"vision\":true,\"imageTokenBound\":0,\"source\":\"local mock\",\"verifiedAt\":\"2026-09-08\"}",
+        "created_at": 1788882313855,
+        "updated_at": 1788882313856
+      }
+    ],
+    "placements": [
+      {
+        "id": "26a4a5b9-dbe5-4d69-89ba-e03168186ea5",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "block_id": "5d9fc80a-2947-423f-8737-b166a6672c8e",
+        "x": 100,
+        "y": 100,
+        "width": 320,
+        "height": 220,
+        "z_index": 0,
+        "updated_at": 1788882313845,
+        "version": 0
+      },
+      {
+        "id": "0fa5a144-5eab-4dcc-bb35-4deae371ce93",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "block_id": "ad6b3f8d-f693-4229-97eb-313bef602043",
+        "x": 100,
+        "y": 100,
+        "width": 320,
+        "height": 220,
+        "z_index": 0,
+        "updated_at": 1788882313845,
+        "version": 0
+      },
+      {
+        "id": "16d21d63-ba92-41f4-8b06-3adea63d330c",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "block_id": "c081c5b3-24f6-49d7-a64a-567b71a7706c",
+        "x": 520,
+        "y": 100,
+        "width": 380,
+        "height": 300,
+        "z_index": 0,
+        "updated_at": 1788882313846,
+        "version": 0
+      },
+      {
+        "id": "345a0cc9-ac6b-43c6-867d-3792ce310b2d",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "block_id": "281093e9-9179-4f8a-b42b-09c5d5d4aca0",
+        "x": 520,
+        "y": 160,
+        "width": 380,
+        "height": 300,
+        "z_index": 0,
+        "updated_at": 1788882313850,
+        "version": 0
+      },
+      {
+        "id": "9377d324-fbac-4429-8039-170c17fd9bbf",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "block_id": "f87d5fc4-f952-45a0-afa2-6af2cbe2ce53",
+        "x": 520,
+        "y": 220,
+        "width": 380,
+        "height": 300,
+        "z_index": 0,
+        "updated_at": 1788882313851,
+        "version": 0
+      },
+      {
+        "id": "9671a454-7006-467a-94cc-571d91482990",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "block_id": "2615cc52-00a1-4097-9337-eefcd104795b",
+        "x": 520,
+        "y": 280,
+        "width": 380,
+        "height": 300,
+        "z_index": 0,
+        "updated_at": 1788882313851,
+        "version": 0
+      },
+      {
+        "id": "bdac9cb9-f74f-4e91-9045-6a4215492b0f",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "block_id": "6b5ac4a1-2dbb-4ad5-a739-32a3372c28ae",
+        "x": 980,
+        "y": 100,
+        "width": 380,
+        "height": 300,
+        "z_index": 0,
+        "updated_at": 1788882313852,
+        "version": 0
+      },
+      {
+        "id": "b8308901-da37-46a1-acb7-322b2d1bd294",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "block_id": "65c71a3d-2b0a-48b5-baab-5576032f3474",
+        "x": 520,
+        "y": 400,
+        "width": 380,
+        "height": 300,
+        "z_index": 0,
+        "updated_at": 1788882313853,
+        "version": 0
+      },
+      {
+        "id": "76c242e0-dac4-41d6-9d35-c2be0b6d561c",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "block_id": "e6d51846-e500-45d1-b67d-8a2a578e84da",
+        "x": 520,
+        "y": 460,
+        "width": 380,
+        "height": 300,
+        "z_index": 0,
+        "updated_at": 1788882313854,
+        "version": 0
+      },
+      {
+        "id": "4b9ab28c-8813-4af8-8aec-65643287d3ce",
+        "brane_id": "0f8d772d-bc9f-4e2c-8929-b00c6eea6f33",
+        "block_id": "3825f6cf-99f0-4c8e-ac1a-6b7cf6621ad0",
+        "x": 560,
+        "y": 180,
+        "width": 380,
+        "height": 300,
+        "z_index": 0,
+        "updated_at": 1788882313855,
+        "version": 0
+      }
+    ],
+    "run_placements": [
+      {
+        "run_id": "5e637216-a5f5-461c-ab15-c560a59d1bf1",
+        "anchor_placement_id": "16d21d63-ba92-41f4-8b06-3adea63d330c",
+        "output_placement_id": "bdac9cb9-f74f-4e91-9045-6a4215492b0f"
+      }
+    ]
+  }
+}

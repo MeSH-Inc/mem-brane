@@ -2,7 +2,7 @@ import { modelCompatibility } from '../../shared/representations.js';
 import type { DB } from '../db/index.js';
 import type { SubmitRun, RunInput } from '../../shared/types/domain.js';
 import { canRunOnBrane, requireOwned, DomainError } from '../domain/access.js';
-import { readLineage } from './runs.js';
+import { readLineage, lineageInputs } from './contexts.js';
 import {
   budgetState,
   costMicro,
@@ -26,21 +26,8 @@ export function estimateRun(
     role: RunInput['role'] = 'user',
     revision_id = '00000000-0000-0000-0000-000000000000',
   ) => inputs.push({ position: inputs.length, kind, label, role, revision_id, content });
-  for (const message of input.continueFrom ? readLineage(db, actor, input.continueFrom) : []) {
-    for (const ref of JSON.parse(message.context_json)) {
-      const r = db
-        .prepare('SELECT content_json FROM block_revisions WHERE id=?')
-        .get(ref.revisionId) as any;
-      add(JSON.parse(r.content_json), 'lineage_reference', ref.label, 'user', ref.revisionId);
-    }
-    add(
-      JSON.parse(message.content_json),
-      'lineage',
-      'Conversation',
-      message.role,
-      message.revision_id,
-    );
-  }
+  if (input.continueFrom)
+    inputs.push(...lineageInputs(db, readLineage(db, actor, input.continueFrom)));
   for (const [i, blockId] of input.references.entries()) {
     requireOwned(db, 'blocks', actor, blockId);
     const row = (db

@@ -10,6 +10,7 @@ import {
   updateBlockLiveState,
 } from '../../server/services/content.js';
 import { submitRun } from '../../server/services/runs.js';
+import { readInputs } from '../../server/services/contexts.js';
 import { RunWorker } from '../../server/jobs/worker.js';
 import { EventHub } from '../../server/sse/hub.js';
 
@@ -66,7 +67,12 @@ export async function seedHistory(
     userConcurrency: 1,
     maxContextCharacters: 100000,
   };
-  const lineage: { turns: number; inputRows: number; liveDatabaseBytes: number }[] = [];
+  const lineage: {
+    turns: number;
+    storedContextEntries: number;
+    expandedInputs: number;
+    liveDatabaseBytes: number;
+  }[] = [];
   let continueFrom: string | undefined;
   let removedPlacements = 0;
   const finish = async (references: string[], prompt: string, parent?: string) => {
@@ -106,7 +112,17 @@ export async function seedHistory(
       if ([10, 40, chainTurns].includes(turn))
         lineage.push({
           turns: turn,
-          inputRows: (db.prepare('SELECT count(*) n FROM run_inputs').get() as { n: number }).n,
+          storedContextEntries: (
+            db.prepare('SELECT count(*) n FROM context_entries').get() as { n: number }
+          ).n,
+          expandedInputs: readInputs(
+            db,
+            (
+              db
+                .prepare('SELECT run_id FROM conversation_messages WHERE id=?')
+                .get(continueFrom) as { run_id: string }
+            ).run_id,
+          ).length,
           liveDatabaseBytes: databaseFootprint(db).liveBytes,
         });
     }

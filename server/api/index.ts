@@ -31,14 +31,8 @@ import {
   now,
   uid,
 } from '../services/content.js';
-import {
-  spawnArtifact,
-  submitRun,
-  cancelRun,
-  retryRun,
-  readInputs,
-  readLineage,
-} from '../services/runs.js';
+import { spawnArtifact, submitRun, cancelRun, retryRun } from '../services/runs.js';
+import { readInputs, readLineage } from '../services/contexts.js';
 import {
   geometry,
   placementEdit,

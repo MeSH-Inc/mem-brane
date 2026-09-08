@@ -10,7 +10,7 @@ import { BeforeInvocationError } from '../llm/errors.js';
 import { lifecycleLog } from '../app/logging.js';
 import type { DB } from '../db/index.js';
 import { now, uid } from '../services/content.js';
-import { readInputs } from '../services/runs.js';
+import { readInputs } from '../services/contexts.js';
 import type { ModelExecutor } from '../llm/model.js';
 import type { EventHub } from '../sse/hub.js';
 export interface WorkerOptions {
@@ -248,26 +248,33 @@ export class RunWorker {
         db.prepare(
           'INSERT INTO block_revisions (id,block_id,content_json,created_at) VALUES (?,?,?,?)',
         ).run(revisionId, run.output_block_id, JSON.stringify({ format: 'text', text }), now());
-        const inputs = readInputs(db, run.id);
-        const prompt = inputs.find((i) => i.kind === 'prompt')!;
+        const context = db
+          .prepare(
+            "SELECT c.parent_message_id,e.revision_id FROM context_manifests c JOIN context_entries e ON e.context_id=c.id AND e.kind='prompt' WHERE c.id=?",
+          )
+          .get(run.context_id) as { parent_message_id: string | null; revision_id: string };
         db.prepare(
-          'INSERT INTO conversation_messages (id,conversation_id,parent_id,role,revision_id,created_at,context_json) VALUES (?,?,?,?,?,?,?)',
+          'INSERT INTO conversation_messages (id,conversation_id,parent_id,role,revision_id,created_at,run_id) VALUES (?,?,?,?,?,?,?)',
         ).run(
           userMessage,
           run.conversation_id,
-          run.continue_from,
+          context.parent_message_id,
           'user',
-          prompt.revision_id,
+          context.revision_id,
           now(),
-          JSON.stringify(
-            inputs
-              .filter((i) => i.kind === 'source' || i.kind === 'reference')
-              .map((i) => ({ revisionId: i.revision_id, label: i.label })),
-          ),
+          run.id,
         );
         db.prepare(
-          'INSERT INTO conversation_messages (id,conversation_id,parent_id,role,revision_id,created_at) VALUES (?,?,?,?,?,?)',
-        ).run(assistantMessage, run.conversation_id, userMessage, 'assistant', revisionId, now());
+          'INSERT INTO conversation_messages (id,conversation_id,parent_id,role,revision_id,created_at,run_id) VALUES (?,?,?,?,?,?,?)',
+        ).run(
+          assistantMessage,
+          run.conversation_id,
+          userMessage,
+          'assistant',
+          revisionId,
+          now(),
+          run.id,
+        );
         db.prepare('INSERT INTO run_outputs VALUES (?,?,?)').run(
           run.id,
           revisionId,

@@ -143,7 +143,7 @@ it('retains active/uncertain/mismatched history and removes only redundant settl
     ).toBe(0);
     expect((db.prepare('SELECT count(*) n FROM run_checkpoints').get() as { n: number }).n).toBe(3);
     expect((db.prepare('SELECT count(*) n FROM run_outputs').get() as { n: number }).n).toBe(4);
-    expect((db.prepare('SELECT count(*) n FROM run_inputs').get() as { n: number }).n).toBe(5);
+    expect((db.prepare('SELECT count(*) n FROM context_entries').get() as { n: number }).n).toBe(5);
   } finally {
     await worker.stop();
     db.close();

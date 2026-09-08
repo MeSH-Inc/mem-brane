@@ -31,12 +31,12 @@ export function readVisibleDerivations(db: DB, actor: string, braneId: string): 
   // the size of the owner's run history. The unique index enforces one producer.
   return db
     .prepare(
-      `SELECT i.run_id runId,v.block_id sourceBlockId,i.revision_id sourceRevisionId,
+      `SELECT r.id runId,v.block_id sourceBlockId,i.revision_id sourceRevisionId,
     r.output_block_id outputBlockId,i.position,l.anchor_placement_id anchorPlacementId,
     l.output_placement_id outputPlacementId
     FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p
     CROSS JOIN runs r INDEXED BY runs_output_block ON r.output_block_id=p.block_id
-    CROSS JOIN run_inputs i ON i.run_id=r.id AND i.kind='source'
+    CROSS JOIN context_entries i ON i.context_id=r.context_id AND i.kind='source'
     JOIN block_revisions v ON v.id=i.revision_id
     LEFT JOIN run_placements l ON l.run_id=r.id
     WHERE r.owner_id=? ORDER BY r.created_at,i.position`,

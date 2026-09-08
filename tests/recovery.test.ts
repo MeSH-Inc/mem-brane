@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import { openDatabase } from '../server/db/index';
 import { createBrane, createTextBlock, revisions, uid } from '../server/services/content';
-import { submitRun, retryRun, readInputs } from '../server/services/runs';
+import { submitRun, retryRun } from '../server/services/runs';
+import { readInputs } from '../server/services/contexts';
 const children: ChildProcess[] = [];
 const dirs: string[] = [];
 afterEach(async () => {

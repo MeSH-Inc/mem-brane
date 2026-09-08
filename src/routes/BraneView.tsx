@@ -33,6 +33,7 @@ import { BlockContent } from '../components/BlockContent';
 import { SpawnButton } from '../components/SpawnButton';
 import { ArtifactActions } from '../components/ArtifactActions';
 import { RunHistory } from '../components/RunHistory';
+import type { ConversationMessage } from '../../shared/types/conversation';
 import { draftDisposition } from '../services/drafts';
 import { useMobile } from '../lib/useMobile';
 const BraneCanvas = lazy(() =>
@@ -88,7 +89,7 @@ export function BraneView({
     [url, setUrl] = useState('');
   const [estimate, setEstimate] = useState<{ reservedMicrousd: number; canAfford: boolean }>();
   const [managed, setManaged] = useState<string>(),
-    [lineage, setLineage] = useState<any[]>([]),
+    [lineage, setLineage] = useState<ConversationMessage[]>([]),
     [budget, setBudget] = useState<{ availableMicrousd: number; limitMicrousd: number }>(),
     [vision, setVision] = useState<Record<string, { vision: boolean }>>({});
   const [titleDraft, setTitleDraft] = useState<string>();
@@ -259,7 +260,7 @@ export function BraneView({
       setLineage([]);
       return;
     }
-    void api<any[]>(`/context/lineage/${ui.continueFrom}`)
+    void api<ConversationMessage[]>(`/context/lineage/${ui.continueFrom}`)
       .then(setLineage)
       .catch((e) => setError(e.message));
   }, [ui.continueFrom]);
@@ -985,7 +986,7 @@ export function BraneView({
                             );
                         }}
                       >
-                        {m.role}: {JSON.parse(m.content_json).text.slice(0, 55)}
+                        {m.role}: {m.content.text.slice(0, 55)}
                       </button>
                     </li>
                   ))}

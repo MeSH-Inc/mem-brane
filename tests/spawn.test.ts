@@ -11,7 +11,8 @@ import {
   removePlacement,
   uid,
 } from '../server/services/content';
-import { spawnArtifact, readInputs, retryRun, cancelRun } from '../server/services/runs';
+import { spawnArtifact, retryRun, cancelRun } from '../server/services/runs';
+import { readInputs } from '../server/services/contexts';
 import { RunWorker } from '../server/jobs/worker';
 import { EventHub } from '../server/sse/hub';
 import { derivationEdges } from '../src/canvas/derivations';
