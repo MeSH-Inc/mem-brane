@@ -1,0 +1,201 @@
+{
+  "time": "2026-09-08T15:55:30.441Z",
+  "node": "v24.13.1",
+  "cliVersion": "3.51.0 2025-06-12 13:14:41 f0ca7bba1c5e232e5d279fad6338121ab55af0c8c68c84cdfb18ba5114dcaapl (64-bit)",
+  "results": [
+    {
+      "removedOutputs": 80,
+      "sqlite": {
+        "version": "3.53.2"
+      },
+      "database": {
+        "allocatedBytes": 753664,
+        "freeBytes": 0,
+        "liveBytes": 753664
+      },
+      "workspaceBytes": 1832,
+      "queries": [
+        {
+          "sql": "SELECT * FROM branes WHERE id=? AND owner_id=?",
+          "vmSteps": 18,
+          "plan": ["SEARCH branes USING INDEX sqlite_autoindex_branes_1 (id=?)"]
+        },
+        {
+          "sql": "SELECT id,brane_id,block_id,x,y,width,height,z_index,version FROM placements WHERE brane_id=? ORDER BY z_index,updated_at",
+          "vmSteps": 72,
+          "plan": [
+            "SEARCH placements USING INDEX placements_brane_block (brane_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "sql": "SELECT b.id,b.kind,b.origin,l.content_json,l.version,v.content_json final_content,o.message_id\n        FROM blocks b LEFT JOIN block_live_state l ON l.block_id=b.id\n        LEFT JOIN runs r ON r.output_block_id=b.id\n        LEFT JOIN run_outputs o ON o.run_id=r.id\n        LEFT JOIN block_revisions v ON v.id=o.revision_id\n        WHERE b.id IN (SELECT block_id FROM placements WHERE brane_id=?)\n        ORDER BY b.created_at,b.id",
+          "vmSteps": 159,
+          "plan": [
+            "SEARCH b USING INDEX sqlite_autoindex_blocks_1 (id=?)",
+            "LIST SUBQUERY 1",
+            "SEARCH placements USING COVERING INDEX placements_brane_block (brane_id=?)",
+            "SEARCH l USING INDEX sqlite_autoindex_block_live_state_1 (block_id=?) LEFT-JOIN",
+            "SEARCH r USING INDEX runs_output_block (output_block_id=?) LEFT-JOIN",
+            "SEARCH o USING INDEX sqlite_autoindex_run_outputs_1 (run_id=?) LEFT-JOIN",
+            "SEARCH v USING INDEX sqlite_autoindex_block_revisions_1 (id=?) LEFT-JOIN",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "sql": "WITH selected AS (\n    SELECT r.id FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p\n    CROSS JOIN runs r INDEXED BY runs_output_block ON r.output_block_id=p.block_id\n    WHERE r.owner_id=?\n    UNION\n    SELECT id FROM runs INDEXED BY runs_brane_active WHERE brane_id=?\n    AND status IN ('queued','claimed','running','cancel_requested')\n  ) SELECT r.id,r.brane_id,r.status,r.model,r.provider,r.output_block_id,r.error,r.usage_json,r.retry_of,r.created_at,COALESCE(c.text,'') partial FROM selected s\n  CROSS JOIN runs r ON r.id=s.id\n  LEFT JOIN run_checkpoints c ON c.run_id=r.id AND r.status!='completed'\n  ORDER BY r.created_at,r.id",
+          "vmSteps": 168,
+          "plan": [
+            "CO-ROUTINE selected",
+            "MERGE (UNION)",
+            "LEFT",
+            "CO-ROUTINE p",
+            "SEARCH placements USING COVERING INDEX placements_brane_block (brane_id=?)",
+            "SCAN p",
+            "SEARCH r USING INDEX runs_output_block (output_block_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY",
+            "RIGHT",
+            "SEARCH runs USING INDEX runs_brane_active (brane_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY",
+            "SCAN s",
+            "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)",
+            "SEARCH c USING INDEX sqlite_autoindex_run_checkpoints_1 (run_id=?) LEFT-JOIN",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "sql": "SELECT r.id runId,v.block_id sourceBlockId,i.revision_id sourceRevisionId,\n    r.output_block_id outputBlockId,i.position,l.anchor_placement_id anchorPlacementId,\n    l.output_placement_id outputPlacementId\n    FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p\n    CROSS JOIN runs r INDEXED BY runs_output_block ON r.output_block_id=p.block_id\n    CROSS JOIN context_entries i ON i.context_id=r.context_id AND i.kind='source'\n    JOIN block_revisions v ON v.id=i.revision_id\n    LEFT JOIN run_placements l ON l.run_id=r.id\n    WHERE r.owner_id=? ORDER BY r.created_at,i.position",
+          "vmSteps": 92,
+          "plan": [
+            "CO-ROUTINE p",
+            "SEARCH placements USING COVERING INDEX placements_brane_block (brane_id=?)",
+            "SCAN p",
+            "SEARCH r USING INDEX runs_output_block (output_block_id=?)",
+            "SEARCH i USING INDEX sqlite_autoindex_context_entries_1 (context_id=?)",
+            "SEARCH v USING INDEX sqlite_autoindex_block_revisions_1 (id=?)",
+            "SEARCH l USING INDEX sqlite_autoindex_run_placements_1 (run_id=?) LEFT-JOIN",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "sql": "SELECT r.id,r.brane_id,r.status,r.model,r.provider,r.output_block_id,r.error,r.usage_json,r.retry_of,r.created_at FROM runs r WHERE brane_id=? ORDER BY created_at DESC,id DESC LIMIT ?",
+          "vmSteps": 398,
+          "plan": ["SEARCH r USING INDEX runs_brane_history (brane_id=?)"]
+        }
+      ]
+    },
+    {
+      "removedOutputs": 2580,
+      "sqlite": {
+        "version": "3.53.2"
+      },
+      "database": {
+        "allocatedBytes": 12222464,
+        "freeBytes": 0,
+        "liveBytes": 12222464
+      },
+      "workspaceBytes": 1832,
+      "queries": [
+        {
+          "sql": "SELECT * FROM branes WHERE id=? AND owner_id=?",
+          "vmSteps": 18,
+          "plan": ["SEARCH branes USING INDEX sqlite_autoindex_branes_1 (id=?)"]
+        },
+        {
+          "sql": "SELECT id,brane_id,block_id,x,y,width,height,z_index,version FROM placements WHERE brane_id=? ORDER BY z_index,updated_at",
+          "vmSteps": 72,
+          "plan": [
+            "SEARCH placements USING INDEX placements_brane_block (brane_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "sql": "SELECT b.id,b.kind,b.origin,l.content_json,l.version,v.content_json final_content,o.message_id\n        FROM blocks b LEFT JOIN block_live_state l ON l.block_id=b.id\n        LEFT JOIN runs r ON r.output_block_id=b.id\n        LEFT JOIN run_outputs o ON o.run_id=r.id\n        LEFT JOIN block_revisions v ON v.id=o.revision_id\n        WHERE b.id IN (SELECT block_id FROM placements WHERE brane_id=?)\n        ORDER BY b.created_at,b.id",
+          "vmSteps": 159,
+          "plan": [
+            "SEARCH b USING INDEX sqlite_autoindex_blocks_1 (id=?)",
+            "LIST SUBQUERY 1",
+            "SEARCH placements USING COVERING INDEX placements_brane_block (brane_id=?)",
+            "SEARCH l USING INDEX sqlite_autoindex_block_live_state_1 (block_id=?) LEFT-JOIN",
+            "SEARCH r USING INDEX runs_output_block (output_block_id=?) LEFT-JOIN",
+            "SEARCH o USING INDEX sqlite_autoindex_run_outputs_1 (run_id=?) LEFT-JOIN",
+            "SEARCH v USING INDEX sqlite_autoindex_block_revisions_1 (id=?) LEFT-JOIN",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "sql": "WITH selected AS (\n    SELECT r.id FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p\n    CROSS JOIN runs r INDEXED BY runs_output_block ON r.output_block_id=p.block_id\n    WHERE r.owner_id=?\n    UNION\n    SELECT id FROM runs INDEXED BY runs_brane_active WHERE brane_id=?\n    AND status IN ('queued','claimed','running','cancel_requested')\n  ) SELECT r.id,r.brane_id,r.status,r.model,r.provider,r.output_block_id,r.error,r.usage_json,r.retry_of,r.created_at,COALESCE(c.text,'') partial FROM selected s\n  CROSS JOIN runs r ON r.id=s.id\n  LEFT JOIN run_checkpoints c ON c.run_id=r.id AND r.status!='completed'\n  ORDER BY r.created_at,r.id",
+          "vmSteps": 168,
+          "plan": [
+            "CO-ROUTINE selected",
+            "MERGE (UNION)",
+            "LEFT",
+            "CO-ROUTINE p",
+            "SEARCH placements USING COVERING INDEX placements_brane_block (brane_id=?)",
+            "SCAN p",
+            "SEARCH r USING INDEX runs_output_block (output_block_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY",
+            "RIGHT",
+            "SEARCH runs USING INDEX runs_brane_active (brane_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY",
+            "SCAN s",
+            "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)",
+            "SEARCH c USING INDEX sqlite_autoindex_run_checkpoints_1 (run_id=?) LEFT-JOIN",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "sql": "SELECT r.id runId,v.block_id sourceBlockId,i.revision_id sourceRevisionId,\n    r.output_block_id outputBlockId,i.position,l.anchor_placement_id anchorPlacementId,\n    l.output_placement_id outputPlacementId\n    FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p\n    CROSS JOIN runs r INDEXED BY runs_output_block ON r.output_block_id=p.block_id\n    CROSS JOIN context_entries i ON i.context_id=r.context_id AND i.kind='source'\n    JOIN block_revisions v ON v.id=i.revision_id\n    LEFT JOIN run_placements l ON l.run_id=r.id\n    WHERE r.owner_id=? ORDER BY r.created_at,i.position",
+          "vmSteps": 92,
+          "plan": [
+            "CO-ROUTINE p",
+            "SEARCH placements USING COVERING INDEX placements_brane_block (brane_id=?)",
+            "SCAN p",
+            "SEARCH r USING INDEX runs_output_block (output_block_id=?)",
+            "SEARCH i USING INDEX sqlite_autoindex_context_entries_1 (context_id=?)",
+            "SEARCH v USING INDEX sqlite_autoindex_block_revisions_1 (id=?)",
+            "SEARCH l USING INDEX sqlite_autoindex_run_placements_1 (run_id=?) LEFT-JOIN",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "sql": "SELECT r.id,r.brane_id,r.status,r.model,r.provider,r.output_block_id,r.error,r.usage_json,r.retry_of,r.created_at FROM runs r WHERE brane_id=? ORDER BY created_at DESC,id DESC LIMIT ?",
+          "vmSteps": 398,
+          "plan": ["SEARCH r USING INDEX runs_brane_history (brane_id=?)"]
+        }
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "sql": "SELECT * FROM branes WHERE id=? AND owner_id=?",
+      "smallVmSteps": 18,
+      "largeVmSteps": 18
+    },
+    {
+      "sql": "SELECT id,brane_id,block_id,x,y,width,height,z_index,version FROM placements WHERE brane_id=? ORDER BY z_index,updated_at",
+      "smallVmSteps": 72,
+      "largeVmSteps": 72
+    },
+    {
+      "sql": "SELECT b.id,b.kind,b.origin,l.content_json,l.version,v.content_json final_content,o.message_id\n        FROM blocks b LEFT JOIN block_live_state l ON l.block_id=b.id\n        LEFT JOIN runs r ON r.output_block_id=b.id\n        LEFT JOIN run_outputs o ON o.run_id=r.id\n        LEFT JOIN block_revisions v ON v.id=o.revision_id\n        WHERE b.id IN (SELECT block_id FROM placements WHERE brane_id=?)\n        ORDER BY b.created_at,b.id",
+      "smallVmSteps": 159,
+      "largeVmSteps": 159
+    },
+    {
+      "sql": "WITH selected AS (\n    SELECT r.id FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p\n    CROSS JOIN runs r INDEXED BY runs_output_block ON r.output_block_id=p.block_id\n    WHERE r.owner_id=?\n    UNION\n    SELECT id FROM runs INDEXED BY runs_brane_active WHERE brane_id=?\n    AND status IN ('queued','claimed','running','cancel_requested')\n  ) SELECT r.id,r.brane_id,r.status,r.model,r.provider,r.output_block_id,r.error,r.usage_json,r.retry_of,r.created_at,COALESCE(c.text,'') partial FROM selected s\n  CROSS JOIN runs r ON r.id=s.id\n  LEFT JOIN run_checkpoints c ON c.run_id=r.id AND r.status!='completed'\n  ORDER BY r.created_at,r.id",
+      "smallVmSteps": 168,
+      "largeVmSteps": 168
+    },
+    {
+      "sql": "SELECT r.id runId,v.block_id sourceBlockId,i.revision_id sourceRevisionId,\n    r.output_block_id outputBlockId,i.position,l.anchor_placement_id anchorPlacementId,\n    l.output_placement_id outputPlacementId\n    FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p\n    CROSS JOIN runs r INDEXED BY runs_output_block ON r.output_block_id=p.block_id\n    CROSS JOIN context_entries i ON i.context_id=r.context_id AND i.kind='source'\n    JOIN block_revisions v ON v.id=i.revision_id\n    LEFT JOIN run_placements l ON l.run_id=r.id\n    WHERE r.owner_id=? ORDER BY r.created_at,i.position",
+      "smallVmSteps": 92,
+      "largeVmSteps": 92
+    },
+    {
+      "sql": "SELECT r.id,r.brane_id,r.status,r.model,r.provider,r.output_block_id,r.error,r.usage_json,r.retry_of,r.created_at FROM runs r WHERE brane_id=? ORDER BY created_at DESC,id DESC LIMIT ?",
+      "smallVmSteps": 398,
+      "largeVmSteps": 398
+    }
+  ]
+}

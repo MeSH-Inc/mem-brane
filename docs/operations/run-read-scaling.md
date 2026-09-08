@@ -15,7 +15,8 @@ same two visible blocks, two active runs (one unplaced), and one visible derivat
 The [raw report](read-scaling.json) records SQL captured from actual service calls,
 query plans from the application's SQLite library, and execution steps from the
 system SQLite CLI. Both engine versions are recorded; CLI steps are a complexity
-probe, not an application latency measurement. The script fails if any measured
+probe, not an application latency measurement. VM counts exclude internal B-tree
+traversal; indexed lookup costs may still grow with index depth. The script fails if any measured
 query grows by more than 25 steps between fixtures. It uses real domain submission
 and deterministic worker finalization, never a paid provider or live database.
 
@@ -27,3 +28,7 @@ Set `SQLITE_CLI` to a CLI supporting `.stats vmstep` if needed. On macOS the def
 is `/usr/bin/sqlite3`; other hosts use `sqlite3` from PATH. Full visible text still
 belongs to the workspace response. This change bounds history-related read work;
 it does not reduce text transfer for a densely populated brane.
+
+The [post-normalization report](read-scaling-contexts.json) repeats the same probe
+after introducing context manifests. Visible/active reads remain at 168 VM steps,
+derivations at 92, and the first history page at 398 in both fixture sizes.

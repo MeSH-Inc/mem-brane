@@ -68,6 +68,10 @@ server explicitly uses development mode. Both exercises create disposable data.
 
 ## Recommended next commits
 
+Items 1 and 2 below are implemented in the [run-read boundary](run-read-scaling.md)
+and [context manifest](../architecture/12-context-manifests.md) follow-ups. Item 3
+remains the recommended next refactor.
+
 1. Separate visible/active run retrieval from paginated run history. Drive visible
    derivation lookup from placed output IDs. Extend the fixture to thousands of
    removed outputs and require visible-read query work to stay proportional to

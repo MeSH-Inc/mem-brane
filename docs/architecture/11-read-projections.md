@@ -16,7 +16,8 @@ stopped history and are not a lazy content-loading protocol.
 
 Visible run and derivation queries start from distinct placed Block IDs with a
 fixed outer join loop and indexed producer lookup. Active runs use a partial index.
-Their query work therefore does not depend on removed output history. SSE updates
+Their outer row loops are bounded by visible and active records; indexed lookups
+can still depend on index depth. SSE updates
 also match visible Run IDs so an output reused from another brane keeps streaming.
 
 `GET /branes/:id/runs` returns `{ items, nextCursor }` in descending
