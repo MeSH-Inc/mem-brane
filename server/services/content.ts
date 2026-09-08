@@ -1,3 +1,8 @@
+import {
+  MAX_BRANE_PLACEMENTS,
+  MAX_BLOCK_TEXT_CHARACTERS,
+  fitsArtifactContent,
+} from '../../shared/limits.js';
 import { content as contentSchema } from '../../shared/schemas/index.js';
 import { randomUUID } from 'node:crypto';
 import type { DB } from '../db/index.js';
@@ -34,7 +39,7 @@ export function createPlacement(
   requireOwned(db, 'blocks', actor, blockId);
   if (
     (db.prepare('SELECT count(*) n FROM placements WHERE brane_id=?').get(braneId) as { n: number })
-      .n >= 500
+      .n >= MAX_BRANE_PLACEMENTS
   )
     throw new DomainError(429, 'Brane placement capacity reached');
   const id = uid();
@@ -52,6 +57,8 @@ export function createBlock(
   geometry?: { x: number; y: number; width: number; height: number },
   origin: 'authored' | 'generated' = 'authored',
 ) {
+  if (!fitsArtifactContent(content))
+    throw new DomainError(400, 'Artifact text exceeds the character limit');
   content = contentSchema.parse(content);
   if (kind !== content.format) throw new DomainError(400, 'Block kind must match content format');
   return db.transaction(() => {
@@ -83,6 +90,8 @@ export function createTextBlock(
 }
 export function updateBlockLiveState(db: DB, actor: string, edit: Edit) {
   const block = requireOwned(db, 'blocks', actor, edit.blockId);
+  if (edit.text.length > MAX_BLOCK_TEXT_CHARACTERS)
+    throw new DomainError(400, 'Artifact text exceeds the character limit');
   if (block.origin === 'generated' || !['text', 'webpage'].includes(block.kind))
     throw new DomainError(400, 'This block is not editable');
   const state = db
@@ -93,6 +102,8 @@ export function updateBlockLiveState(db: DB, actor: string, edit: Edit) {
     text: edit.text,
     ...(block.kind === 'webpage' ? { status: 'ready', error: undefined } : {}),
   };
+  if (!fitsArtifactContent(content))
+    throw new DomainError(400, 'Artifact content exceeds the byte limit');
   const result = db
     .prepare(
       'UPDATE block_live_state SET content_json=?, version=version+1, updated_at=? WHERE block_id=? AND version=?',

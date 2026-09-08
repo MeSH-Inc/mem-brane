@@ -1,3 +1,4 @@
+import { MAX_BLOCK_TEXT_CHARACTERS } from '../limits.js';
 import { z } from 'zod';
 export const id = z.string().uuid();
 export const geometry = z.object({
@@ -9,7 +10,7 @@ export const geometry = z.object({
 export const placementEdit = geometry.extend({ version: z.number().int().nonnegative() });
 export const edit = z.object({
   blockId: id,
-  text: z.string().max(100000),
+  text: z.string().max(MAX_BLOCK_TEXT_CHARACTERS),
   version: z.number().int().nonnegative(),
 });
 export const submitRun = z.object({

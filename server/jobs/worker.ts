@@ -1,3 +1,4 @@
+import { fitsArtifactContent } from '../../shared/limits.js';
 import { abortable } from '../app/abort.js';
 import {
   settleCost,
@@ -19,6 +20,7 @@ export interface WorkerOptions {
   checkpointCharacters: number;
   totalMs?: number;
   idleMs?: number;
+  canClaim?: () => boolean;
   onFatal?: (error: unknown) => void;
 }
 export function recoverStale(db: DB, time = now()) {
@@ -94,7 +96,7 @@ export class RunWorker {
     if (this.stopping) return;
     try {
       recoverStale(this.db);
-      while (this.active.size < this.options.concurrency) {
+      while (this.active.size < this.options.concurrency && (this.options.canClaim?.() ?? true)) {
         const run = claimRun(this.db, this.id, this.options.leaseMs);
         if (!run) break;
         const controller = new AbortController();
@@ -216,6 +218,8 @@ export class RunWorker {
           (chunk) => {
             controller.signal.throwIfAborted();
             progress();
+            if (!fitsArtifactContent({ text: text + chunk }))
+              throw new Error('Generated text exceeds the character limit');
             text += chunk;
             publish();
             if (
@@ -228,6 +232,8 @@ export class RunWorker {
         controller.signal,
       );
       controller.signal.throwIfAborted();
+      if (!fitsArtifactContent({ text: result.text }))
+        throw new Error('Generated text exceeds the character limit');
       db.transaction(() => {
         const current = db
           .prepare('SELECT status,lease_owner FROM runs WHERE id=?')

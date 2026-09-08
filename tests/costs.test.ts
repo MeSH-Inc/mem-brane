@@ -26,6 +26,7 @@ const limits = {
   models: ['test-model'],
   maxTokens: 100,
   userConcurrency: 100,
+  queueLimit: 100,
   maxContextCharacters: 100000,
   costPolicy: policy,
 };

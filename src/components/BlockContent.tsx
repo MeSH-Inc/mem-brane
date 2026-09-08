@@ -1,3 +1,4 @@
+import { MAX_BLOCK_TEXT_CHARACTERS } from '../../shared/limits';
 import { useEffect, useRef } from 'react';
 import type { Block } from '../../shared/types/domain';
 import { useInteraction } from '../stores/interaction';
@@ -59,6 +60,7 @@ export function BlockContent({
       {block.content.error && <small className="error">{block.content.error}</small>}
       <textarea
         ref={ref}
+        maxLength={MAX_BLOCK_TEXT_CHARACTERS}
         aria-label={block.kind === 'webpage' ? 'Webpage text' : 'Block text'}
         className="block-editor nodrag nowheel nopan"
         value={draft ?? block.content.text}

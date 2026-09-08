@@ -1,3 +1,4 @@
+import { MAX_BLOCK_TEXT_CHARACTERS } from '../../shared/limits.js';
 import { admitImport } from '../services/capacity.js';
 import { Hono } from 'hono';
 import { createRateLimit } from './rate-limit.js';
@@ -86,6 +87,7 @@ export function createApi(
   };
   app.get('/config', (c) =>
     c.json({
+      imports: { maxBytes: config.MAX_UPLOAD_BYTES },
       models: config.models,
       defaultModel: config.defaultModel,
       maxOutputTokens: config.MAX_OUTPUT_TOKENS,
@@ -318,7 +320,7 @@ export function createApi(
       .object({
         braneId: id,
         url: z.string().url().max(2048),
-        text: z.string().max(100000).optional(),
+        text: z.string().max(MAX_BLOCK_TEXT_CHARACTERS).optional(),
       })
       .parse(await c.req.json());
     canEditBrane(db, c.get('actor'), body.braneId);

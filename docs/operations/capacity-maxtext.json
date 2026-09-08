@@ -1,0 +1,45 @@
+{
+  "time": "2026-09-08T08:42:13.025Z",
+  "environment": {
+    "node": "v24.13.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "totalMemoryGiB": 24,
+    "cpus": 12
+  },
+  "fixture": {
+    "placements": 500,
+    "textCharacters": 100000,
+    "queueLimit": 100,
+    "workerConcurrency": 2,
+    "maxOutputTokens": 128,
+    "readConcurrency": 4,
+    "requests": 40,
+    "overflowRejected": true
+  },
+  "http": {
+    "status": {
+      "200": 40
+    },
+    "p50Ms": 609.4270409999999,
+    "p95Ms": 1049.62475,
+    "maxMs": 1079.970583,
+    "responseBytes": 50184733
+  },
+  "runtime": {
+    "samples": 113,
+    "peakSampledRssBytes": 1700134912,
+    "maxEventLoopMs": 719.85
+  },
+  "workers": {
+    "outcomes": [
+      {
+        "status": "completed",
+        "count": 100
+      }
+    ],
+    "queueWaitP95Ms": 28872,
+    "queueWaitMaxMs": 29872,
+    "durationP95Ms": 1772
+  }
+}

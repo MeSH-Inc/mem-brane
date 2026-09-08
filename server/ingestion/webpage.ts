@@ -1,3 +1,4 @@
+import { fitsArtifactContent } from '../../shared/limits.js';
 import { abortable } from '../app/abort.js';
 import { lookup } from 'node:dns/promises';
 import ipaddr from 'ipaddr.js';
@@ -105,6 +106,8 @@ export async function fetchWebpage(
             .replace(/\s+/g, ' ')
             .trim()
         : body;
+      if (!fitsArtifactContent({ text, url: url.href, status: 'ready', format: 'webpage' }))
+        throw new Error('Imported text exceeds the character limit');
       return { text, url: url.href, status: 'ready' as const };
     } finally {
       await agent.destroy();
@@ -120,6 +123,7 @@ export class IngestionWorker {
     private db: DB,
     private maxBytes: number,
     private onFatal?: (error: unknown) => void,
+    private canClaim: () => boolean = () => true,
   ) {}
   private failed = false;
   get healthy() {
@@ -133,7 +137,7 @@ export class IngestionWorker {
   start() {
     this.db.prepare("UPDATE ingestions SET status='queued' WHERE status='running'").run();
     this.timer = setInterval(() => {
-      if (!this.active) {
+      if (!this.active && this.canClaim()) {
         this.active = this.next()
           .catch((error) => this.fail(error))
           .finally(() => {
