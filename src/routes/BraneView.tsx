@@ -1,3 +1,6 @@
+import { imports } from '../services/imports';
+import { acceptedFiles, pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapters';
+import { ImportTray } from '../components/ImportTray';
 import { TextSaves } from '../services/text-saves';
 import { Submission } from '../services/submission';
 import { canvasTools } from '../canvas/tools';
@@ -116,6 +119,54 @@ export function BraneView({
   const [spawning, setSpawning] = useState<string[]>([]);
   const [retrySpawns, setRetrySpawns] = useState<string[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
+  const pickerTarget = useRef<'canvas' | 'composer'>('canvas');
+  const importRevision = useSyncExternalStore(imports.subscribe, imports.getSnapshot);
+  const importTasks = imports.list(braneId);
+  const pendingAttachments = importTasks.some(
+    (task) =>
+      task.intent.target === 'composer' &&
+      !(task.status === 'ready' && task.delivered) &&
+      task.status !== 'rejected',
+  );
+  const canvasInsertion = useRef<() => { x: number; y: number }>(() => ({ x: 100, y: 100 }));
+  const acceptFiles = useCallback(
+    (files: File[], target: 'canvas' | 'composer', point?: { x: number; y: number }) => {
+      const at = { ...(point ?? canvasInsertion.current()) };
+      if (!point) {
+        const occupied = [
+          ...(stateRef.current?.placements ?? []),
+          ...imports
+            .list(braneId)
+            .filter((task) => task.status !== 'rejected')
+            .map((task) => task.intent.geometry),
+        ];
+        const width = Math.min(3, files.length) * 350;
+        const height = Math.ceil(files.length / 3) * 330;
+        for (
+          let attempt = 0;
+          attempt < 500 &&
+          occupied.some(
+            (g) =>
+              at.x < g.x + g.width + 20 &&
+              at.x + width > g.x &&
+              at.y < g.y + g.height + 20 &&
+              at.y + height > g.y,
+          );
+          attempt++
+        )
+          at.y += 330;
+      }
+      void imports
+        .enqueue(files, { braneId, target, geometry: { ...at, width: 320, height: 300 } })
+        .catch((error) => setError(error.message));
+    },
+    [braneId],
+  );
+  const attachFiles = useCallback(
+    (files: File[], point?: { x: number; y: number }) => acceptFiles(files, 'canvas', point),
+    [acceptFiles],
+  );
+
   const refreshGeneration = useRef(0);
   const refresh = useCallback(async () => {
     const generation = ++refreshGeneration.current;
@@ -135,6 +186,7 @@ export function BraneView({
         setModels(c.models);
         setBudget(c.budget);
         setVision(c.modelCapabilities);
+        imports.maxBytes = c.imports?.maxBytes ?? imports.maxBytes;
         setModel(c.defaultModel);
       })
       .catch((e) => setError(e.message));
@@ -143,6 +195,28 @@ export function BraneView({
     setError('');
     setNotice('');
   }, [braneId, refresh]);
+  useEffect(() => {
+    let active = true;
+    const ready = imports
+      .list(braneId)
+      .filter((task) => task.status === 'ready' && !task.delivered);
+    if (ready.length)
+      void refresh()
+        .then(() => {
+          if (!active) return;
+          for (const task of ready) {
+            if (task.intent.target === 'composer' && task.result)
+              ui.addReferences([task.result.id]);
+            void imports.delivered(task.id);
+          }
+        })
+        .catch((error) => {
+          if (active) setError(error.message);
+        });
+    return () => {
+      active = false;
+    };
+  }, [braneId, importRevision, refresh]);
   useEffect(() => {
     let active = true;
     setEstimate(undefined);
@@ -415,7 +489,7 @@ export function BraneView({
     [braneId, model, refresh, mobile, focusBlock],
   );
   async function run() {
-    if (busy) return;
+    if (busy || pendingAttachments) return;
     setBusy(true);
     setError('');
     try {
@@ -572,7 +646,12 @@ export function BraneView({
         />
       )}
       <div className="workbench">
-        <div className="workspace">
+        <div
+          className="workspace"
+          onPaste={(event) => pasteFiles(event, attachFiles)}
+          onDragOver={allowFileDrop}
+          onDrop={(event) => dropFiles(event, attachFiles)}
+        >
           <div className="tools">
             <div className="canvas-tools" role="group" aria-label="Canvas tools">
               {canvasTools.map(({ id, label }) => (
@@ -588,7 +667,14 @@ export function BraneView({
             </div>
             <span className="divider" />
             <button onClick={() => void create()}>＋ Text</button>
-            <button onClick={() => fileInput.current?.click()}>▧ Image</button>
+            <button
+              onClick={() => {
+                pickerTarget.current = 'canvas';
+                fileInput.current?.click();
+              }}
+            >
+              ▧ Image
+            </button>
             <button onClick={() => setWebOpen(!webOpen)}>↗ Webpage</button>
             {selectedBlocks.length > 0 && (
               <button onClick={() => ui.addReferences(selectedBlocks)}>
@@ -598,29 +684,13 @@ export function BraneView({
             <input
               ref={fileInput}
               type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
+              accept={acceptedFiles}
+              multiple
               hidden
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const data = new FormData();
-                data.append('file', file);
-                data.append(
-                  'intent',
-                  JSON.stringify({
-                    key: crypto.randomUUID(),
-                    braneId,
-                    target: 'canvas',
-                    geometry: { x: 100, y: 100, width: 320, height: 300 },
-                  }),
-                );
-                try {
-                  await api('/imports', data);
-                  await refresh();
-                } catch (err) {
-                  setError((err as Error).message);
-                }
-                e.target.value = '';
+              onChange={(event) => {
+                const files = Array.from(event.currentTarget.files ?? []);
+                event.currentTarget.value = '';
+                acceptFiles(files, pickerTarget.current);
               }}
             />
           </div>
@@ -668,6 +738,12 @@ export function BraneView({
                 </p>
               )}
             </div>
+          )}
+          {importTasks.length > 0 && <ImportTray tasks={importTasks} />}
+          {imports.recoveryError && (
+            <p role="alert" className="error">
+              {imports.recoveryError}
+            </p>
           )}
           {focusMode ? (
             <div className="focus-layout">
@@ -743,6 +819,10 @@ export function BraneView({
               }
             >
               <BraneCanvas
+                onImport={attachFiles}
+                onInsertionReady={(getPoint) => {
+                  canvasInsertion.current = getPoint;
+                }}
                 state={state}
                 revealedBlock={revealedBlock}
                 onSpawn={spawn}
@@ -780,7 +860,21 @@ export function BraneView({
                 </span>
               )}
             </div>
-            <div className="prompt-row">
+            <div
+              className="prompt-row"
+              onPaste={(event) => pasteFiles(event, (files) => acceptFiles(files, 'composer'))}
+              onDragOver={allowFileDrop}
+              onDrop={(event) => dropFiles(event, (files) => acceptFiles(files, 'composer'))}
+            >
+              <button
+                aria-label="Attach files to prompt"
+                onClick={() => {
+                  pickerTarget.current = 'composer';
+                  fileInput.current?.click();
+                }}
+              >
+                ＋
+              </button>
               <textarea
                 aria-label="Run prompt"
                 placeholder="Where should this thought go next?"
@@ -795,7 +889,11 @@ export function BraneView({
               />
               <button
                 className="primary run-button"
-                disabled={busy || (submission.state.status !== 'uncertain' && !prompt.trim())}
+                disabled={
+                  busy ||
+                  pendingAttachments ||
+                  (submission.state.status !== 'uncertain' && !prompt.trim())
+                }
                 onClick={() => void run()}
               >
                 {busy
@@ -805,6 +903,9 @@ export function BraneView({
                     : 'Run ↗'}
               </button>
             </div>
+            {pendingAttachments && (
+              <small>Finish or dismiss failed attachments before running.</small>
+            )}
             <div className="composer-meta">
               <label>
                 <span className="model-dot" />

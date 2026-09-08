@@ -1372,3 +1372,55 @@ a {
   background: #777b60;
   border: 0;
 }
+
+.import-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px;
+  max-height: 180px;
+  overflow: auto;
+  background: #f5f4ee;
+}
+.import-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 480px;
+  padding: 8px 12px;
+  border: 1px solid #d8d7cd;
+  border-radius: 10px;
+  background: #fffefa;
+  font-size: 12px;
+}
+.import-item img {
+  width: 56px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+.import-item strong {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-item small {
+  display: block;
+  max-width: 260px;
+  margin-top: 4px;
+}
+.import-item.failed,
+.import-item.uncertain,
+.import-item.rejected {
+  border-color: #b76b55;
+}
+.import-file-icon {
+  font-size: 28px;
+  color: #69735f;
+}
+.canvas-host:focus-visible {
+  outline: 2px solid #69735f;
+  outline-offset: -2px;
+}

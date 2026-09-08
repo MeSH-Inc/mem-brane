@@ -10,6 +10,7 @@ import {
   useNavigate,
 } from '@tanstack/react-router';
 import { z } from 'zod';
+import { imports } from '../services/imports';
 import { api } from '../services/api';
 import { useInteraction } from '../stores/interaction';
 import { BraneView } from '../routes/BraneView';
@@ -120,6 +121,7 @@ function Shell() {
     void api('/auth/get-session')
       .then(async (value) => {
         if (value?.user) await useInteraction.getState().initialize(value.user.id);
+        await imports.activate(value?.user?.id);
         setSession(value);
         setError('');
       })
@@ -226,6 +228,7 @@ function Shell() {
             title="Sign out"
             onClick={async () => {
               await api('/auth/sign-out', {});
+              await imports.activate(undefined);
               setSession(null);
             }}
           >

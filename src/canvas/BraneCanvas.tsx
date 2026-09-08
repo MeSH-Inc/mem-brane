@@ -1,3 +1,4 @@
+import { pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapters';
 import { toolPolicy } from './toolPolicy';
 import { useCanvasGesture } from './useCanvasGesture';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -93,6 +94,8 @@ function Card({ id, data, selected }: NodeProps<CardNode>) {
 }
 const nodeTypes = { card: Card };
 interface Props {
+  onImport?: (files: File[], point?: { x: number; y: number }) => void;
+  onInsertionReady?: (getPoint: () => { x: number; y: number }) => void;
   state: BraneState;
   newBlock?: string;
   revealedBlock?: string;
@@ -128,6 +131,19 @@ function Inner(props: Props) {
     props.onCreate,
     resetMarquee,
   );
+  const host = useRef<HTMLDivElement>(null);
+  const insertion = useCallback(() => {
+    const bounds = host.current?.getBoundingClientRect();
+    const point = screenToFlowPosition(
+      bounds
+        ? { x: bounds.left + bounds.width / 2 - 160, y: bounds.top + bounds.height / 2 - 150 }
+        : { x: 100, y: 100 },
+    );
+    return point;
+  }, [screenToFlowPosition]);
+  useEffect(() => {
+    props.onInsertionReady?.(insertion);
+  }, [props.onInsertionReady, insertion]);
   const placements = props.state.placements;
   const placementsRef = useRef(placements);
   placementsRef.current = placements;
@@ -273,7 +289,31 @@ function Inner(props: Props) {
     [props.onGeometry],
   );
   return (
-    <div className={`canvas-host tool-${tool}`} {...bindings}>
+    <div
+      ref={host}
+      tabIndex={0}
+      aria-label="Artifact canvas"
+      className={`canvas-host tool-${tool}`}
+      {...bindings}
+      onPaste={(event) =>
+        pasteFiles(event, (files) => {
+          const node = (event.target as HTMLElement).closest('[data-id]');
+          const placement = props.state.placements.find(
+            (p) => p.id === node?.getAttribute('data-id'),
+          );
+          props.onImport?.(
+            files,
+            placement ? { x: placement.x + placement.width + 30, y: placement.y } : insertion(),
+          );
+        })
+      }
+      onDragOver={allowFileDrop}
+      onDrop={(event) =>
+        dropFiles(event, (files) =>
+          props.onImport?.(files, screenToFlowPosition({ x: event.clientX, y: event.clientY })),
+        )
+      }
+    >
       <ReactFlow
         key={flowEpoch}
         nodes={nodes}
