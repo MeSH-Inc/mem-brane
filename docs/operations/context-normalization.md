@@ -72,3 +72,7 @@ in [data efficiency](data-efficiency.md):
 3. Replace full import-result JSON with compact creation receipts. Verify uncertain
    retries acknowledge the same block and placement without restoring old geometry.
    Add binary/PDF fixtures before claiming storage or memory improvements.
+
+The asset/representation round above is now implemented. See
+[asset normalization results](asset-normalization.md) for commits, binary/PDF
+measurements, verification, migration limits and the next recommended round.

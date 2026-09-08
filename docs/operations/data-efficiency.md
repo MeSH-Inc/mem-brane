@@ -114,3 +114,7 @@ subsequently moved geometry. Add tests for repeated bytes under different keys,
 cross-owner isolation, crash recovery, changed extraction versions, exact frozen
 context, backup restoration and quota reconciliation. Only then define safe
 reclamation from live content, revisions and pending operations as retention roots.
+
+Implemented in the [asset normalization round](asset-normalization.md). That report
+records the concrete schema, measured binary/PDF payloads and remaining extraction
+policy, read-projection and legacy-consolidation work.

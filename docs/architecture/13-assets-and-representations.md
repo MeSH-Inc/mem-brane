@@ -31,3 +31,11 @@ representation identity against its payload, foreign keys, ownership and format.
 Migrations preserve revision identities and provider content. They abort rather
 than guess if legacy hashes are missing, conflicting, or cannot satisfy canonical
 owner/digest uniqueness. No object deletion is attempted during SQL migration.
+
+Import completion stores a block foreign key and the original placement identity.
+The placement ID is historical, so it survives placement removal without a foreign
+key or a geometry snapshot. Completed receipts are immutable. Both first delivery
+and retry return `{ blockId, placementId, braneId }`; the UI refreshes authoritative
+workspace state. Reconciliation never recreates a removed placement or applies an
+old position. Request hashes still reject reuse of an import key with different
+bytes, filenames or placement intent.
