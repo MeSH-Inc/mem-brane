@@ -19,6 +19,7 @@ if (!db.prepare('SELECT id FROM branes WHERE owner_id=?').get(user.id)) {
     user.id,
     'text',
     {
+      format: 'text',
       text: 'What happens when an idea has room to grow?\n\nDrag on empty space to make a text block. Write something, then choose Use as context. Your next run will remember exactly what you submitted.',
     },
     brane.id,

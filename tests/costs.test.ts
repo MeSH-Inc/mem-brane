@@ -124,7 +124,15 @@ it('vision capability is enforced before queueing any paid work', async () => {
     db,
     actor,
     'image',
-    { text: 'image', assetId: uid(), assetHash: 'abc', mimeType: 'image/png' },
+    {
+      format: 'image',
+      filename: 'image',
+      representation: 'original-image-v1',
+      text: 'image',
+      assetId: uid(),
+      assetHash: 'a'.repeat(64),
+      mimeType: 'image/png',
+    },
     braneId,
   );
   expect(() =>

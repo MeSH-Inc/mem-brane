@@ -12,30 +12,32 @@ function deferred<T>() {
 }
 const state = (version: number, text: string): BraneState => ({
   brane: { id: 'b', title: '', created_at: 0, updated_at: 0 },
-  blocks: [{ id: 'a', origin: 'authored', kind: 'text', version, content: { text } }],
+  blocks: [
+    { id: 'a', origin: 'authored', kind: 'text', version, content: { format: 'text', text } },
+  ],
   placements: [],
   runs: [],
   derivations: [],
 });
 it('keeps acknowledged text when a pre-save GET arrives late', async () => {
-  const write = deferred<{ version: number; content: { text: string } }>();
+  const write = deferred<{ version: number; content: { format: 'text'; text: string } }>();
   const saves = new TextSaves(() => write.promise);
   saves.reconcile(state(0, 'old'));
   const pending = saves.save({ blockId: 'a', version: 0, text: 'saved' });
-  write.resolve({ version: 1, content: { text: 'saved' } });
+  write.resolve({ version: 1, content: { format: 'text', text: 'saved' } });
   await pending;
   expect(saves.reconcile(state(0, 'old')).blocks[0]).toMatchObject({
     version: 1,
-    content: { text: 'saved' },
+    content: { format: 'text', text: 'saved' },
   });
   saves.reconcile(state(2, 'remote'));
-  saves.acknowledge('a', { version: 1, content: { text: 'saved' } });
+  saves.acknowledge('a', { version: 1, content: { format: 'text', text: 'saved' } });
   expect(saves.reconcile(state(0, 'old')).blocks[0].content.text).toBe('remote');
 });
 it('serializes text writes and snapshots, and resumes after a rejected operation', async () => {
   const gate = deferred<void>();
   const order: string[] = [];
-  const saves = new TextSaves(async () => ({ version: 1, content: { text: '' } }));
+  const saves = new TextSaves(async () => ({ version: 1, content: { format: 'text', text: '' } }));
   const first = saves.serialize(async () => {
     await gate.promise;
     order.push('save');

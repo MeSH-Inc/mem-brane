@@ -242,7 +242,7 @@ export class RunWorker {
         db.prepare('INSERT INTO block_revisions VALUES (?,?,?,?)').run(
           revisionId,
           run.output_block_id,
-          JSON.stringify({ text }),
+          JSON.stringify({ format: 'text', text }),
           now(),
         );
         const inputs = readInputs(db, run.id);

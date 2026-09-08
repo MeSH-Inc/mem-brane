@@ -8,15 +8,42 @@ export type RunStatus =
   | 'cancel_requested'
   | 'cancelled'
   | 'interrupted';
-export interface Content {
+export interface TextContent {
+  format: 'text';
+  text: string;
+  url?: never;
+  assetId?: never;
+  assetHash?: never;
+  mimeType?: never;
+  status?: never;
+  error?: never;
+}
+export interface WebpageContent {
+  format: 'webpage';
   text: string;
   url?: string;
-  assetId?: string;
-  assetHash?: string;
-  mimeType?: string;
-  status?: 'pending' | 'ready' | 'failed';
+  status: 'pending' | 'ready' | 'failed';
   error?: string;
+  assetId?: never;
+  assetHash?: never;
+  mimeType?: never;
 }
+export interface ImageContent {
+  format: 'image';
+  text: string;
+  filename: string;
+  assetId: string;
+  assetHash: string;
+  mimeType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+  width?: number;
+  height?: number;
+  frames?: number;
+  representation: 'original-image-v1';
+  url?: never;
+  status?: never;
+  error?: never;
+}
+export type Content = TextContent | WebpageContent | ImageContent;
 export interface Brane {
   id: string;
   title: string;

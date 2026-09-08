@@ -66,15 +66,30 @@ it('runs real auth, uploads, SSE and worker shutdown against an isolated server'
       })
     ).json();
     const form = new FormData();
-    form.set('braneId', brane.id);
+    form.set(
+      'intent',
+      JSON.stringify({
+        key: crypto.randomUUID(),
+        braneId: brane.id,
+        target: 'canvas',
+        geometry: { x: 10, y: 20, width: 320, height: 300 },
+      }),
+    );
     form.set(
       'file',
-      new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0])]),
+      new Blob([
+        await (
+          await import('sharp')
+        )
+          .default({ create: { width: 2, height: 3, channels: 3, background: 'red' } })
+          .png()
+          .toBuffer(),
+      ]),
       'test.png',
     );
     expect(
       (
-        await fetch(`${origin}/api/assets`, {
+        await fetch(`${origin}/api/imports`, {
           method: 'POST',
           headers: { cookie, origin },
           body: form,

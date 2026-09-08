@@ -40,6 +40,7 @@ it('limits imports by actor and globally before admitting more work', () => {
   const { db, actor } = fixture();
   try {
     const block = createBlock(db, actor, 'webpage', {
+      format: 'webpage',
       text: '',
       url: 'https://example.com',
       status: 'pending',
@@ -78,6 +79,10 @@ it('restores an online backup with image bytes and detects missing or corrupted 
       actor,
       'image',
       {
+        format: 'image',
+        filename: 'image',
+        representation: 'original-image-v1',
+        mimeType: 'image/png',
         text: 'image',
         assetId: asset,
         assetHash: createHash('sha256').update(bytes).digest('hex'),

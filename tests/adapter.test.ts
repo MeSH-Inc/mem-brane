@@ -49,7 +49,15 @@ it('AI SDK sends exact frozen text and image bytes to a local provider, then rec
     label: 'Reference 1',
     role: 'user',
     revision_id: uid(),
-    content: { text: 'Frozen caption', assetId: asset, assetHash: hash, mimeType: 'image/png' },
+    content: {
+      format: 'image',
+      filename: 'image',
+      representation: 'original-image-v1',
+      text: 'Frozen caption',
+      assetId: asset,
+      assetHash: hash,
+      mimeType: 'image/png',
+    },
   };
   const store = {
     get: async () => bytes,
@@ -199,7 +207,7 @@ it('production Responses protocol streams locally and never retries provider fai
           label: 'Prompt',
           role: 'user' as const,
           revision_id: uid(),
-          content: { text: 'Local test' },
+          content: { format: 'text' as const, text: 'Local test' },
         },
       ],
       signal: AbortSignal.timeout(3000),

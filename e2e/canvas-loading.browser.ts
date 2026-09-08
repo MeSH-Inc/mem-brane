@@ -7,7 +7,13 @@ for (const mode of ['explicit Focus', 'mobile default'] as const) {
     const state: BraneState = {
       brane: { id: 'b', title: 'Deferred canvas', created_at: 0, updated_at: 0 },
       blocks: [
-        { id: 'a', kind: 'text', origin: 'authored', version: 0, content: { text: 'Focus first' } },
+        {
+          id: 'a',
+          kind: 'text',
+          origin: 'authored',
+          version: 0,
+          content: { format: 'text', text: 'Focus first' },
+        },
       ],
       placements: [
         {

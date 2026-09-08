@@ -42,8 +42,20 @@ const noop = () => {};
 const state: BraneState = {
   brane: { id: 'b', title: 'test', created_at: 0, updated_at: 0 },
   blocks: [
-    { id: 'a', kind: 'text', origin: 'authored', content: { text: 'a' }, version: 0 },
-    { id: 'b', kind: 'text', origin: 'authored', content: { text: 'b' }, version: 0 },
+    {
+      id: 'a',
+      kind: 'text',
+      origin: 'authored',
+      content: { format: 'text', text: 'a' },
+      version: 0,
+    },
+    {
+      id: 'b',
+      kind: 'text',
+      origin: 'authored',
+      content: { format: 'text', text: 'b' },
+      version: 0,
+    },
   ],
   placements: ['a', 'b'].map((id, i) => ({
     id: 'p' + id,
@@ -157,7 +169,10 @@ it('preserves in-progress resize through content updates and commits once', () =
   render(
     {
       ...state,
-      blocks: state.blocks.map((b) => ({ ...b, content: { text: 'updated during resize' } })),
+      blocks: state.blocks.map((b) => ({
+        ...b,
+        content: { format: 'text', text: 'updated during resize' },
+      })),
     },
     save,
   );

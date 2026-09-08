@@ -56,7 +56,7 @@ it('exposes authenticated Spawn, frozen inspection, durable links, and idempoten
     const inspection = await (await app.request(`/api/runs/${run.id}`, { headers })).json();
     expect(inspection.inputs[0]).toMatchObject({
       kind: 'source',
-      content: { text: 'Unsaved API source' },
+      content: { format: 'text', text: 'Unsaved API source' },
     });
     expect(inspection.cost).toBeTruthy();
     const state = await (await app.request(`/api/branes/${brane.id}`, { headers })).json();

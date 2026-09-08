@@ -119,7 +119,7 @@ export function submitRun(
         revisionId: r.id,
       });
     }
-    const prompt = createBlock(db, actor, 'text', { text: input.prompt });
+    const prompt = createBlock(db, actor, 'text', { format: 'text', text: input.prompt });
     frozen.push({
       kind: 'prompt',
       label: 'Prompt',
@@ -141,7 +141,7 @@ export function submitRun(
       db,
       actor,
       'text',
-      { text: '' },
+      { format: 'text', text: '' },
       input.braneId,
       anchor
         ? childGeometry(db, anchor)
@@ -234,7 +234,7 @@ export function retryRun(db: DB, actor: string, id: string, key: string, limits:
         db,
         actor,
         'text',
-        { text: '' },
+        { format: 'text', text: '' },
         old.brane_id,
         anchor
           ? childGeometry(db, anchor)

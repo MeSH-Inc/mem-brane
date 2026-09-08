@@ -24,7 +24,7 @@ it('keyboard input stays in the editor instead of reaching canvas shortcuts', ()
             kind: 'text',
             origin: 'authored',
             version: 0,
-            content: { text: 'Editable' },
+            content: { format: 'text', text: 'Editable' },
           }}
           onEdit={() => {}}
         />

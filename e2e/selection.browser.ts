@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
       kind: 'text',
       origin: 'authored',
       version: 0,
-      content: { text: id },
+      content: { format: 'text', text: id },
     })),
     placements: [
       { id: 'pa', block_id: 'a', x: 100, y: 100 },

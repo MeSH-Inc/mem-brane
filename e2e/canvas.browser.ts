@@ -11,8 +11,20 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
   const state: BraneState = {
     brane: { id: 'b', title: 'Canvas regression', created_at: 0, updated_at: 0 },
     blocks: [
-      { id: 'a', kind: 'text', origin: 'authored', version: 0, content: { text: 'First thought' } },
-      { id: 'c', kind: 'text', origin: 'generated', version: 0, content: { text: '' } },
+      {
+        id: 'a',
+        kind: 'text',
+        origin: 'authored',
+        version: 0,
+        content: { format: 'text', text: 'First thought' },
+      },
+      {
+        id: 'c',
+        kind: 'text',
+        origin: 'generated',
+        version: 0,
+        content: { format: 'text', text: '' },
+      },
     ],
     placements: ['a', 'c'].map((id, i) => ({
       id: 'p' + id,

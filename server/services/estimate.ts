@@ -56,7 +56,7 @@ export function estimateRun(
     if (edit) content.text = edit.text;
     add(content, 'reference', `Reference ${i + 1}`);
   }
-  add({ text: input.prompt }, 'prompt', 'Prompt');
+  add({ format: 'text', text: input.prompt }, 'prompt', 'Prompt');
   const price = priceFor(input.model, policy),
     tokens = estimatedInputTokens(inputs, price),
     reservedMicrousd = costMicro(

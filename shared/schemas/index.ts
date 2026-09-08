@@ -42,3 +42,39 @@ export const spawnArtifact = z
     (input) => input.edits.every((edit) => input.sourceBlockIds.includes(edit.blockId)),
     'Only source edits may be submitted',
   );
+
+export const importIntent = z
+  .object({
+    key: id,
+    braneId: id,
+    geometry,
+    target: z.enum(['canvas', 'composer']),
+  })
+  .strict();
+
+export const content = z.discriminatedUnion('format', [
+  z.object({ format: z.literal('text'), text: z.string() }).strict(),
+  z
+    .object({
+      format: z.literal('webpage'),
+      text: z.string(),
+      url: z.string().optional(),
+      status: z.enum(['pending', 'ready', 'failed']),
+      error: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      format: z.literal('image'),
+      text: z.string(),
+      filename: z.string(),
+      assetId: id,
+      assetHash: z.string().regex(/^[a-f0-9]{64}$/),
+      mimeType: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']),
+      width: z.number().int().positive().optional(),
+      height: z.number().int().positive().optional(),
+      frames: z.number().int().positive().optional(),
+      representation: z.literal('original-image-v1'),
+    })
+    .strict(),
+]);

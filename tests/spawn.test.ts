@@ -149,7 +149,13 @@ it('validates ownership, anchor membership, ready sources and source-only edits'
   const elsewhere = createBrane(db, actor).id;
   const foreignPlacement = createPlacement(db, actor, elsewhere, block);
   expect(() => spawn(request({ anchorPlacementId: foreignPlacement.id }))).toThrow('anchor');
-  const page = createBlock(db, actor, 'webpage', { text: '', status: 'pending' }, brane);
+  const page = createBlock(
+    db,
+    actor,
+    'webpage',
+    { format: 'webpage', text: '', status: 'pending' },
+    brane,
+  );
   expect(() =>
     spawn(request({ sourceBlockIds: [page.id], anchorPlacementId: page.placement.id })),
   ).toThrow('not ready');

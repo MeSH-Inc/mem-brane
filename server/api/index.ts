@@ -1,18 +1,17 @@
-import { reserveUpload, admitImport } from '../services/capacity.js';
+import { admitImport } from '../services/capacity.js';
 import { Hono } from 'hono';
 import { createRateLimit } from './rate-limit.js';
 import { streamSSE } from 'hono/streaming';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import type { DB } from '../db/index.js';
-import { createHash } from 'node:crypto';
+import { createImports } from '../services/imports.js';
 import { estimateRun } from '../services/estimate.js';
 import { budgetState } from '../services/costs.js';
 import { config, costPolicy } from '../app/config.js';
 import type { createAuth } from '../auth/index.js';
 import type { EventHub } from '../sse/hub.js';
 import type { AssetStore } from '../storage/assets.js';
-import { imageMime } from '../storage/assets.js';
 import { canEditBrane, DomainError, requireOwned } from '../domain/access.js';
 import {
   createBrane,
@@ -52,6 +51,7 @@ export function createApi(
 ) {
   const app = new Hono<{ Variables: { actor: string } }>();
   const allowRequest = createRateLimit();
+  const imports = createImports(db, store);
   app.use('*', async (c, next) => {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
       const origin = c.req.header('origin');
@@ -293,44 +293,19 @@ export function createApi(
       }
     }),
   );
-  app.post('/assets', async (c) => {
+  app.post('/imports', async (c) => {
     const body = await c.req.parseBody();
-    const file = body.file;
-    const braneId = id.parse(body.braneId);
-    canEditBrane(db, c.get('actor'), braneId);
-    if (!(file instanceof File) || file.size > config.MAX_UPLOAD_BYTES)
-      throw new DomainError(400, 'Choose an image within the upload limit');
-    const bytes = new Uint8Array(await file.arrayBuffer()),
-      mime = imageMime(bytes);
-    if (!mime) throw new DomainError(400, 'Only PNG, JPEG, GIF and WebP images are supported');
-    const assetId = uid();
-    const assetHash = createHash('sha256').update(bytes).digest('hex');
-    reserveUpload(db, c.get('actor'), assetId, bytes.length, {
-      userBytes: config.USER_STORAGE_BYTES,
-      totalBytes: config.TOTAL_STORAGE_BYTES,
-    });
-    await store.put(assetId, bytes, mime);
-    // Metadata commit consumes the intent; failures retain it for offline reconciliation.
-    const block = db.transaction(() => {
-      db.prepare('DELETE FROM upload_intents WHERE id=?').run(assetId);
-      db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?)').run(
-        assetId,
-        c.get('actor'),
-        assetId,
-        mime,
-        bytes.length,
-        now(),
-      );
-      return createBlock(
-        db,
-        c.get('actor'),
-        'image',
-        { text: file.name.slice(0, 200), assetId, assetHash, mimeType: mime },
-        braneId,
-      );
-    })();
-    return c.json(block, 201);
+    let intent: unknown;
+    try {
+      intent = JSON.parse(String(body.intent));
+    } catch {
+      throw new DomainError(400, 'Invalid import intent');
+    }
+    return c.json(await imports.import(c.get('actor'), intent, body.file as File), 201);
   });
+  app.get('/imports/:key', (c) =>
+    c.json(imports.status(c.get('actor'), id.parse(c.req.param('key')))),
+  );
   app.get('/assets/:id', async (c) => {
     const asset = requireOwned(db, 'assets', c.get('actor'), id.parse(c.req.param('id')));
     c.header('Content-Type', asset.mime);
@@ -354,7 +329,12 @@ export function createApi(
         db,
         c.get('actor'),
         'webpage',
-        { url: body.url, text: body.text ?? '', status: body.text ? 'ready' : 'pending' },
+        {
+          format: 'webpage',
+          url: body.url,
+          text: body.text ?? '',
+          status: body.text ? 'ready' : 'pending',
+        },
         body.braneId,
       );
       if (!body.text)

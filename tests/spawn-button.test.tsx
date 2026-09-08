@@ -23,7 +23,7 @@ it('only permits ready sources, blocks duplicate clicks in flight, and allows re
     id: 'source',
     kind: 'text',
     origin: 'authored',
-    content: { text: 'Idea' },
+    content: { format: 'text', text: 'Idea' },
     version: 0,
   };
   render(source);
@@ -36,7 +36,11 @@ it('only permits ready sources, blocks duplicate clicks in flight, and allows re
   expect(host.querySelector('button')!.disabled).toBe(true);
   render({ ...source, origin: 'generated', messageId: 'finalized' });
   expect(host.querySelector('button')!.disabled).toBe(false);
-  render({ ...source, kind: 'webpage', content: { text: '', status: 'pending' } });
+  render({
+    ...source,
+    kind: 'webpage',
+    content: { format: 'webpage', text: '', status: 'pending' },
+  });
   expect(host.querySelector('button')!.disabled).toBe(true);
   render(source, false, true);
   expect(host.querySelector('button')!.textContent).toBe('Retry Spawn');

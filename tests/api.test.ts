@@ -139,14 +139,24 @@ it('rate-limit hook bounds bursts and expires its window', async () => {
 
 it('uploads an image, authorizes its bytes and reconstructs its brane placement', async () => {
   const brane = createBrane(db, actor);
-  const bytes = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jf1sAAAAASUVORK5CYII=',
-    'base64',
-  );
+  const bytes = await (
+    await import('sharp')
+  )
+    .default({ create: { width: 2, height: 3, channels: 3, background: 'red' } })
+    .png()
+    .toBuffer();
   const body = new FormData();
-  body.append('braneId', brane.id);
+  body.append(
+    'intent',
+    JSON.stringify({
+      key: uid(),
+      braneId: brane.id,
+      target: 'canvas',
+      geometry: { x: 10, y: 20, width: 320, height: 300 },
+    }),
+  );
   body.append('file', new File([bytes], 'pixel.png', { type: 'image/png' }));
-  const response = await app.request('/api/assets', {
+  const response = await app.request('/api/imports', {
     method: 'POST',
     headers: { cookie, origin: 'http://localhost:5173' },
     body,
@@ -258,12 +268,30 @@ it('retains upload recovery intent when bytes succeed but metadata commit fails'
     "CREATE TRIGGER fail_asset_insert BEFORE INSERT ON assets BEGIN SELECT RAISE(ABORT, 'fixture storage metadata failure'); END",
   );
   const form = new FormData();
-  form.set('braneId', brane.id);
+  form.set(
+    'intent',
+    JSON.stringify({
+      key: uid(),
+      braneId: brane.id,
+      target: 'canvas',
+      geometry: { x: 10, y: 20, width: 320, height: 300 },
+    }),
+  );
   form.set(
     'file',
-    new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0])], 'test.png'),
+    new File(
+      [
+        await (
+          await import('sharp')
+        )
+          .default({ create: { width: 2, height: 3, channels: 3, background: 'red' } })
+          .png()
+          .toBuffer(),
+      ],
+      'test.png',
+    ),
   );
-  const response = await app.request('/api/assets', {
+  const response = await app.request('/api/imports', {
     method: 'POST',
     headers: { cookie, origin: 'http://localhost:5173' },
     body: form,
@@ -271,6 +299,6 @@ it('retains upload recovery intent when bytes succeed but metadata commit fails'
   expect(response.status).toBe(500);
   expect((db.prepare('SELECT count(*) n FROM assets').get() as any).n).toBe(0);
   const intent = db.prepare('SELECT * FROM upload_intents').get() as any;
-  expect(intent.size).toBe(12);
+  expect(intent.size).toBeGreaterThan(12);
   expect(stored.has(intent.id)).toBe(true);
 });

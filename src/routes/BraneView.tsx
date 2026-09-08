@@ -605,9 +605,17 @@ export function BraneView({
                 if (!file) return;
                 const data = new FormData();
                 data.append('file', file);
-                data.append('braneId', braneId);
+                data.append(
+                  'intent',
+                  JSON.stringify({
+                    key: crypto.randomUUID(),
+                    braneId,
+                    target: 'canvas',
+                    geometry: { x: 100, y: 100, width: 320, height: 300 },
+                  }),
+                );
                 try {
-                  await api('/assets', data);
+                  await api('/imports', data);
                   await refresh();
                 } catch (err) {
                   setError((err as Error).message);

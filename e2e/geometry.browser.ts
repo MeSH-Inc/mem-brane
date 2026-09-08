@@ -9,7 +9,13 @@ test('delayed saves retain newer moves, conflicts pause, and explicit retry uses
   const state: BraneState = {
     brane: { id: 'b', title: 'Geometry concurrency', created_at: 0, updated_at: 0 },
     blocks: [
-      { id: 'a', kind: 'text', origin: 'authored', version: 0, content: { text: 'Move me' } },
+      {
+        id: 'a',
+        kind: 'text',
+        origin: 'authored',
+        version: 0,
+        content: { format: 'text', text: 'Move me' },
+      },
     ],
     placements: [
       {

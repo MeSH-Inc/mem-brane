@@ -89,13 +89,3 @@ export function assetStore(): AssetStore {
   }
   return new FileAssetStore(config.ASSET_DIRECTORY);
 }
-export function imageMime(bytes: Uint8Array): string | null {
-  if (bytes.length < 12) return null;
-  if (Buffer.from(bytes.subarray(0, 8)).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
-    return 'image/png';
-  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return 'image/jpeg';
-  const head = Buffer.from(bytes.subarray(0, 12)).toString('ascii');
-  if (head.startsWith('GIF87a') || head.startsWith('GIF89a')) return 'image/gif';
-  if (head.startsWith('RIFF') && head.endsWith('WEBP')) return 'image/webp';
-  return null;
-}

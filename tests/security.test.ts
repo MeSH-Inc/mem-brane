@@ -5,7 +5,6 @@ import {
   validateDestination,
   fetchWebpage,
 } from '../server/ingestion/webpage';
-import { imageMime } from '../server/storage/assets';
 describe('webpage ingress', () => {
   it.each([
     '127.0.0.1',
@@ -65,11 +64,6 @@ describe('webpage ingress', () => {
     expect(await boundedBody(chunks(), 16)).toHaveLength(16);
   });
 });
-it('rejects executable/non-image uploads and recognizes image bytes', () => {
-  expect(imageMime(Buffer.from('<svg onload="alert(1)"></svg>'))).toBeNull();
-  expect(imageMime(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]))).toBe('image/png');
-});
-
 it('actual fetch loop rejects private redirects before making a second request', async () => {
   const fetch = vi.fn(
     async () =>

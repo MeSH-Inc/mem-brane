@@ -1,3 +1,4 @@
+import { content as contentSchema } from '../../shared/schemas/index.js';
 import { randomUUID } from 'node:crypto';
 import type { DB } from '../db/index.js';
 import type {
@@ -51,6 +52,8 @@ export function createBlock(
   geometry?: { x: number; y: number; width: number; height: number },
   origin: 'authored' | 'generated' = 'authored',
 ) {
+  content = contentSchema.parse(content);
+  if (kind !== content.format) throw new DomainError(400, 'Block kind must match content format');
   return db.transaction(() => {
     const id = uid();
     db.prepare('INSERT INTO blocks (id,owner_id,kind,created_at,origin) VALUES (?,?,?,?,?)').run(
@@ -76,7 +79,7 @@ export function createTextBlock(
   braneId: string,
   geometry?: { x: number; y: number; width: number; height: number },
 ) {
-  return createBlock(db, actor, 'text', { text: '' }, braneId, geometry);
+  return createBlock(db, actor, 'text', { format: 'text', text: '' }, braneId, geometry);
 }
 export function updateBlockLiveState(db: DB, actor: string, edit: Edit) {
   const block = requireOwned(db, 'blocks', actor, edit.blockId);
@@ -186,7 +189,7 @@ export function readBrane(db: DB, actor: string, id: string) {
       kind: b.kind,
       origin: b.origin,
       version: b.version ?? 0,
-      content: JSON.parse(b.content_json ?? b.final_content ?? '{"text":""}'),
+      content: JSON.parse(b.content_json ?? b.final_content ?? '{"format":"text","text":""}'),
       messageId: b.message_id,
     };
   });
