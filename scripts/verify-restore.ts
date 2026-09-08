@@ -8,7 +8,7 @@ if (!database || !assets)
   );
 const db = new Database(database, { readonly: true, fileMustExist: true });
 try {
-  console.log(JSON.stringify(await verifyRestoration(db, new FileAssetStore(assets))));
+  console.log(JSON.stringify(await verifyRestoration(db, new FileAssetStore(assets)), null, 2));
 } finally {
   db.close();
 }

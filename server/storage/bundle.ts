@@ -45,10 +45,10 @@ export async function createBundle(
       });
       files[`assets/${row.storage_key}`] = hash(bytes);
     }
-    const checked = await verifyRestoration(
-      snapshot,
-      new FileAssetStore(join(destination, 'assets')),
-    );
+    const checked = {
+      ...(await verifyRestoration(snapshot, new FileAssetStore(join(destination, 'assets')))),
+      objectCoverage: 'canonical-assets-only' as const,
+    };
     const manifest = { version: 1, createdAt: new Date().toISOString(), files, checked };
     await writeFile(
       join(destination, 'manifest.pending.json'),
@@ -90,7 +90,10 @@ export async function verifyBundle(directory: string) {
       if (!Object.hasOwn(manifest.files, `assets/${row.storage_key}`))
         throw new Error('Asset omitted from backup manifest');
     }
-    return await verifyRestoration(db, new FileAssetStore(join(directory, 'assets')));
+    return {
+      ...(await verifyRestoration(db, new FileAssetStore(join(directory, 'assets')))),
+      objectCoverage: 'canonical-assets-only' as const,
+    };
   } finally {
     db.close();
   }

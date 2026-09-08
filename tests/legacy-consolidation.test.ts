@@ -219,6 +219,10 @@ it('recovers after metadata commit and an unacknowledged object deletion', async
     expect(db.prepare('SELECT state FROM asset_consolidation_journal').get()).toEqual({
       state: 'deleting',
     });
+    expect((await verifyRestoration(db, f.store)).cleanup.requiredBackups[0]).toMatchObject({
+      awaitingDeletion: 0,
+      unacknowledgedDeletion: 1,
+    });
     expect(await cleanupConsolidatedAssets(db, f.store, f.backup)).toEqual({ deleted: 1 });
     expect(await verifyRestoration(db, f.store)).toMatchObject({ assets: 2 });
   } finally {
@@ -266,7 +270,28 @@ it('clears obsolete cleanup reservations after restoring a canonical-only bundle
     db = openDatabase(f.path);
     const bundle = join(f.directory, 'canonical-bundle');
     await createBundle(f.path, f.store, bundle);
-    expect(await verifyBundle(bundle)).toMatchObject({ assets: 2, references: 6 });
+    const verified = await verifyBundle(bundle);
+    expect(verified).toMatchObject({
+      assets: 2,
+      references: 6,
+      objectCoverage: 'canonical-assets-only',
+      cleanup: {
+        objects: 1,
+        reservedBytes: f.bytes.length,
+        requiredBackups: [
+          {
+            objects: 1,
+            reservedBytes: f.bytes.length,
+            awaitingDeletion: 1,
+            unacknowledgedDeletion: 0,
+          },
+        ],
+      },
+    });
+    expect(verified.cleanup.requiredBackups[0].backupFingerprint).toBe(
+      (await verifyLegacyBackup(f.backup)).fingerprint,
+    );
+    expect(verified.cleanup.nextAction).toContain('original legacy backup');
     const restoredPath = join(f.directory, 'canonical-restored.sqlite');
     cpSync(join(bundle, 'db.sqlite'), restoredPath);
     const restored = openDatabase(restoredPath);
@@ -281,6 +306,9 @@ it('clears obsolete cleanup reservations after restoring a canonical-only bundle
       expect(restored.prepare('SELECT state FROM asset_consolidation_journal').get()).toEqual({
         state: 'deleted',
       });
+      expect(
+        (await verifyRestoration(restored, new FileAssetStore(join(bundle, 'assets')))).cleanup,
+      ).toMatchObject({ objects: 0, reservedBytes: 0, requiredBackups: [] });
       // Restored cleanup did not touch the separate source object directory.
       expect(existsSync(join(f.directory, 'objects', f.ids[1]))).toBe(true);
     } finally {

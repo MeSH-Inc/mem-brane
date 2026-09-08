@@ -1,3 +1,4 @@
+import { cleanupLiabilities } from './cleanup-report.js';
 import { policyIdentity } from '../ingestion/policy.js';
 import { decodeContent } from '../services/representations.js';
 import { representationId } from '../domain/canonical.js';
@@ -81,5 +82,10 @@ export async function verifyRestoration(db: DB, store: Pick<AssetStore, 'get'>) 
     references++;
   }
   const pending = (db.prepare('SELECT count(*) n FROM upload_intents').get() as { n: number }).n;
-  return { assets: assets.length, references, pendingUploads: pending };
+  return {
+    assets: assets.length,
+    references,
+    pendingUploads: pending,
+    cleanup: cleanupLiabilities(db),
+  };
 }
