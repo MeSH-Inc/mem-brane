@@ -23,7 +23,8 @@ export function toolPolicy(tool: CanvasTool) {
     hint: {
       write: 'Drag to make a thought · Shift-click to select several · Middle mouse to pan',
       pan: 'Drag to pan · Editors and block actions remain available',
-      select: 'Drag empty canvas to select · Shift-click to toggle · Drag a header to move selection',
+      select:
+        'Drag empty canvas to select · Shift-click to toggle · Drag a header to move selection',
     }[tool],
   };
 }

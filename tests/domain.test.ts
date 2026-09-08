@@ -117,7 +117,13 @@ describe('immutable content boundary', () => {
 describe('placements and explicit context', () => {
   it('moves geometry without touching content or creating revisions', () => {
     const p = (readBrane(db, actor, brane).placements as any[])[0];
-    updatePlacementGeometry(db, actor, p.id, { x: 999, y: -100, width: 400, height: 200 });
+    updatePlacementGeometry(db, actor, p.id, {
+      x: 999,
+      y: -100,
+      width: 400,
+      height: 200,
+      version: p.version,
+    });
     expect((db.prepare('SELECT count(*) n FROM block_revisions').get() as any).n).toBe(0);
     expect(readBrane(db, actor, brane).blocks[0].content.text).toBe('Original thought');
   });

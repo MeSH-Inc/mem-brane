@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { DB } from '../db/index.js';
-import type { BlockKind, Content, Edit, Revision } from '../../shared/types/domain.js';
+import type {
+  BlockKind,
+  Content,
+  Edit,
+  Revision,
+  Placement,
+  Geometry,
+} from '../../shared/types/domain.js';
 import { canEditBrane, canReadBrane, DomainError, requireOwned } from '../domain/access.js';
 export const uid = () => randomUUID();
 export const now = () => Date.now();
@@ -20,17 +27,9 @@ export function createPlacement(
   canEditBrane(db, actor, braneId);
   requireOwned(db, 'blocks', actor, blockId);
   const id = uid();
-  db.prepare('INSERT INTO placements VALUES (?,?,?,?,?,?,?,?,?)').run(
-    id,
-    braneId,
-    blockId,
-    g.x,
-    g.y,
-    g.width,
-    g.height,
-    0,
-    now(),
-  );
+  db.prepare(
+    'INSERT INTO placements (id,brane_id,block_id,x,y,width,height,z_index,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
+  ).run(id, braneId, blockId, g.x, g.y, g.width, g.height, 0, now());
   return db.prepare('SELECT * FROM placements WHERE id=?').get(id) as any;
 }
 export function createBlock(
@@ -126,23 +125,33 @@ export function revisions(db: DB): RevisionService {
     },
   };
 }
+export function getPlacement(db: DB, actor: string, id: string): Placement {
+  const placement = db.prepare('SELECT * FROM placements WHERE id=?').get(id) as
+    Placement | undefined;
+  if (!placement) throw new DomainError(404, 'Placement not found');
+  canReadBrane(db, actor, placement.brane_id);
+  return placement;
+}
 export function updatePlacementGeometry(
   db: DB,
   actor: string,
   id: string,
-  g: { x: number; y: number; width: number; height: number },
-) {
-  const p = db.prepare('SELECT * FROM placements WHERE id=?').get(id) as any;
-  if (!p) throw new DomainError(404, 'Placement not found');
-  canEditBrane(db, actor, p.brane_id);
-  db.prepare('UPDATE placements SET x=?,y=?,width=?,height=?,updated_at=? WHERE id=?').run(
-    g.x,
-    g.y,
-    g.width,
-    g.height,
-    now(),
-    id,
-  );
+  edit: Geometry & { version: number },
+): Placement {
+  const placement = getPlacement(db, actor, id);
+  canEditBrane(db, actor, placement.brane_id);
+  const result = db
+    .prepare(
+      `UPDATE placements SET x=?,y=?,width=?,height=?,
+    updated_at=?,version=version+1 WHERE id=? AND version=? RETURNING *`,
+    )
+    .get(edit.x, edit.y, edit.width, edit.height, now(), id, edit.version) as Placement | undefined;
+  if (!result)
+    throw new DomainError(
+      409,
+      'This placement changed elsewhere. Review your move before retrying.',
+    );
+  return result;
 }
 export function removePlacement(db: DB, actor: string, id: string) {
   const p = db.prepare('SELECT * FROM placements WHERE id=?').get(id) as any;

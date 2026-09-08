@@ -23,6 +23,7 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
       width: 320,
       height: 220,
       z_index: 0,
+      version: 0,
     })),
     derivations: [],
     runs: [
@@ -59,10 +60,10 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
     else if (url.pathname.startsWith('/api/placements/') && route.request().method() === 'PATCH') {
       const geometry = route.request().postDataJSON();
       writes.push(geometry);
-      Object.assign(
-        state.placements.find((p) => p.id === url.pathname.split('/').pop())!,
-        geometry,
-      );
+      const placement = state.placements.find((p) => p.id === url.pathname.split('/').pop())!;
+      expect(geometry.version).toBe(placement.version);
+      Object.assign(placement, geometry, { version: placement.version + 1 });
+      response = placement;
     } else throw new Error(`Unexpected API request: ${route.request().method()} ${url.pathname}`);
     await route.fulfill({ json: response });
   });

@@ -54,6 +54,7 @@ const state: BraneState = {
     width: 320,
     height: 220,
     z_index: 0,
+    version: 0,
   })),
   runs: [],
   derivations: [],
@@ -226,4 +227,11 @@ it('keeps duplicate placements consistent when selection moves between them', ()
   expect(useInteraction.getState().selectedPlacements).toEqual(['pa2']);
   expect(probe.store.getState().nodeLookup.get('pa').selected).toBe(false);
   expect(probe.store.getState().nodeLookup.get('pa2').selected).toBe(true);
+});
+
+it('prunes only the removed placement when another copy of its block remains', () => {
+  render({ ...state, placements: [...state.placements, { ...state.placements[0], id: 'pa2' }] });
+  act(() => useInteraction.getState().setSelectedPlacements(['pa', 'pa2']));
+  render({ ...state, placements: [{ ...state.placements[0], id: 'pa2' }, state.placements[1]] });
+  expect(useInteraction.getState().selectedPlacements).toEqual(['pa2']);
 });

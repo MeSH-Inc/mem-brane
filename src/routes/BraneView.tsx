@@ -1,6 +1,6 @@
 import { canvasTools } from '../canvas/toolPolicy';
 import { selectedBlockIds } from '../canvas/selection';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import type {
   BraneState,
@@ -9,6 +9,8 @@ import type {
   SpawnArtifact,
   Run,
 } from '../../shared/types/domain';
+import { PlacementSaves } from '../services/placement-saves';
+import type { Geometry, Placement } from '../../shared/types/domain';
 import { api, ApiError } from '../services/api';
 import { useInteraction } from '../stores/interaction';
 import { BraneCanvas } from '../canvas/BraneCanvas';
@@ -26,7 +28,27 @@ export function BraneView({
   focus?: string;
   view?: 'canvas' | 'focus';
 }) {
-  const [state, setState] = useState<BraneState>();
+  const [serverState, setState] = useState<BraneState>();
+  const [placementSaves] = useState(
+    () =>
+      new PlacementSaves({
+        write: (id, geometry, version) =>
+          api<Placement>(`/placements/${id}`, { ...geometry, version }, 'PATCH'),
+        read: (id) => api<Placement>(`/placements/${id}`),
+      }),
+  );
+  const geometryRevision = useSyncExternalStore(
+    placementSaves.subscribe,
+    placementSaves.getSnapshot,
+  );
+  const state = useMemo(
+    () =>
+      serverState
+        ? { ...serverState, placements: placementSaves.project(serverState.placements) }
+        : undefined,
+    [serverState, placementSaves, geometryRevision],
+  );
+  const placementFailures = placementSaves.failures();
   const stateRef = useRef(state);
   stateRef.current = state;
   const [error, setError] = useState(''),
@@ -80,14 +102,18 @@ export function BraneView({
   const [spawning, setSpawning] = useState<string[]>([]);
   const [retrySpawns, setRetrySpawns] = useState<string[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
+  const refreshGeneration = useRef(0);
   const refresh = useCallback(async () => {
+    const generation = ++refreshGeneration.current;
     void api('/budget')
       .then(setBudget)
       .catch(() => {});
     const next = await api<BraneState>(`/branes/${braneId}`);
+    if (generation !== refreshGeneration.current) return;
+    placementSaves.observe(next.placements);
     stateRef.current = next;
     setState(next);
-  }, [braneId]);
+  }, [braneId, placementSaves]);
   useEffect(() => {
     void refresh().catch((e) => setError(e.message));
     void api('/config').then((c) => {
@@ -242,7 +268,7 @@ export function BraneView({
   }, [saveBlock]);
   useEffect(() => {
     const before = (e: BeforeUnloadEvent) => {
-      if (Object.keys(useInteraction.getState().drafts).length) {
+      if (Object.keys(useInteraction.getState().drafts).length || placementSaves.hasPending()) {
         e.preventDefault();
       }
     };
@@ -269,19 +295,20 @@ export function BraneView({
     },
     [braneId, refresh, navigate],
   );
-  const geometry = useCallback(
-    async (id: string, g: { x: number; y: number; width: number; height: number }) => {
-      setState((s) =>
-        s ? { ...s, placements: s.placements.map((p) => (p.id === id ? { ...p, ...g } : p)) } : s,
-      );
-      try {
-        await api(`/placements/${id}`, g, 'PATCH');
-      } catch (e) {
-        setError((e as Error).message);
-        await refresh();
-      }
+  const saveGeometry = useCallback(
+    (id: string, geometry: Geometry) => {
+      const placement = stateRef.current?.placements.find((p) => p.id === id);
+      if (!placement) return Promise.reject(new Error('Placement no longer exists.'));
+      return placementSaves.save(placement, geometry);
     },
-    [refresh],
+    [placementSaves],
+  );
+  const geometry = useCallback(
+    (id: string, g: Geometry) => {
+      // The queue exposes failure and explicit recovery controls in the route.
+      void saveGeometry(id, g).catch(() => {});
+    },
+    [saveGeometry],
   );
   const focusBlock = useCallback(
     (id: string) => {
@@ -295,6 +322,7 @@ export function BraneView({
   );
   async function save() {
     try {
+      await placementSaves.flush();
       await flush();
       await api(
         `/branes/${braneId}`,
@@ -520,12 +548,26 @@ export function BraneView({
             </div>
           );
         })}
+      {placementFailures.map((failure) => (
+        <div className="error-banner" role="alert" key={failure.id}>
+          <span>
+            Placement changes are unsaved. {failure.message} Your latest move is still shown.
+          </span>
+          <button disabled={failure.busy} onClick={() => void placementSaves.retry(failure.id)}>
+            Save my latest placement
+          </button>
+          <button disabled={failure.busy} onClick={() => void placementSaves.discard(failure.id)}>
+            Use saved placement
+          </button>
+        </div>
+      ))}
       {managed && state.blocks.find((b) => b.id === managed) && (
         <ArtifactActions
           key={managed}
           block={state.blocks.find((b) => b.id === managed)!}
           placements={state.placements.filter((p) => p.block_id === managed)}
           onSave={() => saveBlock(managed)}
+          onGeometry={saveGeometry}
           onChange={refresh}
           onClose={() => setManaged(undefined)}
         />
@@ -535,8 +577,12 @@ export function BraneView({
           <div className="tools">
             <div className="canvas-tools" role="group" aria-label="Canvas tools">
               {canvasTools.map(({ id, label }) => (
-                <button key={id} className={ui.tool === id ? 'active' : ''}
-                  aria-pressed={ui.tool === id} onClick={() => ui.setTool(id)}>
+                <button
+                  key={id}
+                  className={ui.tool === id ? 'active' : ''}
+                  aria-pressed={ui.tool === id}
+                  onClick={() => ui.setTool(id)}
+                >
                   {label}
                 </button>
               ))}
@@ -767,7 +813,7 @@ export function BraneView({
               )}
               <span>{vision[model]?.vision ? 'Image context supported' : 'Text-only model'}</span>
               <span className="save-notice" role="status">
-                {Object.keys(ui.drafts).length
+                {Object.keys(ui.drafts).length || placementSaves.hasPending()
                   ? 'Unsaved edits'
                   : notice || 'All thoughts have room here'}
               </span>

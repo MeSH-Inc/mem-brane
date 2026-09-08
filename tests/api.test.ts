@@ -207,3 +207,47 @@ it('explicit snapshots and placement reuse/removal remain domain operations', as
     (await app.request(`/api/blocks/${block.id}/revisions`, { headers: headers() })).status,
   ).toBe(200);
 });
+
+it('versions geometry and rejects stale or unversioned placement writes', async () => {
+  const brane = createBrane(db, actor);
+  const { placement } = createTextBlock(db, actor, brane.id);
+  const patch = (body: unknown) =>
+    app.request(`/api/placements/${placement.id}`, {
+      method: 'PATCH',
+      headers: headers(),
+      body: JSON.stringify(body),
+    });
+  const geometry = { x: 10, y: 20, width: 400, height: 250 };
+  const first = await patch({ ...geometry, version: 0 });
+  expect(first.status).toBe(200);
+  expect(await first.json()).toMatchObject({ ...geometry, version: 1, id: placement.id });
+  expect((await patch({ ...geometry, x: 999, version: 0 })).status).toBe(409);
+  expect((await patch(geometry)).status).toBe(400);
+  const current = await app.request(`/api/placements/${placement.id}`, { headers: headers() });
+  expect(await current.json()).toMatchObject({ ...geometry, version: 1 });
+  const next = await patch({ ...geometry, x: 30, version: 1 });
+  expect(await next.json()).toMatchObject({ x: 30, version: 2 });
+});
+it('does not expose another actor’s placement through read or versioned write', async () => {
+  const other = uid();
+  db.prepare('INSERT INTO "user" (id,name,email,createdAt,updatedAt) VALUES (?,?,?,?,?)').run(
+    other,
+    'Other',
+    `${other}@example.com`,
+    Date.now(),
+    Date.now(),
+  );
+  const { placement } = createTextBlock(db, other, createBrane(db, other).id);
+  expect(
+    (await app.request(`/api/placements/${placement.id}`, { headers: headers() })).status,
+  ).toBe(404);
+  expect(
+    (
+      await app.request(`/api/placements/${placement.id}`, {
+        method: 'PATCH',
+        headers: headers(),
+        body: JSON.stringify({ x: 0, y: 0, width: 320, height: 220, version: 0 }),
+      })
+    ).status,
+  ).toBe(404);
+});

@@ -39,7 +39,7 @@ export function BlockContent({
     );
   if (block.origin === 'generated')
     return (
-      <div className="response-content nodrag nowheel">
+      <div className="response-content nodrag nowheel nopan">
         {block.content.text || partial || <span className="muted">Thinking space reserved…</span>}
       </div>
     );
@@ -47,7 +47,7 @@ export function BlockContent({
     <>
       {block.content.url && (
         <a
-          className="source-link nodrag"
+          className="source-link nodrag nopan"
           href={/^https?:\/\//.test(block.content.url) ? block.content.url : undefined}
           target="_blank"
           rel="noreferrer"
@@ -60,7 +60,7 @@ export function BlockContent({
       <textarea
         ref={ref}
         aria-label={block.kind === 'webpage' ? 'Webpage text' : 'Block text'}
-        className="block-editor nodrag nowheel"
+        className="block-editor nodrag nowheel nopan"
         value={draft ?? block.content.text}
         placeholder="Let a thought take shape…"
         onChange={(e) => onEdit(block.id, e.target.value)}

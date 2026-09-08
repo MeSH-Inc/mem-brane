@@ -37,7 +37,9 @@ export interface Revision {
   content: Content;
   created_at: number;
 }
+export type Geometry = { x: number; y: number; width: number; height: number };
 export interface Placement {
+  version: number;
   id: string;
   brane_id: string;
   block_id: string;

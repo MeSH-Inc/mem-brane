@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
-import type { Block, Brane, Placement, Revision } from '../../shared/types/domain';
+import type { Block, Brane, Placement, Revision, Geometry } from '../../shared/types/domain';
 import { api } from '../services/api';
 export function ArtifactActions({
   block,
   placements,
   onChange,
   onSave,
+  onGeometry,
   onClose,
 }: {
   block: Block;
   placements: Placement[];
   onChange: () => Promise<void>;
   onSave: () => Promise<unknown>;
+  onGeometry: (id: string, geometry: Geometry) => Promise<void>;
   onClose: () => void;
 }) {
   const [branes, setBranes] = useState<Brane[]>([]),
@@ -94,12 +96,7 @@ export function ArtifactActions({
             <span>Placement {i + 1}</span>
             <GeometryForm
               placement={p}
-              onApply={(g) =>
-                void action(
-                  () => api(`/placements/${p.id}`, g, 'PATCH'),
-                  'Placement geometry saved',
-                )
-              }
+              onApply={(g) => void action(() => onGeometry(p.id, g), 'Placement geometry saved')}
             />
             <button
               onClick={() =>

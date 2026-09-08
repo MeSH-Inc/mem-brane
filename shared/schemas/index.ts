@@ -6,6 +6,7 @@ export const geometry = z.object({
   width: z.number().min(180).max(4000),
   height: z.number().min(120).max(4000),
 });
+export const placementEdit = geometry.extend({ version: z.number().int().nonnegative() });
 export const edit = z.object({
   blockId: id,
   text: z.string().max(100000),

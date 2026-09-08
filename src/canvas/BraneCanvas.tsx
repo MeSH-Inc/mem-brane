@@ -1,3 +1,5 @@
+import { toolPolicy } from './toolPolicy';
+import { useCanvasGesture } from './useCanvasGesture';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
@@ -26,6 +28,7 @@ type CardData = {
   newBlock?: string;
   spawning?: boolean;
   retrySpawn?: boolean;
+  resizable: boolean;
   onSpawn: (blockId: string, placementId: string) => void;
   onEdit: (id: string, text: string) => void;
   onContext: (id: string) => void;
@@ -37,15 +40,13 @@ type CardData = {
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
 type CardNode = Node<CardData>;
 const addContext = (id: string) => useInteraction.getState().addReferences([id]);
-const panButtons = [0, 1, 2];
-const writeButtons = [1, 2];
 const defaultViewport = { x: 20, y: 20, zoom: 1 };
 function Card({ id, data, selected }: NodeProps<CardNode>) {
   return (
     <article className={`canvas-card ${data.block.origin} ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} id="input" isConnectable={false} />
       <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
-      <NodeResizer isVisible={selected} minWidth={180} minHeight={120} />
+      <NodeResizer isVisible={selected && data.resizable} minWidth={180} minHeight={120} />
       <header className="card-grip">
         <span className="kind-mark">{data.block.origin === 'generated' ? '✳' : '◇'}</span>
         <span>
@@ -59,7 +60,7 @@ function Card({ id, data, selected }: NodeProps<CardNode>) {
         </span>
         <span className="card-status">{data.status}</span>
         <button
-          className="nodrag icon-button"
+          className="nodrag nopan icon-button"
           title="Focus block"
           onClick={() => data.onFocus(data.block.id)}
         >
@@ -72,7 +73,7 @@ function Card({ id, data, selected }: NodeProps<CardNode>) {
         autoFocus={data.newBlock === data.block.id}
         onEdit={data.onEdit}
       />
-      <footer className="nodrag">
+      <footer className="nodrag nopan">
         <button aria-label="Block actions" onClick={() => data.onManage(data.block.id)}>
           ⋯
         </button>
@@ -105,18 +106,28 @@ interface Props {
   onManage: CardData['onManage'];
 }
 function Inner(props: Props) {
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition, fitView, getViewport } = useReactFlow();
   const selected = useInteraction((s) => s.selectedPlacements);
   const tool = useInteraction((s) => s.tool);
   const setContinue = useInteraction((s) => s.setContinue);
   // Only in-progress geometry is local. Completed gestures update the domain owner.
   const [geometry, setGeometry] = useState<Record<string, Geometry>>({});
   const geometryRef = useRef(geometry);
-  const [rect, setRect] = useState<{ x: number; y: number; width: number; height: number } | null>(
-    null,
+  const policy = toolPolicy(tool);
+  const [flowEpoch, setFlowEpoch] = useState(0);
+  const viewport = useRef(defaultViewport);
+  const resetMarquee = useCallback(() => {
+    viewport.current = getViewport();
+    // Remount the library gesture owner to clear its private pointer/selection
+    // refs as well as its rectangle. Domain state and viewport remain intact.
+    setFlowEpoch((epoch) => epoch + 1);
+  }, [getViewport]);
+  const { rect, bindings } = useCanvasGesture(
+    tool,
+    screenToFlowPosition,
+    props.onCreate,
+    resetMarquee,
   );
-  const start = useRef<{ clientX: number; clientY: number; x: number; y: number } | null>(null);
-  const host = useRef<HTMLDivElement>(null);
   const placements = props.state.placements;
   const placementsRef = useRef(placements);
   placementsRef.current = placements;
@@ -158,6 +169,7 @@ function Inner(props: Props) {
           selected: selected.includes(p.id),
           data: {
             block,
+            resizable: tool !== 'pan',
             partial: run?.partial,
             status: run?.status,
             newBlock: props.newBlock,
@@ -176,6 +188,7 @@ function Inner(props: Props) {
     });
   }, [
     placements,
+    tool,
     props.state.blocks,
     props.state.runs,
     geometry,
@@ -260,78 +273,27 @@ function Inner(props: Props) {
     [props.onGeometry],
   );
   return (
-    <div
-      className={`canvas-host tool-${tool}`}
-      ref={host}
-      onPointerDownCapture={(e) => {
-        if (
-          tool !== 'write' ||
-          e.button !== 0 ||
-          !(e.target as HTMLElement).classList.contains('react-flow__pane') ||
-          e.shiftKey
-        )
-          return;
-        const bounds = host.current!.getBoundingClientRect();
-        start.current = {
-          clientX: e.clientX,
-          clientY: e.clientY,
-          x: e.clientX - bounds.left,
-          y: e.clientY - bounds.top,
-        };
-        host.current!.setPointerCapture(e.pointerId);
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-      onPointerMove={(e) => {
-        if (!start.current) return;
-        const s = start.current;
-        setRect({
-          x: Math.min(s.x, s.x + e.clientX - s.clientX),
-          y: Math.min(s.y, s.y + e.clientY - s.clientY),
-          width: Math.abs(e.clientX - s.clientX),
-          height: Math.abs(e.clientY - s.clientY),
-        });
-      }}
-      onPointerUp={(e) => {
-        const s = start.current;
-        if (!s) return;
-        start.current = null;
-        setRect(null);
-        host.current!.releasePointerCapture(e.pointerId);
-        if (Math.abs(e.clientX - s.clientX) < 8 && Math.abs(e.clientY - s.clientY) < 8) return;
-        const a = screenToFlowPosition({
-            x: Math.min(s.clientX, e.clientX),
-            y: Math.min(s.clientY, e.clientY),
-          }),
-          b = screenToFlowPosition({
-            x: Math.max(s.clientX, e.clientX),
-            y: Math.max(s.clientY, e.clientY),
-          });
-        props.onCreate({
-          x: a.x,
-          y: a.y,
-          width: Math.max(220, b.x - a.x),
-          height: Math.max(160, b.y - a.y),
-        });
-      }}
-      onPointerCancel={() => {
-        start.current = null;
-        setRect(null);
-      }}
-    >
+    <div className={`canvas-host tool-${tool}`} {...bindings}>
       <ReactFlow
+        key={flowEpoch}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={changes}
-        panOnDrag={tool === 'pan' ? panButtons : writeButtons}
-        selectionOnDrag={false}
-        multiSelectionKeyCode="Shift"
+        panOnDrag={policy.panOnDrag}
+        nodesDraggable={policy.nodesDraggable}
+        elementsSelectable={policy.elementsSelectable}
+        selectionOnDrag={policy.selectionOnDrag}
+        selectionMode={policy.selectionMode}
+        selectionKeyCode={policy.selectionKeyCode}
+        panActivationKeyCode={policy.panActivationKeyCode}
+        multiSelectionKeyCode={policy.multiSelectionKeyCode}
+        paneClickDistance={8}
         deleteKeyCode={null}
         nodesConnectable={false}
         minZoom={0.2}
         maxZoom={2}
-        defaultViewport={defaultViewport}
+        defaultViewport={viewport.current}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#cfcec6" />
         <Controls showInteractive={false} />
@@ -342,10 +304,7 @@ function Inner(props: Props) {
           style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
         />
       )}
-      <div className="canvas-hint">
-        Drag to make a thought <span>·</span> Shift-click to select several <span>·</span> Pan with
-        middle mouse
-      </div>
+      <div className="canvas-hint">{policy.hint} </div>
     </div>
   );
 }

@@ -21,6 +21,7 @@ import {
   readBrane,
   updateBlockLiveState,
   updatePlacementGeometry,
+  getPlacement,
   removePlacement,
   revisions,
   now,
@@ -36,6 +37,7 @@ import {
 } from '../services/runs.js';
 import {
   geometry,
+  placementEdit,
   edit,
   id,
   spawnArtifact as spawnSchema,
@@ -165,15 +167,19 @@ export function createApi(
       201,
     );
   });
-  app.patch('/placements/:id', async (c) => {
-    updatePlacementGeometry(
-      db,
-      c.get('actor'),
-      id.parse(c.req.param('id')),
-      geometry.parse(await c.req.json()),
-    );
-    return c.json({ ok: true });
-  });
+  app.get('/placements/:id', (c) =>
+    c.json(getPlacement(db, c.get('actor'), id.parse(c.req.param('id')))),
+  );
+  app.patch('/placements/:id', async (c) =>
+    c.json(
+      updatePlacementGeometry(
+        db,
+        c.get('actor'),
+        id.parse(c.req.param('id')),
+        placementEdit.parse(await c.req.json()),
+      ),
+    ),
+  );
   app.delete('/placements/:id', (c) => {
     removePlacement(db, c.get('actor'), id.parse(c.req.param('id')));
     return c.json({ ok: true });
