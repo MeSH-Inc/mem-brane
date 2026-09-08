@@ -54,6 +54,59 @@ beforeEach(() => {
 });
 afterEach(() => db.close());
 describe('immutable content boundary', () => {
+  it('reuses one revision for an unchanged live version, including no-op saves', () => {
+    const first = revisions(db).snapshotBlock(actor, block);
+    for (let i = 0; i < 100; i++) {
+      expect(
+        updateBlockLiveState(db, actor, { blockId: block, text: 'Original thought', version: 1 })
+          .version,
+      ).toBe(1);
+      expect(revisions(db).snapshotBlock(actor, block)).toEqual(first);
+    }
+    expect(
+      db.prepare('SELECT count(*) n FROM block_revisions WHERE block_id=?').get(block),
+    ).toEqual({ n: 1 });
+    expect(() =>
+      db
+        .prepare(
+          'INSERT INTO block_revisions (id,block_id,content_json,created_at,source_version) VALUES (?,?,?,?,?)',
+        )
+        .run(uid(), block, JSON.stringify(first.content), Date.now(), 1),
+    ).toThrow('UNIQUE');
+    expect(() =>
+      updateBlockLiveState(db, actor, { blockId: block, text: 'Original thought', version: 0 }),
+    ).toThrow('changed');
+  });
+  it('shares source snapshots across submissions and preserves retry context after edits', () => {
+    const first = submit();
+    const second = submit();
+    expect(readInputs(db, first.id)[0].revision_id).toBe(readInputs(db, second.id)[0].revision_id);
+    updateBlockLiveState(db, actor, { blockId: block, text: 'Changed source', version: 1 });
+    const third = submit();
+    expect(readInputs(db, third.id)[0].revision_id).not.toBe(
+      readInputs(db, first.id)[0].revision_id,
+    );
+    cancelRun(db, actor, first.id);
+    const retried = retryRun(db, actor, first.id, uid(), limits);
+    expect(readInputs(db, retried.id)).toEqual(
+      readInputs(db, first.id).map((i) => ({ ...i, run_id: retried.id })),
+    );
+  });
+  it('rolls back a new snapshot and earlier edits when a later source cannot be frozen', () => {
+    const unavailable = submit().output_block_id;
+    const before = db.prepare('SELECT count(*) n FROM block_revisions').get();
+    expect(() =>
+      submit({
+        references: [block, unavailable],
+        edits: [{ blockId: block, text: 'Must roll back', version: 1 }],
+      }),
+    ).toThrow('finalized');
+    expect(db.prepare('SELECT count(*) n FROM block_revisions').get()).toEqual(before);
+    expect(readBrane(db, actor, brane).blocks.find((b) => b.id === block)).toMatchObject({
+      version: 1,
+      content: { text: 'Original thought' },
+    });
+  });
   it('preserves older snapshots alongside future ones and refuses SQL mutation', () => {
     const old = revisions(db).snapshotBlock(actor, block);
     updateBlockLiveState(db, actor, { blockId: block, text: 'Edited', version: 1 });

@@ -245,12 +245,9 @@ export class RunWorker {
         const revisionId = uid(),
           userMessage = uid(),
           assistantMessage = uid();
-        db.prepare('INSERT INTO block_revisions VALUES (?,?,?,?)').run(
-          revisionId,
-          run.output_block_id,
-          JSON.stringify({ format: 'text', text }),
-          now(),
-        );
+        db.prepare(
+          'INSERT INTO block_revisions (id,block_id,content_json,created_at) VALUES (?,?,?,?)',
+        ).run(revisionId, run.output_block_id, JSON.stringify({ format: 'text', text }), now());
         const inputs = readInputs(db, run.id);
         const prompt = inputs.find((i) => i.kind === 'prompt')!;
         db.prepare(

@@ -104,6 +104,9 @@ export function updateBlockLiveState(db: DB, actor: string, edit: Edit) {
   };
   if (!fitsArtifactContent(content))
     throw new DomainError(400, 'Artifact content exceeds the byte limit');
+  if (state.version !== edit.version)
+    throw new DomainError(409, 'This block changed. Reload before saving your draft.');
+  if (JSON.stringify(content) === state.content_json) return { version: state.version, content };
   const result = db
     .prepare(
       'UPDATE block_live_state SET content_json=?, version=version+1, updated_at=? WHERE block_id=? AND version=?',
@@ -120,10 +123,10 @@ export interface RevisionService {
 }
 export function revisions(db: DB): RevisionService {
   return {
-    snapshotBlock(actor, blockId) {
+    snapshotBlock: db.transaction((actor: string, blockId: string): Revision => {
       const block = requireOwned(db, 'blocks', actor, blockId);
       const live = db
-        .prepare('SELECT content_json FROM block_live_state WHERE block_id=?')
+        .prepare('SELECT content_json,version FROM block_live_state WHERE block_id=?')
         .get(blockId) as any;
       if (!live) {
         const existing = db
@@ -133,20 +136,35 @@ export function revisions(db: DB): RevisionService {
           .get(blockId) as any;
         if (!existing)
           throw new DomainError(409, 'Only finalized responses can be used as context');
-        return { ...existing, content: JSON.parse(existing.content_json) };
+        return revisionDto(existing);
       }
       const content: Content = JSON.parse(live.content_json);
       if (block.kind === 'webpage' && content.status !== 'ready')
         throw new DomainError(409, 'Webpage is not ready; paste content or wait for import');
+      const existing = db
+        .prepare('SELECT * FROM block_revisions WHERE block_id=? AND source_version=?')
+        .get(blockId, live.version) as RevisionRow | undefined;
+      if (existing) return revisionDto(existing);
       const revision = { id: uid(), block_id: blockId, content, created_at: now() };
-      db.prepare('INSERT INTO block_revisions VALUES (?,?,?,?)').run(
-        revision.id,
-        blockId,
-        live.content_json,
-        revision.created_at,
-      );
+      db.prepare(
+        'INSERT INTO block_revisions (id,block_id,content_json,created_at,source_version) VALUES (?,?,?,?,?)',
+      ).run(revision.id, blockId, live.content_json, revision.created_at, live.version);
       return revision;
-    },
+    }),
+  };
+}
+interface RevisionRow {
+  id: string;
+  block_id: string;
+  content_json: string;
+  created_at: number;
+}
+function revisionDto(row: RevisionRow): Revision {
+  return {
+    id: row.id,
+    block_id: row.block_id,
+    content: JSON.parse(row.content_json),
+    created_at: row.created_at,
   };
 }
 export function getPlacement(db: DB, actor: string, id: string): Placement {
