@@ -84,11 +84,11 @@ Paid admission now requires a positive `GLOBAL_DAILY_SPEND_LIMIT` as well as the
 per-user limit. Outstanding and uncertain liabilities across all actors count toward
 this operator budget. Defaults keep paid execution disabled.
 
-`RUN_QUEUE_LIMIT` caps active/queued generations (default 100). Imports have global
-and actor limits (`IMPORT_QUEUE_LIMIT=100`, `USER_IMPORT_LIMIT=10`). Image bytes,
+`RUN_QUEUE_LIMIT` caps active/queued generations (default 8). Imports have global
+and actor limits (`IMPORT_QUEUE_LIMIT=6`, `USER_IMPORT_LIMIT=3`). Image bytes,
 including outstanding upload intents, are reserved against `USER_STORAGE_BYTES`
 (default 100 MiB) and `TOTAL_STORAGE_BYTES` (default 1 GiB) before object writes.
-Each actor can create 100 branes; each brane supports 500 placements. Workspace reads
+Each actor can create 100 branes; each brane supports 200 placements. Workspace reads
 retain runs for visible output blocks, active work, and the latest 100 runs. These
 bounds do not delete historical records.
 
@@ -115,3 +115,70 @@ immutable revisions. Pending uploads are reported separately. For R2, export the
 matching object keys into that directory first. The local test suite performs an
 online backup, copies images, removes the original image directory, validates the
 restore, then confirms that missing and corrupted bytes are detected.
+
+## Measured capacity and disk admission
+
+The capacity exercise and its machine-specific results are recorded in
+[the capacity report](operations/capacity.md). Current defaults admit eight active
+or queued generation runs, six webpage imports globally and three per actor.
+Workspaces admit 200 placements. Artifact text is limited to 20,000 characters and
+serialized content to 32 KiB, including multibyte characters and JSON escaping.
+These limits also apply to ingestion and generated output. Existing records are
+not automatically truncated or deleted.
+
+`MIN_FREE_DISK_BYTES` defaults to 1 GiB on each local database/image filesystem.
+`DISK_CHECK_INTERVAL_MS` defaults to 15 seconds. A low, failed or stale probe makes
+`/health` return 503 and pauses new mutating requests and background claims. Reads,
+run cancellation and sign-out remain available; existing work may checkpoint and
+finalize using the reserved headroom. Recovery from low space requires 25% additional
+headroom. This is an admission guard with a sampling interval, not a guarantee
+against another process exhausting the disk between probes.
+
+JSON `disk_state` logs record transitions and repeated unavailable samples.
+`runtime_sample` logs every ten seconds report sampled RSS, event-loop delay and
+queue age; `TELEMETRY_INTERVAL_MS` controls this interval. No artifact content is
+logged. The [retention policy](operations/retention.md) describes bounded cleanup
+and the records preserved indefinitely.
+
+## Complete backup bundles and off-host rehearsal
+
+Create a new private directory containing an online SQLite snapshot, exactly the
+committed image keys in that snapshot, checksums, and a completion manifest:
+
+```sh
+node --import tsx --env-file-if-exists=.env scripts/backup-bundle.ts /new/backup-directory
+node --import tsx scripts/verify-bundle.ts /new/backup-directory
+```
+
+The manifest is published last. A partial directory without `manifest.json` is not
+a complete backup. Source images remain immutable and are copied after the SQL
+snapshot; uploads committed later are outside that snapshot. Verification streams
+file checksums, checks SQLite integrity and foreign keys, and verifies image hashes
+against both live state and revisions.
+
+FluffyFleet identifies Cachy's SSH alias as `fluffycachy-worker` (user `fluffyr`).
+A bounded transfer and retrieval drill can use:
+
+```sh
+python3 scripts/offhost-rehearsal.py fluffycachy-worker /new/backup-directory /new/download-directory /new/receipt.json
+node --import tsx scripts/rehearse-restore.ts /new/download-directory
+```
+
+The transfer uses a new owner-private directory beneath
+`~/.local/share/mem-brane/backup-rehearsals`, verifies checksums and SQL on the remote
+host, and retrieves the bundle. It never copies repository working directories or
+modifies the fleet worker. SSH must be non-interactive with an established trusted
+host key. No recurring backup schedule or remote deletion policy is installed.
+
+The HTTP rehearsal verifies the downloaded bundle, copies it into a disposable
+restore directory, applies migrations there, creates a probe session only in that
+copy, and starts the built application with `READ_ONLY=1`. This mode blocks mutating
+HTTP and disables workers and retention; queued historical jobs cannot invoke a
+provider. It is an application recovery mode, not a SQLite read-only connection:
+startup migrations and session preparation operate on the disposable copy. The
+original bundle and live database are untouched.
+
+Use `scripts/fixture-bundle.ts /new/fixture-directory` for synthetic drills.
+The September 8 rehearsal completed remote verification, retrieval and four HTTP
+checks using synthetic image/provenance data; see
+[the transfer receipt](operations/offhost-receipt.json).

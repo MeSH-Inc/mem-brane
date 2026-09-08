@@ -1,0 +1,12 @@
+{
+  "hostAlias": "fluffycachy-worker",
+  "hostname": "fluffycachy",
+  "directory": "/home/fluffyr/.local/share/mem-brane/backup-rehearsals/db1617e5009848fdbdb0f39e69950518",
+  "remoteVerification": {
+    "files": 2,
+    "assets": 1,
+    "manifestSha256": "21612ccf91df8bac23ffee4da0be89e32d8acd30dcba39fe490d465782c204fb"
+  },
+  "download": "/private/tmp/membrane-offhost-download-final-20260908",
+  "scope": "backup bundle round trip; run rehearse-restore.ts on the download for HTTP proof"
+}
