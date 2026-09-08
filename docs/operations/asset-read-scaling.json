@@ -1,0 +1,45 @@
+{
+  "parserCalls": {
+    "image": 1,
+    "pdf": 1
+  },
+  "workspaceBytes": {
+    "summary": 30545,
+    "expanded": 170025
+  },
+  "method": "20 distinct imports per file, one snapshot per artifact; byte totals are UTF-8 logical payloads, not SQLite allocation or memory savings",
+  "copiesPerFile": 20,
+  "fixtures": [
+    {
+      "name": "Noise.png",
+      "byteLength": 37107
+    },
+    {
+      "name": "Evidence.pdf",
+      "byteLength": 9988
+    }
+  ],
+  "counts": {
+    "assets": 2,
+    "representations": 2,
+    "blocks": 40,
+    "revisions": 40,
+    "receipts": 40
+  },
+  "objectBytes": {
+    "stored": 47095,
+    "withoutDedup": 941900
+  },
+  "payloadBytes": {
+    "legacyExpandedLiveAndRevisions": 313400,
+    "legacyFullImportResults": 170278,
+    "compactLiveAndRevisions": 11840,
+    "representations": 7405,
+    "wireReceipts": 6080
+  },
+  "restore": {
+    "assets": 2,
+    "references": 80,
+    "pendingUploads": 0
+  }
+}

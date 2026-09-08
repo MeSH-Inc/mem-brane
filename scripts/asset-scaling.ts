@@ -1,3 +1,5 @@
+import { inspectPdf } from '../server/ingestion/pdf.js';
+import { inspectImage } from '../server/ingestion/image.js';
 // Disposable binary/PDF fixture: measures stored payloads, not process memory or latency.
 import { writeFile } from 'node:fs/promises';
 import sharp from 'sharp';
@@ -51,7 +53,17 @@ try {
     { name: 'Noise.png', bytes: png },
     { name: 'Evidence.pdf', bytes: pdf },
   ];
-  const imports = createImports(db, store);
+  const parserCalls = { image: 0, pdf: 0 };
+  const imports = createImports(db, store, {
+    image: async (bytes) => {
+      parserCalls.image++;
+      return inspectImage(bytes);
+    },
+    pdf: async (bytes) => {
+      parserCalls.pdf++;
+      return inspectPdf(bytes);
+    },
+  });
   let legacyContentBytes = 0,
     legacyResultBytes = 0,
     receiptBytes = 0;
@@ -87,7 +99,20 @@ try {
       receiptBytes += Buffer.byteLength(JSON.stringify(receipt));
     }
   const scalar = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
+  const workspace = readBrane(db, actor, brane);
+  const expandedWorkspace = {
+    ...workspace,
+    blocks: workspace.blocks.map((block) => ({
+      ...block,
+      content: revisions(db).snapshotBlock(actor, block.id).content,
+    })),
+  };
   const result = {
+    parserCalls,
+    workspaceBytes: {
+      summary: Buffer.byteLength(JSON.stringify(workspace)),
+      expanded: Buffer.byteLength(JSON.stringify(expandedWorkspace)),
+    },
     method:
       '20 distinct imports per file, one snapshot per artifact; byte totals are UTF-8 logical payloads, not SQLite allocation or memory savings',
     copiesPerFile: copies,
@@ -117,6 +142,8 @@ try {
     restore: await verifyRestoration(db, store),
   };
   if (
+    parserCalls.image !== 1 ||
+    parserCalls.pdf !== 1 ||
     result.counts.assets !== 2 ||
     result.counts.representations !== 2 ||
     result.restore.references !== 80

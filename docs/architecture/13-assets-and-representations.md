@@ -22,11 +22,17 @@ progress. Import operations own pending/ready delivery progress. Extraction runs
 synchronously in the bounded import operation, with PDF parsing in a bounded worker;
 there is no additional extraction queue or duplicated job state.
 
-Services expand persisted references into validated content at read boundaries.
-Workspace, revision, estimate and provider consumers receive the same expanded
-content shape. Admission counts expanded content, so normalizing storage cannot
-bypass context limits. Restoration checks asset bytes against canonical digests,
-representation identity against its payload, foreign keys, ownership and format.
+Workspace reads use an immutable summary projection for PDF metadata and omit page
+text. The UI retrieves pages on demand by their pinned representation identity.
+Revision, estimate and provider consumers expand full content at their read
+boundaries. Admission counts expanded content, so normalizing storage cannot bypass
+context limits. Restoration checks asset bytes against canonical digests,
+representation identities, summary projections, foreign keys, ownership and format.
+
+Extraction policies identify the parser version, options and limits. Results bind a
+policy and asset to an immutable representation. Imports serialize matching
+owner/digest/policy work within the database handle and reuse persisted results on
+later deliveries, while still verifying original object integrity.
 
 Migrations preserve revision identities and provider content. They abort rather
 than guess if legacy hashes are missing, conflicting, or cannot satisfy canonical
@@ -39,3 +45,8 @@ and retry return `{ blockId, placementId, braneId }`; the UI refreshes authorita
 workspace state. Reconciliation never recreates a removed placement or applies an
 old position. Request hashes still reject reuse of an import key with different
 bytes, filenames or placement intent.
+
+The [offline consolidation tool](../operations/asset-read-efficiency.md) can resolve
+legacy duplicate owner/digest rows before migration 015. A verified original backup
+precedes reference rewriting. Redundant objects stay in a cleanup journal and in
+quota accounting until deletion or absence is acknowledged.

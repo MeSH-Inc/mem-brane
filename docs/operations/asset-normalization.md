@@ -79,3 +79,8 @@ migration fixtures pass. No live database migration or remote push was performed
    deterministic owner/digest mapping, check actual bytes, rewrite references without
    changing expanded messages, and journal redundant objects for resumable cleanup.
    Validate crash points and backup restoration before deleting any redundant bytes.
+
+The recommended round above is now implemented. See
+[extraction reuse and PDF read results](asset-read-efficiency.md) for measurements,
+verification and the offline legacy-consolidation workflow that resolves duplicate
+owner/digest rows before migration 015.
