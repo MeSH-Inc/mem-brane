@@ -1,3 +1,4 @@
+import type { ImportReceipt } from '../../shared/types/imports.js';
 import { createHash } from 'node:crypto';
 import type { DB } from '../db/index.js';
 import type { AssetStore } from '../storage/assets.js';
@@ -15,22 +16,26 @@ interface Operation {
   asset_id: string;
   brane_id: string;
   state: 'pending' | 'ready';
-  result_json: string | null;
+  block_id: string | null;
+  placement_id: string | null;
 }
 const hash = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 export function createImports(db: DB, store: AssetStore) {
-  const active = new Map<string, { hash: string; promise: Promise<unknown> }>();
+  const active = new Map<string, { hash: string; promise: Promise<ImportReceipt> }>();
   const read = (actor: string, key: string) =>
     db.prepare('SELECT * FROM artifact_imports WHERE owner_id=? AND key=?').get(actor, key) as
       Operation | undefined;
+  const receipt = (op: Operation): ImportReceipt => ({
+    blockId: op.block_id!,
+    placementId: op.placement_id!,
+    braneId: op.brane_id,
+  });
   return {
     status(actor: string, key: string) {
       const op = read(actor, key);
       if (!op) throw new DomainError(404, 'Import not found');
       canEditBrane(db, actor, op.brane_id);
-      return op.state === 'ready'
-        ? { state: 'ready', result: JSON.parse(op.result_json!) }
-        : { state: 'pending' };
+      return op.state === 'ready' ? { state: 'ready', result: receipt(op) } : { state: 'pending' };
     },
     async import(actor: string, rawIntent: unknown, file: File) {
       const intent = importIntent.parse(rawIntent);
@@ -45,7 +50,7 @@ export function createImports(db: DB, store: AssetStore) {
       const existing = read(actor, intent.key);
       if (existing && existing.request_hash !== requestHash)
         throw new DomainError(409, 'This import key belongs to different content or placement');
-      if (existing?.state === 'ready') return JSON.parse(existing.result_json!);
+      if (existing?.state === 'ready') return receipt(existing);
       const running = active.get(identity);
       if (running) {
         if (running.hash !== requestHash) throw new DomainError(409, 'Import key conflict');
@@ -65,6 +70,11 @@ export function createImports(db: DB, store: AssetStore) {
                 representation: 'original-image-v1',
               };
         db.transaction(() => {
+          const current = read(actor, intent.key);
+          if (current && current.request_hash !== requestHash)
+            throw new DomainError(409, 'This import key belongs to different content or placement');
+          // Another service may have completed this delivery during inspection.
+          if (current?.state === 'ready') return;
           const known = db
             .prepare('SELECT id FROM assets WHERE owner_id=? AND digest=?')
             .get(actor, assetHash) as { id: string } | undefined;
@@ -80,15 +90,10 @@ export function createImports(db: DB, store: AssetStore) {
             });
           if (!known)
             db.prepare('UPDATE upload_intents SET digest=? WHERE id=?').run(assetHash, assetId);
-          if (!existing)
-            db.prepare("INSERT INTO artifact_imports VALUES (?,?,?,?,?,'pending',NULL,?)").run(
-              actor,
-              intent.key,
-              requestHash,
-              assetId,
-              intent.braneId,
-              now(),
-            );
+          if (!current)
+            db.prepare(
+              "INSERT INTO artifact_imports (owner_id,key,request_hash,asset_id,brane_id,state,created_at) VALUES (?,?,?,?,?,'pending',?)",
+            ).run(actor, intent.key, requestHash, assetId, intent.braneId, now());
           else
             db.prepare('UPDATE artifact_imports SET asset_id=? WHERE owner_id=? AND key=?').run(
               assetId,
@@ -96,6 +101,8 @@ export function createImports(db: DB, store: AssetStore) {
               intent.key,
             );
         }).immediate();
+        const published = read(actor, intent.key);
+        if (published?.state === 'ready') return receipt(published);
         // A previous process may have stored the immutable object but lost the acknowledgement.
         let stored: Uint8Array | undefined;
         {
@@ -133,7 +140,7 @@ export function createImports(db: DB, store: AssetStore) {
         return db.transaction(() => {
           canEditBrane(db, actor, intent.braneId);
           const finished = read(actor, intent.key);
-          if (finished?.state === 'ready') return JSON.parse(finished.result_json!);
+          if (finished?.state === 'ready') return receipt(finished);
           db.prepare(
             'INSERT INTO assets (id,owner_id,storage_key,mime,size,created_at,digest) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING',
           ).run(assetId, actor, assetId, content.mimeType, bytes.length, now(), assetHash);
@@ -147,9 +154,9 @@ export function createImports(db: DB, store: AssetStore) {
           );
           db.prepare('DELETE FROM upload_intents WHERE id=?').run(assetId);
           db.prepare(
-            "UPDATE artifact_imports SET state='ready',result_json=? WHERE owner_id=? AND key=?",
-          ).run(JSON.stringify(result), actor, intent.key);
-          return result;
+            "UPDATE artifact_imports SET state='ready',block_id=?,placement_id=? WHERE owner_id=? AND key=?",
+          ).run(result.id, result.placement.id, actor, intent.key);
+          return { blockId: result.id, placementId: result.placement.id, braneId: intent.braneId };
         })();
       };
       const promise = work();

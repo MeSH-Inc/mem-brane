@@ -216,7 +216,7 @@ export function BraneView({
           if (!active) return;
           for (const task of ready) {
             if (task.intent.target === 'composer' && task.result)
-              ui.addReferences([task.result.id]);
+              ui.addReferences([task.result.blockId]);
             void imports.delivered(task.id);
           }
         })

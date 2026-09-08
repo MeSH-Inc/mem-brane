@@ -175,7 +175,16 @@ it('uploads an image, authorizes its bytes and reconstructs its brane placement'
     body,
   });
   expect(response.status).toBe(201);
-  const block = await response.json();
+  const receipt = await response.json();
+  const state = await (
+    await app.request(`/api/branes/${brane.id}`, { headers: { cookie } })
+  ).json();
+  const block = state.blocks.find((b: any) => b.id === receipt.blockId);
+  expect(receipt).toEqual({
+    blockId: block.id,
+    braneId: brane.id,
+    placementId: state.placements[0].id,
+  });
   const image = await app.request(`/api/assets/${block.content.assetId}`, { headers: { cookie } });
   expect(image.headers.get('content-type')).toBe('image/png');
   expect(Buffer.from(await image.arrayBuffer())).toEqual(bytes);

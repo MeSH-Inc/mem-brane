@@ -2,7 +2,7 @@ import { encodeContent } from '../server/services/representations';
 import { beforeEach, afterEach, expect, it } from 'vitest';
 import { openDatabase, type DB } from '../server/db/index';
 import { createImports } from '../server/services/imports';
-import { createBrane, revisions, uid } from '../server/services/content';
+import { createBrane, revisions, uid, readBrane } from '../server/services/content';
 import { resolveMessages } from '../server/llm/assets';
 import { freePrice, estimatedInputTokens } from '../server/services/costs';
 import { submitRun } from '../server/services/runs';
@@ -44,11 +44,19 @@ const intent = () => ({
   geometry: { x: 20, y: 40, width: 320, height: 300 },
 });
 const upload = (pages: string[]) =>
-  createImports(db, store).import(
-    actor,
-    intent(),
-    new File([pdfFixture(pages)], 'Research.pdf', { type: 'application/pdf' }),
-  ) as Promise<{ id: string; content: PdfContent }>;
+  createImports(db, store)
+    .import(
+      actor,
+      intent(),
+      new File([pdfFixture(pages)], 'Research.pdf', { type: 'application/pdf' }),
+    )
+    .then(
+      (receipt) =>
+        readBrane(db, actor, brane).blocks.find((b) => b.id === receipt.blockId)! as {
+          id: string;
+          content: PdfContent;
+        },
+    );
 it('retains original PDF bytes and freezes page-aware text with an explicit extractor version', async () => {
   const original = pdfFixture(['First page evidence', '', 'Third page conclusion']);
   const result = await upload(['First page evidence', '', 'Third page conclusion']);

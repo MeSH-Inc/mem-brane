@@ -1,7 +1,14 @@
 import { beforeEach, afterEach, expect, it } from 'vitest';
 import { openDatabase, type DB } from '../server/db';
 import { createImports } from '../server/services/imports';
-import { createBrane, createBlock, readRevision, revisions, uid } from '../server/services/content';
+import {
+  readBrane,
+  createBrane,
+  createBlock,
+  readRevision,
+  revisions,
+  uid,
+} from '../server/services/content';
 import { encodeContent } from '../server/services/representations';
 import { verifyRestoration } from '../server/storage/verify';
 import { pdfFixture } from './fixtures/pdf';
@@ -33,16 +40,20 @@ beforeEach(() => {
 });
 afterEach(() => db.close());
 const upload = async () =>
-  (await createImports(db, store).import(
-    actor,
-    {
-      key: uid(),
-      braneId: brane,
-      target: 'canvas',
-      geometry: { x: 0, y: 0, width: 320, height: 300 },
-    },
-    new File([pdfFixture(['Original evidence'])], 'Report.pdf'),
-  )) as any;
+  (await createImports(db, store)
+    .import(
+      actor,
+      {
+        key: uid(),
+        braneId: brane,
+        target: 'canvas',
+        geometry: { x: 0, y: 0, width: 320, height: 300 },
+      },
+      new File([pdfFixture(['Original evidence'])], 'Report.pdf'),
+    )
+    .then((receipt) =>
+      readBrane(db, actor, brane).blocks.find((b) => b.id === receipt.blockId)!,
+    )) as any;
 it('stores one extraction for repeated artifacts and snapshots with real foreign keys', async () => {
   const a = await upload(),
     b = await upload();

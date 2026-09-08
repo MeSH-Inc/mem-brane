@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { it, expect } from 'vitest';
+import { createImports } from '../server/services/imports';
 import { openDatabase } from '../server/db';
 import { createBrane, readRevision, readBrane, uid } from '../server/services/content';
 import { decodeContent, encodeContent } from '../server/services/representations';
@@ -60,6 +61,24 @@ it('migrates repeated PDF extractions without changing expanded content or messa
         'INSERT INTO block_revisions (id,block_id,content_json,created_at,source_version) VALUES (?,?,?,0,0)',
       ).run(id, id, JSON.stringify(content));
     }
+    const placements = [uid(), uid()];
+    ids.forEach((id, index) => {
+      db.prepare("INSERT INTO artifact_imports VALUES (?,?,?,?,?,'ready',?,0)").run(
+        actor,
+        id,
+        'request',
+        asset,
+        brane,
+        JSON.stringify({
+          id,
+          content,
+          placement: { id: placements[index], x: 0, y: 0, width: 320, height: 300 },
+        }),
+      );
+    });
+    db.prepare(
+      'INSERT INTO placements (id,brane_id,block_id,x,y,width,height,z_index,updated_at) VALUES (?,?,?,999,0,320,300,0,0)',
+    ).run(placements[0], brane, ids[0]);
     const input = (content: Content): RunInput[] => [
       {
         position: 0,
@@ -76,6 +95,24 @@ it('migrates repeated PDF extractions without changing expanded content or messa
     expect(db.prepare('SELECT count(*) n FROM asset_representations').get()).toEqual({ n: 1 });
     for (const id of ids) expect(readRevision(db, actor, id).content).toEqual(content);
     expect(buildMessages(input(readRevision(db, actor, ids[0]).content))).toEqual(before);
+    const receipts = createImports(db, {
+      get: async () => bytes,
+      put: async () => {},
+      delete: async () => {},
+      createReadUrl: async () => '',
+    });
+    ids.forEach((id, index) =>
+      expect(receipts.status(actor, id)).toEqual({
+        state: 'ready',
+        result: { blockId: id, placementId: placements[index], braneId: brane },
+      }),
+    );
+    expect(readBrane(db, actor, brane).placements.map((p) => p.x)).toEqual([999]);
+    expect(
+      (db.pragma('table_info(artifact_imports)') as { name: string }[]).some(
+        (c) => c.name === 'result_json',
+      ),
+    ).toBe(false);
     const encoded = encodeContent(db, actor, content);
     expect(decodeContent(db, encoded)).toEqual(content);
     expect(db.prepare('SELECT count(*) n FROM asset_representations').get()).toEqual({ n: 1 });

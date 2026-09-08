@@ -2,7 +2,15 @@ import { beforeEach, afterEach, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { openDatabase, type DB } from '../server/db/index';
 import { createImports } from '../server/services/imports';
-import { createBrane, createBlock, revisions, uid } from '../server/services/content';
+import {
+  createBrane,
+  createBlock,
+  revisions,
+  uid,
+  readBrane,
+  updatePlacementGeometry,
+  removePlacement,
+} from '../server/services/content';
 import { reserveUpload } from '../server/services/capacity';
 import { resolveMessages } from '../server/llm/assets';
 import type { AssetStore } from '../server/storage/assets';
@@ -46,6 +54,9 @@ const intent = () => ({
   target: 'composer',
   geometry: { x: 420, y: 70, width: 320, height: 300 },
 });
+const contentOf = (receipt: any, owner = actor) =>
+  readBrane(db, owner, receipt.braneId).blocks.find((b) => b.id === receipt.blockId)!
+    .content as any;
 const file = () => new File([new Uint8Array(bytes)], 'Screenshot.png', { type: 'image/png' });
 it('deduplicates concurrent and lost-response delivery, including after service restart', async () => {
   const imports = createImports(db, store),
@@ -55,8 +66,8 @@ it('deduplicates concurrent and lost-response delivery, including after service 
     imports.import(actor, request, file()),
   ])) as any[];
   expect(second).toEqual(first);
-  expect(first.placement).toMatchObject(request.geometry);
-  expect(first.content).toMatchObject({
+  expect(readBrane(db, actor, brane).placements[0]).toMatchObject(request.geometry);
+  expect(contentOf(first)).toMatchObject({
     format: 'image',
     width: 12,
     height: 8,
@@ -90,7 +101,7 @@ it('resumes bytes whose write acknowledgement was lost without another object or
   const result: any = await createImports(db, store).import(actor, request, file());
   expect(objects.size).toBe(1);
   expect((db.prepare('SELECT count(*) n FROM upload_intents').get() as any).n).toBe(0);
-  const frozen = revisions(db).snapshotBlock(actor, result.id);
+  const frozen = revisions(db).snapshotBlock(actor, result.blockId);
   const messages = await resolveMessages(db, store, actor, [
     {
       position: 0,
@@ -102,7 +113,7 @@ it('resumes bytes whose write acknowledgement was lost without another object or
     },
   ]);
   expect(Buffer.from((messages[0].content as any[])[1].image)).toEqual(bytes);
-  objects.set(result.content.assetId, Buffer.from('corrupt'));
+  objects.set(contentOf(result).assetId, Buffer.from('corrupt'));
   await expect(
     resolveMessages(db, store, actor, [
       {
@@ -158,19 +169,19 @@ it('rejects malformed, empty, executable and over-pixel-limit images before stor
 it('requires a still-image representation for animated model context', async () => {
   const { modelCompatibility } = await import('../shared/representations');
   const result: any = await createImports(db, store).import(actor, intent(), file());
-  expect(modelCompatibility({ ...result.content, frames: 2 })).toContain('still image');
+  expect(modelCompatibility({ ...contentOf(result), frames: 2 })).toContain('still image');
 });
 
 it('shares immutable bytes across distinct artifacts only within an owner', async () => {
   const imports = createImports(db, store);
   const first: any = await imports.import(actor, intent(), file());
   const second: any = await imports.import(actor, intent(), file());
-  expect(first.id).not.toBe(second.id);
-  expect(first.placement.id).not.toBe(second.placement.id);
-  expect(first.content.assetId).toBe(second.content.assetId);
+  expect(first.blockId).not.toBe(second.blockId);
+  expect(first.placementId).not.toBe(second.placementId);
+  expect(contentOf(first).assetId).toBe(contentOf(second).assetId);
   expect(objects.size).toBe(1);
   const asset = db.prepare('SELECT * FROM assets').get() as any;
-  expect(asset.digest).toBe(first.content.assetHash);
+  expect(asset.digest).toBe(contentOf(first).assetHash);
   expect(() =>
     db.prepare('UPDATE assets SET mime=? WHERE id=?').run('image/jpeg', asset.id),
   ).toThrow('immutable');
@@ -187,7 +198,7 @@ it('shares immutable bytes across distinct artifacts only within an owner', asyn
     { ...intent(), braneId: createBrane(db, other).id },
     file(),
   );
-  expect(third.content.assetId).not.toBe(first.content.assetId);
+  expect(contentOf(third, other).assetId).not.toBe(contentOf(first).assetId);
   expect(objects.size).toBe(2);
 });
 
@@ -204,8 +215,8 @@ it('shares an uncertain upload reservation across different import keys', async 
   ).rejects.toThrow('uncertain');
   const second: any = await createImports(db, store).import(actor, intent(), file());
   const first: any = await createImports(db, store).import(actor, request, file());
-  expect(first.id).not.toBe(second.id);
-  expect(first.content.assetId).toBe(second.content.assetId);
+  expect(first.blockId).not.toBe(second.blockId);
+  expect(contentOf(first).assetId).toBe(contentOf(second).assetId);
   expect(objects.size).toBe(1);
   expect(db.prepare('SELECT count(*) n FROM upload_intents').get()).toEqual({ n: 0 });
 });
@@ -223,7 +234,37 @@ it('converges concurrent distinct deliveries across service instances', async ()
     createImports(db, store).import(actor, intent(), file()),
     createImports(db, store).import(actor, intent(), file()),
   ])) as any[];
-  expect(a.id).not.toBe(b.id);
-  expect(a.content.assetId).toBe(b.content.assetId);
+  expect(a.blockId).not.toBe(b.blockId);
+  expect(contentOf(a).assetId).toBe(contentOf(b).assetId);
   expect(objects.size).toBe(1);
+});
+
+it('returns only stable creation identities after movement or removal', async () => {
+  const imports = createImports(db, store),
+    request = intent();
+  const first = await imports.import(actor, request, file());
+  expect(Object.keys(first).sort()).toEqual(['blockId', 'braneId', 'placementId']);
+  updatePlacementGeometry(db, actor, first.placementId, {
+    ...request.geometry,
+    x: 999,
+    version: 0,
+  });
+  expect(await createImports(db, store).import(actor, request, file())).toEqual(first);
+  expect(readBrane(db, actor, brane).placements[0].x).toBe(999);
+  removePlacement(db, actor, first.placementId);
+  expect(imports.status(actor, request.key)).toEqual({ state: 'ready', result: first });
+  expect(await imports.import(actor, request, file())).toEqual(first);
+  expect(readBrane(db, actor, brane).placements).toEqual([]);
+  expect(() => db.prepare("UPDATE artifact_imports SET placement_id='other'").run()).toThrow(
+    'immutable',
+  );
+});
+it('converges concurrent same-key deliveries across service instances', async () => {
+  const request = intent();
+  const results = await Promise.all([
+    createImports(db, store).import(actor, request, file()),
+    createImports(db, store).import(actor, request, file()),
+  ]);
+  expect(results[0]).toEqual(results[1]);
+  expect(db.prepare('SELECT count(*) n FROM blocks').get()).toEqual({ n: 1 });
 });

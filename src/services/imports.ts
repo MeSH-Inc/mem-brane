@@ -1,4 +1,5 @@
-import type { Block, Geometry, Placement } from '../../shared/types/domain';
+import type { ImportReceipt } from '../../shared/types/imports';
+import type { Geometry } from '../../shared/types/domain';
 import { api, ApiError } from './api';
 import { supportedFile } from './import-adapters';
 import { indexedImportStorage, type ImportStorage } from './import-storage';
@@ -8,7 +9,7 @@ export interface ImportIntent {
   target: 'canvas' | 'composer';
   geometry: Geometry;
 }
-export type ImportResult = Block & { placement: Placement };
+export type ImportResult = ImportReceipt;
 export interface ImportTask {
   id: string;
   actor: string;

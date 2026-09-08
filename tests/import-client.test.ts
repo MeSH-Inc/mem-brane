@@ -14,12 +14,7 @@ const destination = (braneId = 'brane-a') => ({
   geometry: { x: 20, y: 30, width: 320, height: 300 },
 });
 const file = (name = 'screenshot.png') => new File(['fixture'], name, { type: 'image/png' });
-const result = {
-  id: 'block-a',
-  kind: 'image',
-  content: { format: 'image', text: 'screenshot' },
-  placement: { id: 'placement-a' },
-} as ImportResult;
+const result: ImportResult = { blockId: 'block-a', placementId: 'placement-a', braneId: 'brane-a' };
 function storage(): ImportStorage {
   const tasks = new Map<string, ImportTask>();
   return {
