@@ -15,7 +15,7 @@ export function reserveUpload(
   db.transaction(() => {
     const usage = db
       .prepare(
-        `SELECT COALESCE(SUM(size),0) total, COALESCE(SUM(CASE WHEN owner_id=? THEN size ELSE 0 END),0) actor FROM (SELECT owner_id,size FROM assets UNION ALL SELECT owner_id,size FROM upload_intents)`,
+        `SELECT COALESCE(SUM(size),0) total, COALESCE(SUM(CASE WHEN owner_id=? THEN size ELSE 0 END),0) actor FROM (SELECT owner_id,size FROM assets UNION ALL SELECT owner_id,size FROM upload_intents UNION ALL SELECT a.owner_id,j.size FROM asset_consolidation_journal j JOIN assets a ON a.id=j.canonical_id WHERE j.state!='deleted')`,
       )
       .get(actor) as { total: number; actor: number };
     if (usage.total + size > limits.totalBytes || usage.actor + size > limits.userBytes)
