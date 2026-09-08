@@ -64,6 +64,7 @@ test('PDF originals, page text, frozen context and unavailable representations i
     await expect(
       page.getByText('Model context uses extracted text by page.', { exact: false }),
     ).toBeVisible();
+    await page.getByRole('button', { name: 'Load page text', exact: true }).click();
     await page.getByText('Page 2', { exact: true }).click();
     await expect(page.getByText('Conclusion on page two', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: '+ Use as context', exact: true }).click();

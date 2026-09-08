@@ -1,6 +1,9 @@
 import type { Block, BraneState, Content, Edit } from '../../shared/types/domain';
 
-export type SavedText = { version: number; content: Content };
+export type SavedText = {
+  version: number;
+  content: Extract<Content, { format: 'text' | 'webpage' }>;
+};
 // This service owns acknowledged text versions and orders text writes with snapshot submissions.
 export class TextSaves {
   private accepted = new Map<string, SavedText>();
@@ -27,8 +30,12 @@ export class TextSaves {
     return { ...state, blocks: state.blocks.map((block) => this.reconcileBlock(block)) };
   }
   private reconcileBlock(block: Block): Block {
-    if (block.origin !== 'authored') return block;
-    this.acknowledge(block.id, block);
+    if (
+      block.origin !== 'authored' ||
+      (block.content.format !== 'text' && block.content.format !== 'webpage')
+    )
+      return block;
+    this.acknowledge(block.id, { version: block.version, content: block.content });
     return { ...block, ...this.accepted.get(block.id)! };
   }
 }

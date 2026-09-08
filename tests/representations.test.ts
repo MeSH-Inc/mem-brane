@@ -9,7 +9,7 @@ import {
   revisions,
   uid,
 } from '../server/services/content';
-import { encodeContent } from '../server/services/representations';
+import { encodeContent, decodeContent } from '../server/services/representations';
 import { verifyRestoration } from '../server/storage/verify';
 import { pdfFixture } from './fixtures/pdf';
 import type { AssetStore } from '../server/storage/assets';
@@ -51,9 +51,17 @@ const upload = async () =>
       },
       new File([pdfFixture(['Original evidence'])], 'Report.pdf'),
     )
-    .then((receipt) =>
-      readBrane(db, actor, brane).blocks.find((b) => b.id === receipt.blockId)!,
-    )) as any;
+    .then((receipt) => ({
+      id: receipt.blockId,
+      content: decodeContent(
+        db,
+        (
+          db
+            .prepare('SELECT content_json FROM block_live_state WHERE block_id=?')
+            .get(receipt.blockId) as { content_json: string }
+        ).content_json,
+      ),
+    }))) as any;
 it('stores one extraction for repeated artifacts and snapshots with real foreign keys', async () => {
   const a = await upload(),
     b = await upload();
@@ -130,4 +138,32 @@ it.each(['missing', 'changed'])('detects %s representations during restoration',
       `DROP TRIGGER immutable_representation_update; UPDATE asset_representations SET payload_json=json_set(payload_json,'$.representation.pages[0].text','Corruption')`,
     );
   await expect(verifyRestoration(db, store)).rejects.toThrow(/integrity/i);
+});
+
+it('keeps large PDF pages off workspace reads and authorizes exact representation reads', async () => {
+  const { readPdfPages } = await import('../server/services/representations');
+  const lines = Array.from({ length: 30 }, () => 'Detailed evidence '.repeat(4)).join('\n');
+  const receipt = await createImports(db, store).import(
+    actor,
+    {
+      key: uid(),
+      braneId: brane,
+      target: 'canvas',
+      geometry: { x: 0, y: 0, width: 320, height: 300 },
+    },
+    new File([pdfFixture(Array.from({ length: 4 }, () => lines))], 'Long.pdf'),
+  );
+  const frozen = revisions(db).snapshotBlock(actor, receipt.blockId);
+  expect(JSON.stringify(frozen.content).length).toBeGreaterThan(6000);
+  const workspace = readBrane(db, actor, brane);
+  expect(JSON.stringify(workspace).length).toBeLessThan(2000);
+  expect(JSON.stringify(workspace)).not.toContain('Detailed evidence');
+  const summary = workspace.blocks[0].content;
+  if (summary.format !== 'pdf') throw new Error('expected PDF');
+  expect(summary.representation).not.toHaveProperty('pages');
+  expect(readPdfPages(db, actor, summary.representationId)).toEqual(
+    (frozen.content as any).representation,
+  );
+  expect(() => readPdfPages(db, uid(), summary.representationId)).toThrow('not found');
+  expect(() => readPdfPages(db, actor, 'f'.repeat(64))).toThrow('not found');
 });

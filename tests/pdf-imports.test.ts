@@ -1,4 +1,4 @@
-import { encodeContent } from '../server/services/representations';
+import { encodeContent, decodeContent } from '../server/services/representations';
 import { beforeEach, afterEach, expect, it } from 'vitest';
 import { openDatabase, type DB } from '../server/db/index';
 import { createImports } from '../server/services/imports';
@@ -50,13 +50,17 @@ const upload = (pages: string[]) =>
       intent(),
       new File([pdfFixture(pages)], 'Research.pdf', { type: 'application/pdf' }),
     )
-    .then(
-      (receipt) =>
-        readBrane(db, actor, brane).blocks.find((b) => b.id === receipt.blockId)! as {
-          id: string;
-          content: PdfContent;
-        },
-    );
+    .then((receipt) => ({
+      id: receipt.blockId,
+      content: decodeContent(
+        db,
+        (
+          db
+            .prepare('SELECT content_json FROM block_live_state WHERE block_id=?')
+            .get(receipt.blockId) as { content_json: string }
+        ).content_json,
+      ) as PdfContent,
+    }));
 it('retains original PDF bytes and freezes page-aware text with an explicit extractor version', async () => {
   const original = pdfFixture(['First page evidence', '', 'Third page conclusion']);
   const result = await upload(['First page evidence', '', 'Third page conclusion']);

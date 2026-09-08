@@ -1,3 +1,4 @@
+import { readPdfPages } from '../services/representations.js';
 import { MAX_BLOCK_TEXT_CHARACTERS } from '../../shared/limits.js';
 import { admitImport } from '../services/capacity.js';
 import { readRunPage } from '../services/run-reads.js';
@@ -304,6 +305,18 @@ export function createApi(
   });
   app.get('/imports/:key', (c) =>
     c.json(imports.status(c.get('actor'), id.parse(c.req.param('key')))),
+  );
+  app.get('/representations/:id/pages', (c) =>
+    c.json(
+      readPdfPages(
+        db,
+        c.get('actor'),
+        z
+          .string()
+          .regex(/^[a-f0-9]{64}$/)
+          .parse(c.req.param('id')),
+      ),
+    ),
   );
   app.get('/assets/:id', async (c) => {
     const asset = requireOwned(db, 'assets', c.get('actor'), id.parse(c.req.param('id')));

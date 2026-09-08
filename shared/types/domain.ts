@@ -66,6 +66,13 @@ export interface PdfContent {
   error?: never;
 }
 export type Content = TextContent | WebpageContent | ImageContent | PdfContent;
+export type PdfSummary = Omit<PdfContent, 'representation'> & {
+  representationId: string;
+  representation:
+    | { kind: 'pdf-text-v1'; extractor: string; status: 'ready'; pages?: never }
+    | Extract<PdfRepresentation, { status: 'unavailable' }>;
+};
+export type WorkspaceContent = Exclude<Content, PdfContent> | PdfSummary;
 export interface Brane {
   id: string;
   title: string;
@@ -76,7 +83,7 @@ export interface Block {
   id: string;
   kind: BlockKind;
   origin: 'authored' | 'generated';
-  content: Content;
+  content: WorkspaceContent;
   version: number;
   messageId?: string;
 }

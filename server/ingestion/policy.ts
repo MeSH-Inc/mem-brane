@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import pdfPackage from 'pdfjs-dist/package.json';
+import pdfPackage from 'pdfjs-dist/package.json' with { type: 'json' };
 import sharp from 'sharp';
 import { canonicalJson } from '../domain/canonical.js';
 export const pdfLimits = Object.freeze({

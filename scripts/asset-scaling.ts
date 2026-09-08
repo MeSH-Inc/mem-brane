@@ -69,17 +69,18 @@ try {
       );
       const state = readBrane(db, actor, brane),
         block = state.blocks.find((b) => b.id === receipt.blockId)!;
-      revisions(db).snapshotBlock(actor, block.id);
+      const expanded = revisions(db).snapshotBlock(actor, block.id).content;
       if (
-        block.content.format === 'pdf' &&
-        (block.content.representation.status !== 'ready' ||
-          block.content.representation.pages.reduce((n, p) => n + p.text.length, 0) < 6000)
+        expanded.format === 'pdf' &&
+        (expanded.representation.status !== 'ready' ||
+          expanded.representation.pages.reduce((n, p) => n + p.text.length, 0) < 6000)
       )
         throw new Error('PDF fixture lost evidence');
-      legacyContentBytes += 2 * Buffer.byteLength(JSON.stringify(block.content));
+      legacyContentBytes += 2 * Buffer.byteLength(JSON.stringify(expanded));
       legacyResultBytes += Buffer.byteLength(
         JSON.stringify({
           ...block,
+          content: expanded,
           placement: state.placements.find((p) => p.id === receipt.placementId),
         }),
       );

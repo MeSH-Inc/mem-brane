@@ -59,6 +59,15 @@ export async function verifyRestoration(db: DB, store: Pick<AssetStore, 'get'>) 
       .get()
   )
     throw new Error('Extraction result integrity mismatch');
+  if (
+    db
+      .prepare(
+        `SELECT 1 FROM asset_representations r LEFT JOIN representation_summaries s ON s.representation_id=r.id
+    WHERE s.summary_json IS NOT json_remove(r.payload_json,'$.representation.pages') LIMIT 1`,
+      )
+      .get()
+  )
+    throw new Error('Representation summary integrity mismatch');
   let references = 0;
   for (const row of db
     .prepare(

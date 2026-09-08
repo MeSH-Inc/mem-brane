@@ -1,6 +1,11 @@
 import { canonicalJson, representationId } from '../domain/canonical.js';
 import type { DB } from '../db/index.js';
-import type { Content } from '../../shared/types/domain.js';
+import type {
+  Content,
+  WorkspaceContent,
+  PdfSummary,
+  PdfRepresentation,
+} from '../../shared/types/domain.js';
 import { content as contentSchema } from '../../shared/schemas/index.js';
 import { DomainError, requireOwned } from '../domain/access.js';
 
@@ -50,4 +55,38 @@ export function decodeContent(db: DB, json: string): Content {
     mimeType: row.mime,
     ...JSON.parse(row.payload_json),
   });
+}
+
+export function decodeWorkspaceContent(db: DB, json: string): WorkspaceContent {
+  const stored = JSON.parse(json);
+  if (stored.format !== 'pdf') return decodeContent(db, json) as WorkspaceContent;
+  const row = db
+    .prepare(
+      `SELECT s.summary_json,a.id asset_id,a.digest,a.mime FROM representation_summaries s
+    JOIN asset_representations r ON r.id=s.representation_id JOIN assets a ON a.id=r.asset_id
+    WHERE r.id=? AND r.format='pdf'`,
+    )
+    .get(stored.representationId) as
+    { summary_json: string; asset_id: string; digest: string; mime: 'application/pdf' } | undefined;
+  if (!row) throw new Error('Missing PDF summary');
+  return {
+    format: 'pdf',
+    text: stored.text,
+    filename: stored.filename,
+    representationId: stored.representationId,
+    assetId: row.asset_id,
+    assetHash: row.digest,
+    mimeType: row.mime,
+    ...JSON.parse(row.summary_json),
+  } as PdfSummary;
+}
+export function readPdfPages(db: DB, actor: string, id: string): PdfRepresentation {
+  const row = db
+    .prepare(
+      `SELECT r.payload_json FROM asset_representations r JOIN assets a ON a.id=r.asset_id
+    WHERE r.id=? AND a.owner_id=? AND r.format='pdf'`,
+    )
+    .get(id, actor) as { payload_json: string } | undefined;
+  if (!row) throw new DomainError(404, 'PDF representation not found');
+  return JSON.parse(row.payload_json).representation;
 }

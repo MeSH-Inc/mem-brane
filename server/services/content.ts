@@ -1,4 +1,4 @@
-import { encodeContent, decodeContent } from './representations.js';
+import { encodeContent, decodeContent, decodeWorkspaceContent } from './representations.js';
 import { readWorkspaceRuns, readVisibleDerivations } from './run-reads.js';
 import {
   MAX_BRANE_PLACEMENTS,
@@ -279,7 +279,7 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
       kind: b.kind,
       origin: b.origin,
       version: b.version ?? 0,
-      content: decodeContent(
+      content: decodeWorkspaceContent(
         db,
         b.content_json ?? b.final_content ?? '{"format":"text","text":""}',
       ),
