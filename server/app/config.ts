@@ -16,6 +16,9 @@ const env = z
     CHECKPOINT_INTERVAL_MS: positive(1000),
     CHECKPOINT_CHARACTERS: positive(256),
     LEASE_MS: positive(30000),
+    RUN_TOTAL_MS: positive(300000),
+    RUN_IDLE_MS: positive(60000),
+    SHUTDOWN_MS: positive(20000),
     DAILY_USER_SPEND_LIMIT: z.coerce.number().nonnegative().default(0),
   })
   .parse(process.env);

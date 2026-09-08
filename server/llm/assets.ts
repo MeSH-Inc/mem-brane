@@ -10,11 +10,13 @@ export async function resolveMessages(
   store: AssetStore,
   actor: string,
   inputs: RunInput[],
+  signal?: AbortSignal,
 ): Promise<ModelMessage[]> {
   const messages = buildMessages(inputs);
   // Resolve exact bytes from frozen asset IDs + hashes. Mutable LiveState is never consulted.
   const cache = new Map<string, Uint8Array>();
   for (const [index, input] of inputs.entries()) {
+    signal?.throwIfAborted();
     const content = input.content;
     if (!content.assetId) continue;
     const asset = requireOwned(db, 'assets', actor, content.assetId);
@@ -25,7 +27,8 @@ export async function resolveMessages(
       );
     let bytes = cache.get(content.assetId);
     if (!bytes) {
-      bytes = await store.get(asset.storage_key);
+      bytes = await store.get(asset.storage_key, signal);
+      signal?.throwIfAborted();
       cache.set(content.assetId, bytes);
     }
     if (createHash('sha256').update(bytes).digest('hex') !== content.assetHash)

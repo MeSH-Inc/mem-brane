@@ -1,3 +1,4 @@
+import { abortable } from '../app/abort.js';
 import {
   settleCost,
   holdUncertainCost,
@@ -16,6 +17,9 @@ export interface WorkerOptions {
   leaseMs: number;
   checkpointMs: number;
   checkpointCharacters: number;
+  totalMs?: number;
+  idleMs?: number;
+  onFatal?: (error: unknown) => void;
 }
 export function recoverStale(db: DB, time = now()) {
   return db.transaction(() => {
@@ -63,6 +67,19 @@ export class RunWorker {
   private promises = new Set<Promise<void>>();
   private timer?: ReturnType<typeof setInterval>;
   private stopping = false;
+  private failed = false;
+  get healthy() {
+    return !this.failed && !this.stopping;
+  }
+  private fail(error: unknown) {
+    if (this.failed) return;
+    this.failed = true;
+    this.stopping = true;
+    if (this.timer) clearInterval(this.timer);
+    for (const controller of this.active.values()) controller.abort(error);
+    lifecycleLog('worker_failed', { workerId: this.id });
+    this.options.onFatal?.(error);
+  }
   constructor(
     private db: DB,
     private hub: EventHub,
@@ -71,21 +88,27 @@ export class RunWorker {
   ) {}
   start() {
     this.tick();
-    this.timer = setInterval(() => this.tick(), 250);
+    if (!this.stopping) this.timer = setInterval(() => this.tick(), 250);
   }
   tick() {
     if (this.stopping) return;
-    recoverStale(this.db);
-    while (this.active.size < this.options.concurrency) {
-      const run = claimRun(this.db, this.id, this.options.leaseMs);
-      if (!run) break;
-      const controller = new AbortController();
-      this.active.set(run.id, controller);
-      const promise = this.perform(run, controller).finally(() => {
-        this.active.delete(run.id);
-        this.promises.delete(promise);
-      });
-      this.promises.add(promise);
+    try {
+      recoverStale(this.db);
+      while (this.active.size < this.options.concurrency) {
+        const run = claimRun(this.db, this.id, this.options.leaseMs);
+        if (!run) break;
+        const controller = new AbortController();
+        this.active.set(run.id, controller);
+        const promise = this.perform(run, controller)
+          .catch((error) => this.fail(error))
+          .finally(() => {
+            this.active.delete(run.id);
+            this.promises.delete(promise);
+          });
+        this.promises.add(promise);
+      }
+    } catch (error) {
+      this.fail(error);
     }
   }
   async stop() {
@@ -142,45 +165,67 @@ export class RunWorker {
     publish('running');
     const heartbeat = setInterval(
       () => {
-        const current = db
-          .prepare('SELECT status,lease_owner FROM runs WHERE id=?')
-          .get(run.id) as any;
-        if (
-          current.status === 'cancel_requested' ||
-          current.lease_owner !== this.id ||
-          current.status !== 'running'
-        )
-          controller.abort(new Error('Run stopped'));
-        else {
-          db.prepare('UPDATE runs SET lease_until=? WHERE id=? AND lease_owner=?').run(
-            now() + this.options.leaseMs,
-            run.id,
-            this.id,
-          );
-          db.prepare('UPDATE run_attempts SET heartbeat_at=? WHERE id=?').run(now(), attemptId);
+        try {
+          const current = db
+            .prepare('SELECT status,lease_owner FROM runs WHERE id=?')
+            .get(run.id) as any;
+          if (
+            current.status === 'cancel_requested' ||
+            current.lease_owner !== this.id ||
+            current.status !== 'running'
+          )
+            controller.abort(new Error('Run stopped'));
+          else {
+            db.prepare('UPDATE runs SET lease_until=? WHERE id=? AND lease_owner=?').run(
+              now() + this.options.leaseMs,
+              run.id,
+              this.id,
+            );
+            db.prepare('UPDATE run_attempts SET heartbeat_at=? WHERE id=?').run(now(), attemptId);
+          }
+          if (text !== savedText && now() - savedAt >= this.options.checkpointMs) checkpoint();
+        } catch (error) {
+          this.fail(error);
         }
-        if (text !== savedText && now() - savedAt >= this.options.checkpointMs) checkpoint();
       },
       Math.min(500, Math.max(50, this.options.leaseMs / 3)),
     );
+    const total = setTimeout(
+      () => controller.abort(new Error('Run deadline exceeded')),
+      this.options.totalMs ?? 300000,
+    );
+    let idle: ReturnType<typeof setTimeout>;
+    const progress = () => {
+      clearTimeout(idle);
+      idle = setTimeout(
+        () => controller.abort(new Error('Run stalled')),
+        this.options.idleMs ?? 60000,
+      );
+    };
+    progress();
     try {
-      const result = await this.execute(
-        {
-          actor: run.owner_id,
-          model: run.model,
-          maxOutputTokens: JSON.parse(run.options_json).maxOutputTokens,
-          inputs: readInputs(db, run.id),
-          signal: controller.signal,
-        },
-        (chunk) => {
-          text += chunk;
-          publish();
-          if (
-            text.length - savedText.length >= this.options.checkpointCharacters ||
-            now() - savedAt >= this.options.checkpointMs
-          )
-            checkpoint();
-        },
+      const result = await abortable(
+        this.execute(
+          {
+            actor: run.owner_id,
+            model: run.model,
+            maxOutputTokens: JSON.parse(run.options_json).maxOutputTokens,
+            inputs: readInputs(db, run.id),
+            signal: controller.signal,
+          },
+          (chunk) => {
+            controller.signal.throwIfAborted();
+            progress();
+            text += chunk;
+            publish();
+            if (
+              text.length - savedText.length >= this.options.checkpointCharacters ||
+              now() - savedAt >= this.options.checkpointMs
+            )
+              checkpoint();
+          },
+        ),
+        controller.signal,
       );
       controller.signal.throwIfAborted();
       db.transaction(() => {
@@ -280,6 +325,8 @@ export class RunWorker {
         );
     } finally {
       clearInterval(heartbeat);
+      clearTimeout(total);
+      clearTimeout(idle!);
     }
   }
 }

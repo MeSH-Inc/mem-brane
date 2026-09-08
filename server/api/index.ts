@@ -277,6 +277,8 @@ export function createApi(
             .catch(resolve);
       }, 15000);
       stream.onAbort(resolve);
+      hub.signal.addEventListener('abort', resolve, { once: true });
+      if (hub.signal.aborted) resolve();
       try {
         await stream.writeSSE({ event: 'ready', data: JSON.stringify({ reconcile: true }) });
         await done;
@@ -285,6 +287,7 @@ export function createApi(
         clearInterval(updates);
         clearInterval(ping);
         unsubscribe();
+        hub.signal.removeEventListener('abort', resolve);
       }
     }),
   );

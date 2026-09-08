@@ -8,6 +8,13 @@ export interface RunEvent {
 }
 export class EventHub {
   private events = new EventEmitter();
+  private shutdown = new AbortController();
+  get signal() {
+    return this.shutdown.signal;
+  }
+  close() {
+    this.shutdown.abort();
+  }
   constructor() {
     this.events.setMaxListeners(1000);
   }

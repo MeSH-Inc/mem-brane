@@ -297,3 +297,79 @@ it('enforces ownership on branes, blocks, runs and assets', () => {
   expect(() => requireOwned(db, 'assets', other, asset)).toThrow('not found');
   expect(() => createPlacement(db, other, brane, block)).toThrow('not found');
 });
+
+it.each(['idle', 'total'])(
+  'bounds %s execution and fences late output from an uncooperative executor',
+  async (deadline) => {
+    const run = submit();
+    let emit!: (text: string) => void;
+    let finish!: (result: { text: string }) => void;
+    const worker = new RunWorker(
+      db,
+      new EventHub(),
+      async (_request, onChunk) => {
+        emit = onChunk;
+        onChunk('Partial');
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      },
+      {
+        concurrency: 1,
+        leaseMs: 1000,
+        checkpointMs: 1,
+        checkpointCharacters: 1,
+        idleMs: deadline === 'idle' ? 20 : 1000,
+        totalMs: deadline === 'total' ? 20 : 1000,
+      },
+    );
+    worker.tick();
+    await expect
+      .poll(() => (db.prepare('SELECT status FROM runs WHERE id=?').get(run.id) as any).status)
+      .toBe('failed');
+    expect(() => emit('Late')).toThrow();
+    finish({ text: 'Late success' });
+    await worker.stop();
+    expect(db.prepare('SELECT * FROM run_outputs WHERE run_id=?').get(run.id)).toBeUndefined();
+    expect(
+      (db.prepare('SELECT text FROM run_checkpoints WHERE run_id=?').get(run.id) as any).text,
+    ).toBe('Partial');
+    expect(
+      (db.prepare('SELECT status FROM run_costs WHERE run_id=?').get(run.id) as any).status,
+    ).toBe('uncertain');
+  },
+);
+
+it('shutdown interrupts execution even when the executor ignores cancellation', async () => {
+  const run = submit();
+  const worker = new RunWorker(db, new EventHub(), async () => new Promise(() => {}), {
+    concurrency: 1,
+    leaseMs: 1000,
+    checkpointMs: 100,
+    checkpointCharacters: 100,
+  });
+  worker.tick();
+  await worker.stop();
+  expect((db.prepare('SELECT status FROM runs WHERE id=?').get(run.id) as any).status).toBe(
+    'interrupted',
+  );
+});
+
+it('supervises claim failures instead of throwing from the scheduling timer', async () => {
+  let failures = 0;
+  const worker = new RunWorker(db, new EventHub(), async () => ({ text: '' }), {
+    concurrency: 1,
+    leaseMs: 1000,
+    checkpointMs: 100,
+    checkpointCharacters: 100,
+    onFatal: () => {
+      failures++;
+    },
+  });
+  db.exec('DROP INDEX runs_queue; ALTER TABLE runs RENAME TO unavailable_runs');
+  expect(() => worker.tick()).not.toThrow();
+  expect(worker.healthy).toBe(false);
+  worker.tick();
+  expect(failures).toBe(1);
+  await worker.stop();
+});

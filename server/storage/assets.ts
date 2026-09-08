@@ -10,7 +10,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from '../app/config.js';
 export interface AssetStore {
   put(key: string, bytes: Uint8Array, mime: string): Promise<void>;
-  get(key: string): Promise<Uint8Array>;
+  get(key: string, signal?: AbortSignal): Promise<Uint8Array>;
   delete(key: string): Promise<void>;
   createReadUrl(key: string): Promise<string>;
 }
@@ -24,8 +24,8 @@ export class FileAssetStore implements AssetStore {
     await mkdir(this.directory, { recursive: true });
     await writeFile(this.path(key), bytes, { flag: 'wx' });
   }
-  async get(key: string) {
-    return readFile(this.path(key));
+  async get(key: string, signal?: AbortSignal) {
+    return readFile(this.path(key), { signal });
   }
   async delete(key: string) {
     await unlink(this.path(key));
@@ -60,9 +60,10 @@ export class R2AssetStore implements AssetStore {
       }),
     );
   }
-  async get(key: string) {
+  async get(key: string, signal?: AbortSignal) {
     const response = await this.client.send(
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      { abortSignal: signal },
     );
     return (await response.Body?.transformToByteArray()) ?? new Uint8Array();
   }

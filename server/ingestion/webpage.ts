@@ -1,3 +1,4 @@
+import { abortable } from '../app/abort.js';
 import { lookup } from 'node:dns/promises';
 import ipaddr from 'ipaddr.js';
 import { Agent, fetch } from 'undici';
@@ -60,7 +61,10 @@ export async function fetchWebpage(
   let target = raw;
   for (let redirect = 0; redirect <= 5; redirect++) {
     signal.throwIfAborted();
-    const { url, address } = await validateDestination(target, dependencies.resolve);
+    const { url, address } = await abortable(
+      validateDestination(target, dependencies.resolve),
+      signal,
+    );
     const agent = new Agent({
       connect: {
         lookup: ((_host: any, options: any, callback: any) => {
@@ -115,14 +119,26 @@ export class IngestionWorker {
   constructor(
     private db: DB,
     private maxBytes: number,
+    private onFatal?: (error: unknown) => void,
   ) {}
+  private failed = false;
+  get healthy() {
+    return !this.failed;
+  }
+  private fail(error: unknown) {
+    this.failed = true;
+    if (this.timer) clearInterval(this.timer);
+    this.onFatal?.(error);
+  }
   start() {
     this.db.prepare("UPDATE ingestions SET status='queued' WHERE status='running'").run();
     this.timer = setInterval(() => {
       if (!this.active) {
-        this.active = this.next().finally(() => {
-          this.active = null;
-        });
+        this.active = this.next()
+          .catch((error) => this.fail(error))
+          .finally(() => {
+            this.active = null;
+          });
       }
     }, 500);
   }
