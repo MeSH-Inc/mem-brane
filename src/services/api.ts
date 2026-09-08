@@ -13,6 +13,7 @@ export async function api<T = any>(
 ): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method,
+    signal: AbortSignal.timeout(30000),
     credentials: 'same-origin',
     headers:
       body instanceof FormData
@@ -22,7 +23,12 @@ export async function api<T = any>(
           : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
   });
-  const data = await response.json();
+  if (response.status === 401 && !path.startsWith('/auth/'))
+    window.dispatchEvent(new Event('brane:session-expired'));
+  const data = await response.json().catch(() => {
+    if (response.ok) throw new Error('Invalid server response');
+    return { error: 'Request failed' };
+  });
   if (!response.ok)
     throw new ApiError(
       response.status,

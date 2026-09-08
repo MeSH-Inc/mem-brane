@@ -1,3 +1,5 @@
+import { TextSaves } from '../services/text-saves';
+import { Submission } from '../services/submission';
 import { canvasTools } from '../canvas/tools';
 import { selectedBlockIds } from '../canvas/selection';
 import {
@@ -107,8 +109,8 @@ export function BraneView({
   const selectedBlocks = selectedBlockIds(state?.placements ?? [], ui.selectedPlacements);
   const navigate = useNavigate();
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const saves = useRef<Promise<unknown>>(Promise.resolve());
-  const pending = useRef<SubmitRun | null>(null);
+  const [textSaves] = useState(() => new TextSaves((edit) => api('/blocks/live', edit, 'PATCH')));
+  const [submission] = useState(() => new Submission<SubmitRun>());
   const spawnRequests = useRef(new Map<string, SpawnArtifact>());
   const spawningRef = useRef(new Set<string>());
   const [spawning, setSpawning] = useState<string[]>([]);
@@ -120,25 +122,26 @@ export function BraneView({
     void api('/budget')
       .then(setBudget)
       .catch(() => {});
-    const next = await api<BraneState>(`/branes/${braneId}`);
+    const next = textSaves.reconcile(await api<BraneState>(`/branes/${braneId}`));
     if (generation !== refreshGeneration.current) return;
     placementSaves.observe(next.placements);
     stateRef.current = next;
     setState(next);
-  }, [braneId, placementSaves]);
+  }, [braneId, placementSaves, textSaves]);
   useEffect(() => {
     void refresh().catch((e) => setError(e.message));
-    void api('/config').then((c) => {
-      setModels(c.models);
-      setBudget(c.budget);
-      setVision(c.modelCapabilities);
-      setModel(c.defaultModel);
-    });
+    void api('/config')
+      .then((c) => {
+        setModels(c.models);
+        setBudget(c.budget);
+        setVision(c.modelCapabilities);
+        setModel(c.defaultModel);
+      })
+      .catch((e) => setError(e.message));
     ui.resetContext();
     setInspected(undefined);
     setError('');
     setNotice('');
-    pending.current = null;
   }, [braneId, refresh]);
   useEffect(() => {
     let active = true;
@@ -209,57 +212,41 @@ export function BraneView({
   }, [braneId, refresh]);
   const saveBlock = useCallback((id: string) => {
     clearTimeout(timers.current[id]);
-    const work = saves.current
-      .catch(() => {})
-      .then(async () => {
-        const interaction = useInteraction.getState();
-        const text = interaction.drafts[id];
-        if (text === undefined) return;
-        const block = stateRef.current?.blocks.find((b) => b.id === id);
-        if (!block) return;
-        const draft = interaction.draftRecords[id];
-        if (draft && draftDisposition(draft, block) === 'saved') {
-          interaction.clearDraft(id, text);
-          return;
-        }
-        if (draft && draftDisposition(draft, block) === 'conflict')
-          throw new Error('Resolve the changed block below before saving or running.');
-        await interaction.flushRecovery().catch(() => {});
-        const result = await api(
-          '/blocks/live',
-          { blockId: id, text, version: draft?.baseVersion ?? block.version },
-          'PATCH',
-        ).catch(async (error) => {
+    const work = textSaves.serialize(async () => {
+      const interaction = useInteraction.getState();
+      const text = interaction.drafts[id];
+      if (text === undefined) return;
+      const block = stateRef.current?.blocks.find((b) => b.id === id);
+      if (!block) return;
+      const draft = interaction.draftRecords[id];
+      if (draft && draftDisposition(draft, block) === 'saved') {
+        interaction.clearDraft(id, text);
+        return;
+      }
+      if (draft && draftDisposition(draft, block) === 'conflict')
+        throw new Error('Resolve the changed block below before saving or running.');
+      await interaction.flushRecovery().catch(() => {});
+      const result = await textSaves
+        .save({ blockId: id, text, version: draft?.baseVersion ?? block.version })
+        .catch(async (error) => {
           if (error instanceof ApiError && error.status === 409) {
-            const next = await api<BraneState>(`/branes/${stateRef.current!.brane.id}`);
+            const next = textSaves.reconcile(
+              await api<BraneState>(`/branes/${stateRef.current!.brane.id}`),
+            );
             stateRef.current = next;
             setState(next);
           }
           throw error;
         });
-        setState((s) => {
-          if (!s) return s;
-          const next = {
-            ...s,
-            blocks: s.blocks.map((b) =>
-              b.id === id ? { ...b, version: result.version, content: result.content } : b,
-            ),
-          };
-          stateRef.current = next;
-          return next;
-        });
-        if (stateRef.current)
-          stateRef.current = {
-            ...stateRef.current,
-            blocks: stateRef.current.blocks.map((b) =>
-              b.id === id ? { ...b, version: result.version, content: result.content } : b,
-            ),
-          };
-        useInteraction.getState().clearDraft(id, text);
-        if (useInteraction.getState().drafts[id] !== undefined)
-          useInteraction.getState().rebase(id, result.version);
-      });
-    saves.current = work;
+      if (stateRef.current) {
+        const next = textSaves.reconcile(stateRef.current);
+        stateRef.current = next;
+        setState(next);
+      }
+      useInteraction.getState().clearDraft(id, text);
+      if (useInteraction.getState().drafts[id] !== undefined)
+        useInteraction.getState().rebase(id, result.version);
+    });
     return work;
   }, []);
   const edit = useCallback(
@@ -276,7 +263,7 @@ export function BraneView({
   );
   const flush = useCallback(async () => {
     for (const block of stateRef.current?.blocks ?? []) await saveBlock(block.id);
-    await saves.current;
+    await textSaves.flush();
   }, [saveBlock]);
   useEffect(() => {
     const before = (e: BeforeUnloadEvent) => {
@@ -357,64 +344,62 @@ export function BraneView({
       setError('');
       // Join the autosave queue: earlier writes finish first, later writes wait until
       // the source edit and frozen input have committed together.
-      const work = saves.current
-        .catch(() => {})
-        .then(async () => {
-          let request = spawnRequests.current.get(blockId);
-          if (!request) {
-            const block = stateRef.current?.blocks.find((b) => b.id === blockId);
-            if (!block) throw new Error('Source artifact is no longer available.');
-            const draft = useInteraction.getState().draftRecords[blockId];
-            if (draft && draftDisposition(draft, block) === 'conflict')
-              throw new Error('Resolve the changed source before spawning.');
-            request = {
-              braneId,
-              key: crypto.randomUUID(),
-              sourceBlockIds: [blockId],
-              anchorPlacementId: placementId,
-              action: 'develop',
-              model,
-              edits:
-                draft && draftDisposition(draft, block) !== 'saved'
-                  ? [{ blockId, text: draft.text, version: draft.baseVersion }]
-                  : [],
+      const work = textSaves.serialize(async () => {
+        let request = spawnRequests.current.get(blockId);
+        if (!request) {
+          const block = stateRef.current?.blocks.find((b) => b.id === blockId);
+          if (!block) throw new Error('Source artifact is no longer available.');
+          const draft = useInteraction.getState().draftRecords[blockId];
+          if (draft && draftDisposition(draft, block) === 'conflict')
+            throw new Error('Resolve the changed source before spawning.');
+          request = {
+            braneId,
+            key: crypto.randomUUID(),
+            sourceBlockIds: [blockId],
+            anchorPlacementId: placementId,
+            action: 'develop',
+            model,
+            edits:
+              draft && draftDisposition(draft, block) !== 'saved'
+                ? [{ blockId, text: draft.text, version: draft.baseVersion }]
+                : [],
+          };
+          spawnRequests.current.set(blockId, request);
+        }
+        const result = await api<Run>('/artifacts/spawn', request);
+        spawnRequests.current.delete(blockId);
+        for (const edit of request.edits) {
+          const current = stateRef.current;
+          if (current) {
+            const next = {
+              ...current,
+              blocks: current.blocks.map((b) =>
+                b.id === edit.blockId && b.version <= edit.version
+                  ? {
+                      ...b,
+                      version: edit.version + 1,
+                      content: { ...b.content, text: edit.text },
+                    }
+                  : b,
+              ),
             };
-            spawnRequests.current.set(blockId, request);
+            const reconciled = textSaves.reconcile(next);
+            stateRef.current = reconciled;
+            setState(reconciled);
           }
-          const result = await api<Run>('/artifacts/spawn', request);
-          spawnRequests.current.delete(blockId);
-          for (const edit of request.edits) {
-            const current = stateRef.current;
-            if (current) {
-              const next = {
-                ...current,
-                blocks: current.blocks.map((b) =>
-                  b.id === edit.blockId && b.version <= edit.version
-                    ? {
-                        ...b,
-                        version: edit.version + 1,
-                        content: { ...b.content, text: edit.text },
-                      }
-                    : b,
-                ),
-              };
-              stateRef.current = next;
-              setState(next);
-            }
-            const interaction = useInteraction.getState();
-            interaction.clearDraft(edit.blockId, edit.text);
-            interaction.rebase(
-              edit.blockId,
-              stateRef.current?.blocks.find((b) => b.id === edit.blockId)?.version ??
-                edit.version + 1,
-            );
-          }
-          setNotice('Artifact spawned · source context frozen');
-          await refresh();
-          setRevealedBlock(result.output_block_id);
-          if (mobile) focusBlock(result.output_block_id);
-        });
-      saves.current = work;
+          const interaction = useInteraction.getState();
+          interaction.clearDraft(edit.blockId, edit.text);
+          interaction.rebase(
+            edit.blockId,
+            stateRef.current?.blocks.find((b) => b.id === edit.blockId)?.version ??
+              edit.version + 1,
+          );
+        }
+        setNotice('Artifact spawned · source context frozen');
+        await refresh();
+        setRevealedBlock(result.output_block_id);
+        if (mobile) focusBlock(result.output_block_id);
+      });
       void work
         .catch((e) => {
           if (e instanceof ApiError && e.status >= 400 && e.status < 500)
@@ -434,20 +419,22 @@ export function BraneView({
     setBusy(true);
     setError('');
     try {
-      await flush();
-      const input = pending.current ?? {
-        braneId,
-        key: crypto.randomUUID(),
-        model,
-        prompt,
-        references: ui.references,
-        continueFrom: ui.continueFrom,
-        edits: [],
-      };
-      pending.current = input;
-      await api('/runs', input);
-      pending.current = null;
-      setPrompt('');
+      const accepted = await submission.send(
+        async () => {
+          await flush();
+          return {
+            braneId,
+            key: crypto.randomUUID(),
+            model,
+            prompt,
+            references: ui.references,
+            continueFrom: ui.continueFrom,
+            edits: [],
+          };
+        },
+        (input) => api('/runs', input),
+      );
+      setPrompt((current) => (current === accepted.prompt ? '' : current));
       setNotice('Run submitted · context frozen');
       await refresh();
     } catch (e) {
@@ -666,16 +653,11 @@ export function BraneView({
               >
                 Reload state
               </button>
-              {pending.current && (
-                <button
-                  onClick={() => {
-                    pending.current = null;
-                    setNotice('Next Run will submit a new request');
-                    setError('');
-                  }}
-                >
-                  Discard pending submission
-                </button>
+              {submission.state.status === 'uncertain' && (
+                <p>
+                  Delivery is uncertain. Retry submission checks the original request; edits to the
+                  composer are kept for your next run.
+                </p>
               )}
             </div>
           )}
@@ -805,10 +787,14 @@ export function BraneView({
               />
               <button
                 className="primary run-button"
-                disabled={busy || (!pending.current && !prompt.trim())}
+                disabled={busy || (submission.state.status !== 'uncertain' && !prompt.trim())}
                 onClick={() => void run()}
               >
-                {busy ? 'Submitting…' : pending.current ? 'Retry submission ↗' : 'Run ↗'}
+                {busy
+                  ? 'Submitting…'
+                  : submission.state.status === 'uncertain'
+                    ? 'Retry submission ↗'
+                    : 'Run ↗'}
               </button>
             </div>
             <div className="composer-meta">

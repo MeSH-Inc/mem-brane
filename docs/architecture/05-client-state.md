@@ -27,3 +27,14 @@ Failures pause the affected lane without rolling back the latest local geometry.
 Geometry tests use deferred promises to exercise acknowledgement ordering, remote-version conflicts, coalescing, independent lanes, failed reads, explicit retry/discard and stale refreshes. Browser coverage holds actual PATCH responses while newer keyboard moves are made and verifies the conflict/retry UI. API tests enforce version preconditions and ownership for both reads and writes.
 
 The route loads `BraneCanvas` through a lazy import only when Canvas is rendered. React Flow and its stylesheet remain behind that boundary; Focus and the toolbar depend only on the library-independent tool catalog. A local Suspense fallback keeps navigation and the composer available while the canvas loads. Browser tests cover explicit Focus and the mobile default, delayed loading, returning to Focus during loading, and subsequent canvas activation.
+
+Text acknowledgements and workspace refreshes pass through `TextSaves`, which accepts
+only increasing authored block versions. The same service serializes text writes and
+Spawn snapshots. A delayed read cannot erase an acknowledged save.
+
+Composed submissions distinguish preparation, delivery, definite rejection and
+uncertain delivery. Definite rejection permits corrected inputs with a new key.
+Uncertain delivery retries the exact frozen request and key without flushing new edits.
+Accepting an older request preserves a different current composer prompt. API calls
+have a thirty-second deadline; expired sessions return to authentication while local
+text draft recovery remains available.

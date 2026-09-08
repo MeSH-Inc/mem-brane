@@ -128,7 +128,11 @@ function Shell() {
     void api<Brane[]>('/branes')
       .then(setBranes)
       .catch((e) => setError(e.message));
-  useEffect(refreshSession, []);
+  useEffect(() => {
+    refreshSession();
+    window.addEventListener('brane:session-expired', refreshSession);
+    return () => window.removeEventListener('brane:session-expired', refreshSession);
+  }, []);
   useEffect(() => {
     if (!session) return;
     refreshBranes();
