@@ -259,7 +259,13 @@ it('paginates immutable revision history and rejects invalid or foreign cursors'
   const detail = await (
     await app.request(`/api/revisions/${first.items[0].id}`, { headers: headers() })
   ).json();
-  expect(detail).toEqual(first.items[0]);
+  expect(first.items[0]).not.toHaveProperty('content');
+  expect(detail).toMatchObject({
+    id: first.items[0].id,
+    block_id: first.items[0].block_id,
+    created_at: first.items[0].created_at,
+    content: { format: first.items[0].format, text: first.items[0].preview },
+  });
   for (const query of [
     '?limit=0',
     '?limit=51',

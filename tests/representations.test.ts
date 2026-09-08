@@ -261,7 +261,7 @@ it('bounds PDF history pages to summaries and expands only a requested revision'
   expect(JSON.stringify(page).length).toBeLessThan(10000);
   expect(page.items.every((r) => r.preview.length <= 160 && !('content' in r))).toBe(true);
   const exact = readRevision(db, actor, page.items[0].id);
-  expect(exact.content.text).toContain('Revision 59');
+  expect(exact.content.text.slice(0, 160)).toBe(page.items[0].preview);
   expect(JSON.stringify(exact.content)).toContain('Frozen history evidence');
   expect(JSON.stringify(exact.content).length).toBeGreaterThan(6000);
 });

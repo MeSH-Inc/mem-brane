@@ -9,10 +9,9 @@ over revisions. A unique index enforces one producing run per output block.
 
 Completed run summaries contain an empty `partial`; their content belongs to the
 final block revision. Failed and active checkpoints remain available in summaries.
-This projection does not delete checkpoint evidence. Workspace reads include full
-block content, runs producing placed blocks (including outputs reused from another
+This projection does not delete checkpoint evidence. Workspace reads include text/image content and PDF summaries, runs producing placed blocks (including outputs reused from another
 brane), and active runs originating in the brane. They do not include removed,
-stopped history and are not a lazy content-loading protocol.
+stopped history. PDF page text is fetched separately by immutable representation identity.
 
 Visible run and derivation queries start from distinct placed Block IDs with a
 fixed outer join loop and indexed producer lookup. Active runs use a partial index.
@@ -33,6 +32,12 @@ uses descending `(created_at, id)` so equal timestamps cannot skip records. Newe
 insertions do not shift subsequent pages. A composite index supports the ordering.
 The UI appends pages on explicit request and discards superseded responses.
 
-History items, individual revision reads and snapshots share the `Revision` shape.
-They contain parsed `content` without a duplicate `content_json` field. Frozen run
-inputs similarly expose only their declared fields and parsed content.
+History items use `RevisionSummary`: identity, timestamp, format and a preview capped
+at 160 characters. They contain no full content or extraction payload. The UI loads
+`GET /revisions/:id` only for the selected snapshot and drops obsolete selections.
+Individual revision reads and snapshots retain the full `Revision` shape.
+
+Workspace and context reads use request-scoped representation readers. Each distinct
+identity is loaded at most once in that scope through an owner-authorized batch
+query; decoded payloads are reused. Inherited revision references are also loaded
+in one metadata batch. Frozen inputs expose only declared fields and expanded content.

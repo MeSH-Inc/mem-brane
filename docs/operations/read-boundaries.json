@@ -1,0 +1,34 @@
+{
+  "method": "200-artifact shared-PDF read stress probe; inherited-reference expansion is measured separately from run admission. Byte figures are UTF-8 JSON, not heap measurements.",
+  "workspace": {
+    "artifacts": 200,
+    "statements": 8,
+    "representationQueries": 1,
+    "bytes": 147277
+  },
+  "context": {
+    "references": 200,
+    "statements": 2,
+    "representationQueries": 1,
+    "providerMessagesEqual": true
+  },
+  "history": {
+    "totalRevisions": 101,
+    "pageSize": 25,
+    "statements": 2,
+    "representationQueries": 0,
+    "summaryBytes": 4114,
+    "expandedBytes": 187739
+  },
+  "restore": {
+    "assets": 1,
+    "references": 500,
+    "pendingUploads": 0,
+    "cleanup": {
+      "objects": 0,
+      "reservedBytes": 0,
+      "requiredBackups": [],
+      "nextAction": "No consolidation cleanup required."
+    }
+  }
+}

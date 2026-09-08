@@ -110,3 +110,7 @@ content references.
 3. Make backup verification report outstanding cleanup liabilities explicitly. Cover
    recovery of canonical-only bundles without requiring operators to infer journal
    state, and retain the verified-backup gate before any object deletion.
+
+The recommended work above is complete. See the
+[data-layer checkpoint](data-layer-checkpoint.md) for final measurements, backup
+report semantics, stopping points and recommended product pivots.
