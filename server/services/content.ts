@@ -1,12 +1,13 @@
-import { decodeJson } from '../db/records.js';
+import {
+  loadBlockStates,
+  planTextEdit,
+  snapshotState,
+  assertSnapshotReady,
+} from './block-state.js';
 import type { SavedText } from '../../shared/contracts.js';
 import { encodeContent, decodeContent, contentReader } from './representations.js';
 import { readWorkspaceRuns, readVisibleDerivations } from './run-reads.js';
-import {
-  MAX_BRANE_PLACEMENTS,
-  MAX_BLOCK_TEXT_CHARACTERS,
-  fitsArtifactContent,
-} from '../../shared/limits.js';
+import { MAX_BRANE_PLACEMENTS, fitsArtifactContent } from '../../shared/limits.js';
 import { content as contentSchema } from '../../shared/schemas/index.js';
 import { randomUUID } from 'node:crypto';
 import type { DB } from '../db/index.js';
@@ -122,31 +123,7 @@ export function createTextBlock(
   return createBlock(db, actor, 'text', { format: 'text', text: '' }, braneId, geometry);
 }
 export function planBlockEdit(db: DB, actor: string, edit: Edit): SavedText {
-  const block = requireOwned(db, 'blocks', actor, edit.blockId);
-  if (edit.text.length > MAX_BLOCK_TEXT_CHARACTERS)
-    throw new DomainError(400, 'Artifact text exceeds the character limit');
-  if (block.origin === 'generated' || !['text', 'webpage'].includes(block.kind))
-    throw new DomainError(400, 'This block is not editable');
-  const state = db
-    .prepare<unknown[], { content_json: string; version: number }>(
-      'SELECT content_json,version FROM block_live_state WHERE block_id=?',
-    )
-    .get(edit.blockId);
-  if (!state) throw new Error('Editable block has no live state');
-  const previous = decodeJson(contentSchema, state.content_json);
-  if (previous.format !== 'text' && previous.format !== 'webpage')
-    throw new Error('Editable block has invalid content');
-  const content = {
-    ...previous,
-    text: edit.text,
-    ...(block.kind === 'webpage' ? { status: 'ready' as const, error: undefined } : {}),
-  };
-  if (!fitsArtifactContent(content))
-    throw new DomainError(400, 'Artifact content exceeds the byte limit');
-  if (state.version !== edit.version)
-    throw new DomainError(409, 'This block changed. Reload before saving your draft.');
-  if (JSON.stringify(content) === state.content_json) return { version: state.version, content };
-  return { version: edit.version + 1, content };
+  return planTextEdit(loadBlockStates(db, actor, [edit.blockId]).get(edit.blockId)!, edit);
 }
 export function updateBlockLiveState(db: DB, actor: string, edit: Edit): SavedText {
   const planned = planBlockEdit(db, actor, edit);
@@ -168,42 +145,17 @@ export interface RevisionService {
 }
 /** Resolve snapshot content without creating history; drafts use the same edit validation. */
 export function readSnapshotCandidate(db: DB, actor: string, blockId: string, draft?: SavedText) {
-  const block = requireOwned(db, 'blocks', actor, blockId);
-  const live = draft
-    ? { content_json: JSON.stringify(draft.content), version: draft.version }
-    : db
-        .prepare<unknown[], { content_json: string; version: number }>(
-          'SELECT content_json,version FROM block_live_state WHERE block_id=?',
-        )
-        .get(blockId);
-  if (!live) {
-    const existing = db
-      .prepare<unknown[], RevisionRow>(
-        'SELECT * FROM block_revisions WHERE block_id=? ORDER BY created_at DESC LIMIT 1',
-      )
-      .get(blockId);
-    if (!existing) throw new DomainError(409, 'Only finalized responses can be used as context');
-    const revision = revisionDto(db, existing);
-    return {
-      revision,
-      content: revision.content,
-      contentJson: existing.content_json,
-      sourceVersion: undefined,
-    };
-  }
-  const content = decodeContent(db, live.content_json);
-  if (block.kind === 'webpage' && content.status !== 'ready')
-    throw new DomainError(409, 'Webpage is not ready; paste content or wait for import');
-  const existing = db
-    .prepare<unknown[], RevisionRow>(
-      'SELECT * FROM block_revisions WHERE block_id=? AND source_version=?',
-    )
-    .get(blockId, live.version);
+  const block = loadBlockStates(db, actor, [blockId]).get(blockId)!;
+  const candidate = snapshotState(block, draft);
+  const reader = contentReader(db, actor, 'full');
+  const content = reader.read(candidate.contentJson);
+  assertSnapshotReady(block, content);
   return {
-    revision: existing ? revisionDto(db, existing) : undefined,
+    ...candidate,
     content,
-    contentJson: live.content_json,
-    sourceVersion: live.version,
+    revision: candidate.revision
+      ? { ...candidate.revision, block_id: blockId, content }
+      : undefined,
   };
 }
 export function revisions(db: DB): RevisionService {

@@ -170,7 +170,7 @@ it('keeps large PDF pages off workspace reads and authorizes exact representatio
 
 it('batches hundreds of shared identities and context references without changing provider messages', async () => {
   const { contentReader } = await import('../server/services/representations');
-  const { lineageInputs } = await import('../server/services/contexts');
+  const { lineageInputs } = await import('../server/services/context-reader');
   const { buildMessages } = await import('../server/llm/model');
   const a = await upload();
   const refs = [];

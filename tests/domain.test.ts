@@ -13,7 +13,7 @@ import {
   uid,
 } from '../server/services/content';
 import { submitRun, retryRun } from '../server/services/runs';
-import { readInputs } from '../server/services/contexts';
+import { readInputs } from '../server/services/context-reader';
 import { RunWorker } from '../server/jobs/worker';
 import { claimRun, recoverStale } from '../server/services/run-lifecycle';
 import { EventHub } from '../server/sse/hub';

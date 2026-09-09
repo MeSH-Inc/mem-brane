@@ -11,7 +11,7 @@ import {
   revisions,
   uid,
 } from '../server/services/content';
-import { readInputs } from '../server/services/contexts';
+import { readInputs } from '../server/services/context-reader';
 it('rebuilds block formats with existing placements, revisions and runs intact', () => {
   const directory = mkdtempSync(join(tmpdir(), 'membrane-migration-'));
   const path = join(directory, 'db.sqlite');

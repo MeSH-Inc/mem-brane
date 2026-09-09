@@ -37,14 +37,13 @@ export function encodeContent(db: DB, actor: string, content: Content): string {
 export function decodeContent(db: DB, json: string): Content {
   const stored = decodeJson(storedContent, json);
   if (stored.format === 'text' || stored.format === 'webpage') return stored;
-  const row = db
+  const raw = db
     .prepare(
       `SELECT r.format,r.payload_json,a.id asset_id,a.digest,a.mime
     FROM asset_representations r JOIN assets a ON a.id=r.asset_id WHERE r.id=?`,
     )
-    .get(stored.representationId) as
-    | { format: string; payload_json: string; asset_id: string; digest: string; mime: string }
-    | undefined;
+    .get(stored.representationId);
+  const row = raw ? decodeRecord(representationRecord.omit({ id: true }), raw) : undefined;
   if (!row || row.format !== stored.format)
     throw new Error('Missing or mismatched content representation');
   return decodeRecord(contentSchema, {
@@ -59,12 +58,13 @@ export function decodeContent(db: DB, json: string): Content {
 }
 
 export function readPdfPages(db: DB, actor: string, id: string): PdfRepresentation {
-  const row = db
+  const raw = db
     .prepare(
       `SELECT r.payload_json FROM asset_representations r JOIN assets a ON a.id=r.asset_id
     WHERE r.id=? AND a.owner_id=? AND r.format='pdf'`,
     )
-    .get(id, actor) as { payload_json: string } | undefined;
+    .get(id, actor);
+  const row = raw ? decodeRecord(z.object({ payload_json: z.string() }).strict(), raw) : undefined;
   if (!row) throw new DomainError(404, 'PDF representation not found');
   return decodeJson(z.object({ representation: pdfRepresentation }), row.payload_json)
     .representation;
@@ -107,20 +107,16 @@ export function contentReader(db: DB, actor: string, projection: 'full' | 'works
       ),
     ].filter((id) => !payloads.has(id));
     if (!ids.length) return;
-    const rows = db
-      .prepare(
-        `SELECT r.id,r.format,${projection === 'full' ? 'r.payload_json' : 's.summary_json'} payload_json,a.id asset_id,a.digest,a.mime
+    const rows = decodeRecord(
+      z.array(representationRecord),
+      db
+        .prepare(
+          `SELECT r.id,r.format,${projection === 'full' ? 'r.payload_json' : 's.summary_json'} payload_json,a.id asset_id,a.digest,a.mime
       FROM asset_representations r ${projection === 'workspace' ? 'JOIN representation_summaries s ON s.representation_id=r.id' : ''}
       JOIN assets a ON a.id=r.asset_id WHERE r.id IN (SELECT value FROM json_each(?)) AND a.owner_id=?`,
-      )
-      .all(JSON.stringify(ids), actor) as {
-      id: string;
-      format: 'image' | 'pdf';
-      payload_json: string;
-      asset_id: string;
-      digest: string;
-      mime: string;
-    }[];
+        )
+        .all(JSON.stringify(ids), actor),
+    );
     for (const row of rows) {
       const base = {
         format: row.format,
@@ -163,3 +159,14 @@ const storedContent = z.union([
     representationId: z.string(),
   }),
 ]);
+
+const representationRecord = z
+  .object({
+    id: z.string(),
+    format: z.enum(['image', 'pdf']),
+    payload_json: z.string(),
+    asset_id: z.string(),
+    digest: z.string(),
+    mime: z.string(),
+  })
+  .strict();

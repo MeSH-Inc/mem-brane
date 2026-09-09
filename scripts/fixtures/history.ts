@@ -10,7 +10,7 @@ import {
   updateBlockLiveState,
 } from '../../server/services/content.js';
 import { submitRun } from '../../server/services/runs.js';
-import { readInputs } from '../../server/services/contexts.js';
+import { readInputs } from '../../server/services/context-reader.js';
 import { RunWorker } from '../../server/jobs/worker.js';
 import { EventHub } from '../../server/sse/hub.js';
 

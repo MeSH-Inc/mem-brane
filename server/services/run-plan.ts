@@ -1,8 +1,8 @@
 import type { DB } from '../db/index.js';
 import type { SubmitRun, RunInput } from '../../shared/types/domain.js';
 import { canRunOnBrane, DomainError } from '../domain/access.js';
-import { planBlockEdit, readSnapshotCandidate } from './content.js';
-import { readLineage, lineageInputs, type ContextEntry } from './contexts.js';
+import { type ContextEntry } from './contexts.js';
+import { contextReader } from './context-reader.js';
 import { quoteCost, type CostPolicy } from './costs.js';
 
 export interface RunPlanLimits {
@@ -25,13 +25,12 @@ export function planRun(
   const maxOutputTokens = Math.min(input.maxOutputTokens ?? limits.maxTokens, limits.maxTokens);
   if (new Set(input.edits.map((edit) => edit.blockId)).size !== input.edits.length)
     throw new DomainError(400, 'Only one edit per block may be submitted');
-  const edits = input.edits.map((edit) => ({
-    blockId: edit.blockId,
-    ...planBlockEdit(db, actor, edit),
-  }));
-  const drafts = new Map(edits.map((edit) => [edit.blockId, edit]));
-  const lineage = input.continueFrom ? readLineage(db, actor, input.continueFrom) : [];
-  const inputs: RunInput[] = lineageInputs(db, actor, lineage);
+  const context = contextReader(db, actor).plan(
+    [...sources, ...input.references],
+    input.edits,
+    input.continueFrom,
+  );
+  const inputs: RunInput[] = context.inputs;
   const entries: { blockId?: string; kind: ContextEntry['kind']; label: string }[] = [
     ...sources.map((blockId, index) => ({
       blockId,
@@ -46,9 +45,7 @@ export function planRun(
     { kind: 'prompt', label: 'Prompt' },
   ];
   for (const entry of entries) {
-    const candidate = entry.blockId
-      ? readSnapshotCandidate(db, actor, entry.blockId, drafts.get(entry.blockId))
-      : undefined;
+    const candidate = entry.blockId ? context.candidates.get(entry.blockId)! : undefined;
     inputs.push({
       position: inputs.length,
       kind: entry.kind,
@@ -66,7 +63,7 @@ export function planRun(
   return {
     maxOutputTokens,
     entries,
-    conversationId: lineage.at(-1)?.conversation_id,
+    conversationId: context.conversationId,
     quote: quoteCost(input.model, inputs, maxOutputTokens, limits.costPolicy),
   };
 }

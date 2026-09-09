@@ -11,7 +11,7 @@ import {
   revisions,
   uid,
 } from '../server/services/content.js';
-import { lineageInputs } from '../server/services/contexts.js';
+import { lineageInputs } from '../server/services/context-reader.js';
 import { inspectPdf } from '../server/ingestion/pdf.js';
 import { pdfFixture } from '../tests/fixtures/pdf.js';
 import { buildMessages } from '../server/llm/model.js';

@@ -63,3 +63,25 @@ Parity tests independently recalculate costs from committed inputs and compare t
 with preview and reservation for Unicode drafts, output limits, webpages, images,
 and conversation lineage. Invalid drafts, unfinished generated references, and
 oversized context fail consistently in both paths.
+
+## Batched context reads
+
+`context-reader.ts` owns expanded context reads for planning, execution, and lineage
+inspection. `block-state.ts` loads owned blocks, their live versions, and the relevant
+immutable revisions in one query. Its edit and snapshot rules are also used by direct
+saves and snapshot creation. Joined records and representation rows have runtime
+schemas; row assertions no longer define this boundary.
+
+Planning gathers local snapshots, ancestor messages, and ancestor references before
+hydrating their combined representation identities. One request-scoped content reader
+loads each distinct representation once. De-duplication applies only to fetching:
+ordered and repeated source/reference entries remain intact in provider context.
+Foreign or missing blocks reject the batch before representation hydration. Reference
+revisions and their assets must belong to the actor as well as the conversation.
+
+The reader tests hold query counts at two for 1, 32, and 200 distinct image blocks
+(one block/revision query and one representation query). A batch of 64 draft edits
+requires one query. Combined lineage and local images require four reader queries
+and still one representation query; the outer brane authorization adds one planning
+query. These are database round-trip bounds, not claims of constant CPU, bytes, or
+wall time. SQL and content work still scale with the amount of selected context.

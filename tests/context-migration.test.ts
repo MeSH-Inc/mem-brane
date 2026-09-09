@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
 import { openDatabase, type DB } from '../server/db';
 import { retryRun } from '../server/services/runs';
-import { readInputs } from '../server/services/contexts';
+import { readInputs } from '../server/services/context-reader';
 import { buildMessages } from '../server/llm/model';
 import type { RunInput } from '../shared/types/domain';
 import fixture from './fixtures/legacy-context.json';

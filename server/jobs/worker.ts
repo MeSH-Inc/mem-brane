@@ -14,7 +14,7 @@ import { BeforeInvocationError } from '../llm/errors.js';
 import { lifecycleLog } from '../app/logging.js';
 import type { DB } from '../db/index.js';
 import { now, uid } from '../services/content.js';
-import { readInputs } from '../services/contexts.js';
+import { readInputs } from '../services/context-reader.js';
 import type { ModelExecutor } from '../llm/model.js';
 import type { EventHub } from '../sse/hub.js';
 export interface WorkerOptions {

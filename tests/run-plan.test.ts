@@ -10,7 +10,7 @@ import {
 } from '../server/services/content';
 import { submitRun, type RunLimits } from '../server/services/runs';
 import { estimateRun } from '../server/services/estimate';
-import { readInputs } from '../server/services/contexts';
+import { readInputs } from '../server/services/context-reader';
 import { claimRun, startAttempt, completeAttempt } from '../server/services/run-lifecycle';
 import { readRunCost } from '../server/db/records';
 import { quoteCost } from '../server/services/costs';

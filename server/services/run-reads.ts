@@ -1,6 +1,6 @@
 import type { RunRecord } from '../db/records.js';
 import type { RunSummary, RunDetail } from '../../shared/contracts.js';
-import { readInputs } from './contexts.js';
+import { readInputs } from './context-reader.js';
 import type { DB } from '../db/index.js';
 import type { Run, Derivation } from '../../shared/types/domain.js';
 import type { RunPage } from '../../shared/types/history.js';

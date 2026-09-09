@@ -13,7 +13,7 @@ import {
   uid,
 } from '../server/services/content';
 import { spawnArtifact, retryRun } from '../server/services/runs';
-import { readInputs } from '../server/services/contexts';
+import { readInputs } from '../server/services/context-reader';
 import { RunWorker } from '../server/jobs/worker';
 import { EventHub } from '../server/sse/hub';
 import { derivationEdges } from '../src/canvas/derivations';

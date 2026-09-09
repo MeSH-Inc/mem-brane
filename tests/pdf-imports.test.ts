@@ -6,7 +6,7 @@ import { createBrane, revisions, uid, readBrane } from '../server/services/conte
 import { resolveMessages } from '../server/llm/assets';
 import { freePrice, estimatedInputTokens } from '../server/services/costs';
 import { submitRun } from '../server/services/runs';
-import { readInputs } from '../server/services/contexts';
+import { readInputs } from '../server/services/context-reader';
 import { modelCompatibility, representationText } from '../shared/representations';
 import { pdfFixture } from './fixtures/pdf';
 import type { PdfContent } from '../shared/types/domain';

@@ -7,7 +7,7 @@ import {
   uid,
   updateBlockLiveState,
 } from '../server/services/content';
-import { readInputs } from '../server/services/contexts';
+import { readInputs } from '../server/services/context-reader';
 import { submitRun, spawnArtifact, readSubmissionReceipt } from '../server/services/runs';
 const databases: ReturnType<typeof openDatabase>[] = [];
 afterEach(() => databases.splice(0).forEach((db) => db.close()));

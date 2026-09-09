@@ -36,7 +36,7 @@ import {
   uid,
 } from '../services/content.js';
 import { readSubmissionReceipt, spawnArtifact, submitRun, retryRun } from '../services/runs.js';
-import { readInputs, readLineage } from '../services/contexts.js';
+import { readInputs, readLineage } from '../services/context-reader.js';
 import {
   geometry,
   placementEdit,
