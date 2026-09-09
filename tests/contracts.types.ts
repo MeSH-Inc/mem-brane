@@ -44,3 +44,22 @@ export async function contractChecks(db: DB) {
   // @ts-expect-error Internal lease state is not part of the public inspection contract.
   detail.lease_owner;
 }
+
+import { money, tokens, pricedCost, type Microusd, type TokenCount } from '../server/domain/money';
+const microAmount: Microusd = money(1);
+const tokenAmount: TokenCount = tokens(1);
+// @ts-expect-error Dollar amounts cannot be assigned to validated microdollars.
+const invalidMoney: Microusd = 1;
+// @ts-expect-error Currency cannot be used as token usage.
+const invalidTokens: TokenCount = microAmount;
+// @ts-expect-error Arithmetic requires validated token quantities.
+pricedCost(1, tokenAmount, {
+  inputUsdPerMillion: 1,
+  outputUsdPerMillion: 1,
+  vision: false,
+  imageTokenBound: 0,
+  source: 'https://example.com',
+  verifiedAt: '2026-09-08',
+});
+void invalidMoney;
+void invalidTokens;

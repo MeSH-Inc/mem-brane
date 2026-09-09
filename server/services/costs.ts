@@ -1,3 +1,13 @@
+import {
+  modelPrice,
+  money,
+  tokens,
+  usdLimit,
+  pricedCost,
+  type ModelPrice,
+  type Microusd,
+} from '../domain/money.js';
+import { decodeRecord, readRunCost, costCommitmentRecord } from '../db/records.js';
 import type { Budget } from '../../shared/contracts.js';
 import { modelCompatibility } from '../../shared/representations.js';
 import type { DB } from '../db/index.js';
@@ -5,14 +15,7 @@ import type { RunInput } from '../../shared/types/domain.js';
 import { lifecycleLog } from '../app/logging.js';
 import { DomainError } from '../domain/access.js';
 import { buildMessages } from '../llm/model.js';
-export interface ModelPrice {
-  inputUsdPerMillion: number;
-  outputUsdPerMillion: number;
-  vision: boolean;
-  imageTokenBound: number;
-  source: string;
-  verifiedAt: string;
-}
+export type { ModelPrice } from '../domain/money.js';
 export interface CostPolicy {
   dailyLimitUsd: number;
   globalDailyLimitUsd?: number;
@@ -34,50 +37,39 @@ export function priceFor(model: string, policy?: CostPolicy): ModelPrice {
       403,
       'Paid runs require verified model pricing and a positive daily budget',
     );
-  return price;
+  usdLimit(policy.dailyLimitUsd);
+  return decodeRecord(modelPrice, price);
 }
 export function estimatedInputTokens(inputs: RunInput[], price: ModelPrice) {
   // UTF-8 bytes overestimate text token counts for supported OpenAI byte-level tokenizers.
   // Include serialized reference wrappers and a generous per-message protocol allowance.
-  return buildMessages(inputs).reduce(
-    (n, message, i) =>
-      n +
-      Buffer.byteLength(JSON.stringify(message.content), 'utf8') +
-      1024 +
-      (inputs[i].content.format === 'image' ? price.imageTokenBound : 0),
-    1024,
+  return tokens(
+    buildMessages(inputs).reduce(
+      (n, message, i) =>
+        n +
+        Buffer.byteLength(JSON.stringify(message.content), 'utf8') +
+        1024 +
+        (inputs[i].content.format === 'image' ? price.imageTokenBound : 0),
+      1024,
+    ),
   );
 }
 export function costMicro(input: number, output: number, price: ModelPrice) {
-  return Math.ceil(input * price.inputUsdPerMillion + output * price.outputUsdPerMillion);
+  return pricedCost(tokens(input), tokens(output), decodeRecord(modelPrice, price));
 }
 export function budgetState(db: DB, actor: string, policy?: CostPolicy, time = Date.now()): Budget {
   const day = new Date(time).toISOString().slice(0, 10);
-  const row = db
-    .prepare(
-      `SELECT COALESCE(SUM(CASE WHEN status IN ('reserved','uncertain') THEN reserved_microusd WHEN status='confirmed' AND budget_day=? THEN confirmed_microusd ELSE 0 END),0) committed FROM run_costs WHERE owner_id=?`,
-    )
-    .get(day, actor) as { committed: number };
-  const limit = Math.floor((policy?.dailyLimitUsd ?? 0) * 1e6);
+  const committed = committedCost(db, day, actor);
+  const limit = usdLimit(policy?.dailyLimitUsd ?? 0);
   const global =
     policy?.globalDailyLimitUsd === undefined
-      ? Infinity
-      : Math.max(
-          0,
-          Math.floor(policy.globalDailyLimitUsd * 1e6) -
-            (
-              db
-                .prepare(
-                  `SELECT COALESCE(SUM(CASE WHEN status IN ('reserved','uncertain') THEN reserved_microusd WHEN status='confirmed' AND budget_day=? THEN confirmed_microusd ELSE 0 END),0) committed FROM run_costs`,
-                )
-                .get(day) as { committed: number }
-            ).committed,
-        );
+      ? Number.MAX_SAFE_INTEGER
+      : Math.max(0, usdLimit(policy.globalDailyLimitUsd) - committedCost(db, day));
   return {
     day,
     limitMicrousd: limit,
-    committedMicrousd: row.committed,
-    availableMicrousd: Math.min(global, Math.max(0, limit - row.committed)),
+    committedMicrousd: committed,
+    availableMicrousd: Math.min(global, Math.max(0, limit - committed)),
   };
 }
 export function reserveCost(
@@ -99,15 +91,8 @@ export function reserveCost(
     time = Date.now(),
     budget = budgetState(db, actor, policy, time);
   if (model !== 'mock' && policy?.globalDailyLimitUsd !== undefined) {
-    const global = db
-      .prepare(
-        `SELECT COALESCE(SUM(CASE WHEN status IN ('reserved','uncertain') THEN reserved_microusd WHEN status='confirmed' AND budget_day=? THEN confirmed_microusd ELSE 0 END),0) committed FROM run_costs`,
-      )
-      .get(budget.day) as { committed: number };
-    if (
-      global.committed + amount > Math.floor(policy.globalDailyLimitUsd * 1e6) ||
-      policy.globalDailyLimitUsd <= 0
-    )
+    const limit = usdLimit(policy.globalDailyLimitUsd);
+    if (amount > Math.max(0, limit - committedCost(db, budget.day)) || limit === 0)
       throw new DomainError(429, 'Operator model budget is fully committed');
   }
   if (amount > budget.availableMicrousd)
@@ -140,19 +125,19 @@ export function settleCost(
   db: DB,
   runId: string,
   usage?: { inputTokens?: number; outputTokens?: number },
-  free = false,
 ) {
-  const row = db.prepare('SELECT * FROM run_costs WHERE run_id=?').get(runId) as any;
-  if (!row || row.status !== 'reserved') return;
-  const confirmed = free
-    ? 0
-    : usage &&
-        Number.isSafeInteger(usage.inputTokens) &&
-        Number.isSafeInteger(usage.outputTokens) &&
-        usage.inputTokens! >= 0 &&
-        usage.outputTokens! >= 0
-      ? costMicro(usage.inputTokens!, usage.outputTokens!, JSON.parse(row.pricing_json))
-      : null;
+  const row = readRunCost(db, runId);
+  if (row.status !== 'reserved') return;
+  let confirmed: Microusd | null = null;
+  if (row.price.inputUsdPerMillion === 0 && row.price.outputUsdPerMillion === 0)
+    confirmed = money(0);
+  else if (usage) {
+    try {
+      confirmed = costMicro(usage.inputTokens!, usage.outputTokens!, row.price);
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
+    }
+  }
   if (confirmed !== null && confirmed > row.reserved_microusd)
     lifecycleLog('budget_bound_exceeded', {
       runId,
@@ -167,11 +152,13 @@ export function settleCost(
   );
 }
 export function holdUncertainCost(db: DB, runId: string) {
+  readRunCost(db, runId);
   db.prepare(
     "UPDATE run_costs SET status='uncertain',updated_at=? WHERE run_id=? AND status='reserved'",
   ).run(Date.now(), runId);
 }
 export function releaseUninvokedCost(db: DB, runId: string) {
+  readRunCost(db, runId);
   db.prepare(
     "UPDATE run_costs SET status='released',updated_at=? WHERE run_id=? AND status='reserved' AND NOT EXISTS(SELECT 1 FROM run_attempts WHERE run_id=?)",
   ).run(Date.now(), runId, runId);
@@ -193,15 +180,19 @@ export function reconcileUncertainCost(
       'Provide a nonnegative integer micro-USD amount and provider evidence',
     );
   return db.transaction(() => {
+    const row = readRunCost(db, runId);
+    if (row.status !== 'uncertain')
+      throw new DomainError(409, 'Only uncertain billing can be reconciled');
+    const amount = money(confirmedMicrousd);
     const result = db
       .prepare(
         "UPDATE run_costs SET status='confirmed',confirmed_microusd=?,updated_at=? WHERE run_id=? AND status='uncertain'",
       )
-      .run(confirmedMicrousd, Date.now(), runId);
+      .run(amount, Date.now(), runId);
     if (!result.changes) throw new DomainError(409, 'Only uncertain billing can be reconciled');
     db.prepare('INSERT INTO run_cost_reconciliations VALUES (?,?,?,?)').run(
       runId,
-      confirmedMicrousd,
+      amount,
       evidence.trim(),
       Date.now(),
     );
@@ -209,7 +200,18 @@ export function reconcileUncertainCost(
 }
 
 export function releaseFailedPreflightCost(db: DB, runId: string) {
+  readRunCost(db, runId);
   db.prepare(
     "UPDATE run_costs SET status='released',updated_at=? WHERE run_id=? AND status='reserved'",
   ).run(Date.now(), runId);
+}
+
+function committedCost(db: DB, day: string, actor?: string): Microusd {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(CASE WHEN status IN ('reserved','uncertain') THEN reserved_microusd WHEN status='confirmed' AND budget_day=? THEN confirmed_microusd ELSE 0 END),0) committed FROM run_costs${actor === undefined ? '' : ' WHERE owner_id=?'}`,
+    )
+    .safeIntegers()
+    .get(...(actor === undefined ? [day] : [day, actor]));
+  return money(decodeRecord(costCommitmentRecord, row).committed);
 }

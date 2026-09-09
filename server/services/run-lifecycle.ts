@@ -227,7 +227,7 @@ export function completeAttempt(
         time,
         token.attemptId,
       );
-      settleCost(db, run.id, result.usage, run.model === 'mock');
+      settleCost(db, run.id, result.usage);
 
       return true;
     })

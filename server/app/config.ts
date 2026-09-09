@@ -1,3 +1,4 @@
+import { modelPrice } from '../domain/money.js';
 import 'dotenv/config';
 import { z } from 'zod';
 const positive = (fallback: number) => z.coerce.number().int().positive().default(fallback);
@@ -41,23 +42,10 @@ export const config = {
 if (!config.models.includes(config.defaultModel))
   throw new Error('MODEL_DEFAULT must be allowlisted');
 
-const priceSchema = z
-  .object({
-    inputUsdPerMillion: z.number().nonnegative(),
-    outputUsdPerMillion: z.number().nonnegative(),
-    vision: z.boolean(),
-    imageTokenBound: z.number().int().nonnegative(),
-    source: z.string().url(),
-    verifiedAt: z.iso.date(),
-  })
-  .refine(
-    (p) => !p.vision || p.imageTokenBound > 0,
-    'Vision models require a conservative image token bound',
-  );
 export const costPolicy = {
   dailyLimitUsd: config.DAILY_USER_SPEND_LIMIT,
   globalDailyLimitUsd: config.GLOBAL_DAILY_SPEND_LIMIT,
   prices: z
-    .record(z.string(), priceSchema)
+    .record(z.string(), modelPrice)
     .parse(JSON.parse(process.env.MODEL_PRICING_JSON || '{}')),
 };

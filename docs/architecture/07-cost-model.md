@@ -7,3 +7,24 @@ Environment configuration controls global worker concurrency, per-user concurren
 Keep backup retention and storage lifecycle bounded. Do not micro-optimize ordinary HTTP at the expense of context correctness or accidental paid calls.
 
 Pricing entries include input/output USD per million tokens, vision support, a conservative low-detail image token bound, source URL and verification date. No live prices are invented or bundled. Reservations and prices are immutable; final billing state is mutable. Operator reconciliation records provider evidence in an immutable audit record.
+
+## Accounting quantities and persistence
+
+`server/domain/money.ts` defines distinct validated token counts and integer
+microdollar amounts. Both are nonnegative safe integers. Costs use the exact decimal
+representation of configured rates, multiply and combine with bigint arithmetic,
+and round upward once. Dollar budgets round downward to microdollars. Out-of-range
+estimates and budgets fail before admission; SQLite aggregate liabilities are read
+as bigint and rejected if they cannot be represented safely in the public budget.
+
+Configuration and persisted pricing snapshots share one strict schema, including
+pricing provenance, date, and image bounds. Accounting reads validate the complete
+row, status/confirmed-amount consistency, and stored price. Missing or corrupt
+accounting records fail explicitly. Settlement always uses the immutable snapshot;
+zero-priced snapshots settle to zero without a caller-controlled free flag.
+
+Missing, invalid, or overflowing paid usage retains the reservation as uncertain.
+Reconciliation accepts only safe nonnegative microdollars and provider evidence,
+and commits the confirmed amount and immutable audit entry together. Tests cover
+rounding, safe integer boundaries, malformed records, frozen pricing, aggregate
+overflow, and audit-write rollback.

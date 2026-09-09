@@ -1,3 +1,5 @@
+import type { DB } from './index.js';
+import { microusd, tokenCount, modelPrice } from '../domain/money.js';
 import { z } from 'zod';
 import { runStatus } from '../../shared/schemas/index.js';
 
@@ -74,3 +76,30 @@ export function decodeRecord<T>(schema: z.ZodType<T>, value: unknown): T {
 export function decodeJson<T>(schema: z.ZodType<T>, json: string): T {
   return decodeRecord(schema, JSON.parse(json) as unknown);
 }
+
+export const runCostRecord = z
+  .object({
+    run_id: z.string(),
+    owner_id: z.string(),
+    budget_day: z.iso.date(),
+    status: z.enum(['reserved', 'confirmed', 'uncertain', 'released']),
+    reserved_microusd: microusd,
+    estimated_input_tokens: tokenCount,
+    confirmed_microusd: microusd.nullable(),
+    pricing_json: z.string(),
+    created_at: z.number().int(),
+    updated_at: z.number().int(),
+  })
+  .strict()
+  .refine(
+    (row) => (row.status === 'confirmed') === (row.confirmed_microusd !== null),
+    'Confirmed cost must match billing status',
+  );
+export function readRunCost(db: DB, runId: string) {
+  const raw = db.prepare('SELECT * FROM run_costs WHERE run_id=?').get(runId);
+  if (!raw) throw new Error('Missing run cost record');
+  const row = decodeRecord(runCostRecord, raw);
+  return { ...row, price: decodeJson(modelPrice, row.pricing_json) };
+}
+
+export const costCommitmentRecord = z.object({ committed: z.bigint().nonnegative() }).strict();

@@ -205,3 +205,111 @@ it('enforces operator liability across actors and includes it in available budge
   ).toThrow('budget');
   expect((db.prepare('SELECT count(*) n FROM runs').get() as any).n).toBe(1);
 });
+
+it.each([
+  undefined,
+  {},
+  { inputTokens: 1 },
+  { inputTokens: -1, outputTokens: 0 },
+  { inputTokens: NaN, outputTokens: 1 },
+  { inputTokens: 1.5, outputTokens: 1 },
+  { inputTokens: 1, outputTokens: Infinity },
+  { inputTokens: Number.MAX_SAFE_INTEGER, outputTokens: Number.MAX_SAFE_INTEGER },
+])('retains liability for missing, invalid or overflowing usage %j', (usage) => {
+  const run = submitRun(db, revisions(db), actor, input(), limits);
+  settleCost(db, run.id, usage);
+  expect(
+    db.prepare('SELECT status,confirmed_microusd FROM run_costs WHERE run_id=?').get(run.id),
+  ).toEqual({ status: 'uncertain', confirmed_microusd: null });
+  expect(budgetState(db, actor, policy).committedMicrousd).toBeGreaterThan(0);
+});
+it('settles using its frozen price despite subsequent policy changes', () => {
+  const run = submitRun(db, revisions(db), actor, input(), limits);
+  const original = policy.prices['test-model'];
+  policy.prices['test-model'] = { ...original, inputUsdPerMillion: 100 };
+  try {
+    settleCost(db, run.id, { inputTokens: 20, outputTokens: 10 });
+    expect(
+      db.prepare('SELECT confirmed_microusd FROM run_costs WHERE run_id=?').get(run.id),
+    ).toEqual({ confirmed_microusd: 40 });
+  } finally {
+    policy.prices['test-model'] = original;
+  }
+});
+it.each(['{"inputUsdPerMillion":-1}', 'not json'])(
+  'rejects corrupt stored pricing before settlement: %s',
+  (pricing) => {
+    const run = submitRun(db, revisions(db), actor, input(), limits);
+    db.exec('DROP TRIGGER immutable_cost_estimate');
+    db.prepare('UPDATE run_costs SET pricing_json=? WHERE run_id=?').run(pricing, run.id);
+    expect(() => settleCost(db, run.id, { inputTokens: 1, outputTokens: 1 })).toThrow();
+    expect(db.prepare('SELECT status FROM run_costs WHERE run_id=?').get(run.id)).toEqual({
+      status: 'reserved',
+    });
+  },
+);
+it.each([-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
+  'rejects invalid reconciliation amount %s without an audit entry',
+  async (amount) => {
+    const { reconcileUncertainCost } = await import('../server/services/costs');
+    const run = submitRun(db, revisions(db), actor, input(), limits);
+    holdUncertainCost(db, run.id);
+    expect(() => reconcileUncertainCost(db, run.id, amount, 'Provider invoice')).toThrow();
+    expect(db.prepare('SELECT * FROM run_cost_reconciliations').all()).toEqual([]);
+  },
+);
+it('rolls reconciliation back if audit persistence fails', async () => {
+  const { reconcileUncertainCost } = await import('../server/services/costs');
+  const run = submitRun(db, revisions(db), actor, input(), limits);
+  holdUncertainCost(db, run.id);
+  db.exec(
+    "CREATE TRIGGER fail_audit BEFORE INSERT ON run_cost_reconciliations BEGIN SELECT RAISE(ABORT,'audit failure'); END",
+  );
+  expect(() => reconcileUncertainCost(db, run.id, 10, 'Provider invoice')).toThrow('audit failure');
+  expect(
+    db.prepare('SELECT status,confirmed_microusd FROM run_costs WHERE run_id=?').get(run.id),
+  ).toEqual({ status: 'uncertain', confirmed_microusd: null });
+});
+it('rejects aggregate liability beyond the JavaScript integer range without rounding', async () => {
+  const { reconcileUncertainCost } = await import('../server/services/costs');
+  const first = submitRun(db, revisions(db), actor, input(), limits);
+  const second = submitRun(db, revisions(db), actor, input(), limits);
+  for (const run of [first, second]) holdUncertainCost(db, run.id);
+  reconcileUncertainCost(db, first.id, Number.MAX_SAFE_INTEGER, 'Provider invoice');
+  reconcileUncertainCost(db, second.id, 1, 'Provider invoice');
+  expect(() => budgetState(db, actor, policy)).toThrow('safe integer range');
+});
+it.each([
+  { confirmed_microusd: -1, status: 'confirmed' },
+  { confirmed_microusd: 0.5, status: 'confirmed' },
+  { confirmed_microusd: Number.MAX_SAFE_INTEGER + 1, status: 'confirmed' },
+  { confirmed_microusd: null, status: 'confirmed' },
+  { confirmed_microusd: 1, status: 'uncertain' },
+])('rejects malformed accounting records %j', async (value) => {
+  const { readRunCost } = await import('../server/db/records');
+  const run = submitRun(db, revisions(db), actor, input(), limits);
+  db.prepare('UPDATE run_costs SET status=?,confirmed_microusd=? WHERE run_id=?').run(
+    value.status,
+    value.confirmed_microusd,
+    run.id,
+  );
+  expect(() => readRunCost(db, run.id)).toThrow('Invalid database record');
+});
+it.each([
+  { inputUsdPerMillion: NaN },
+  { inputUsdPerMillion: Infinity },
+  { imageTokenBound: -1 },
+  { vision: true, imageTokenBound: 0 },
+  { source: '' },
+  { verifiedAt: '2026-02-30' },
+])('rejects invalid pricing at admission without reserving %j', (change) => {
+  const badPolicy = {
+    ...policy,
+    prices: { 'test-model': { ...policy.prices['test-model'], ...change } },
+  };
+  expect(() =>
+    submitRun(db, revisions(db), actor, input(), { ...limits, costPolicy: badPolicy }),
+  ).toThrow();
+  expect(db.prepare('SELECT * FROM run_costs').all()).toEqual([]);
+  expect(db.prepare('SELECT * FROM runs').all()).toEqual([]);
+});
