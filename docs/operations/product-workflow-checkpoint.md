@@ -65,7 +65,7 @@ Stop the current architecture and workspace-recovery round here. All three paths
 complete with explicit context and without manual data repair in the rehearsal.
 More data-model redesign has no new evidence from this round.
 
-The next useful local-only round is a **bounded interruption and conflict drill**:
+The following drill is now completed by the [interruption/conflict checkpoint](interruption-conflict-checkpoint.md), which records the new explicit draft recovery and retry contract. The original recommendation was a **bounded interruption and conflict drill**:
 
 1. Edit the same authored note in two tabs, interrupt a save with an offline
    transition, resume, and attempt Spawn after another tab changes the server
