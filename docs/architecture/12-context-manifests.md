@@ -42,3 +42,24 @@ For the measured 80-turn fixture, storage falls from 6,480 flattened input rows 
 81 local context entries. Expansion still produces 160 inputs for the last run.
 This reduces historical storage growth, not the model's required context size or
 token cost. Content limits and the lineage-depth boundary remain enforced.
+
+## Preview and submission planning
+
+`run-plan.ts` resolves a read-only plan shared by estimation and admission. It checks
+model and context limits, validates draft versions and editability, resolves finalized
+snapshot candidates, expands frozen lineage, and computes the output limit and cost
+quote. Duplicate edits for one block are rejected. Webpage draft normalization and
+snapshot readiness use the same functions as saving and snapshot creation.
+
+Preview runs the planner in a read transaction and reports the current budget without
+creating revisions, manifests, runs, or reservations. Submission replans inside its
+write transaction, applies the validated edits, freezes the ordered local entries,
+and stores the plan's quote. Preview is advisory: a later submission sees intervening
+edits and budget changes. Queue/concurrency checks remain admission concerns.
+
+Pending revision identifiers use a UUID-width placeholder solely when calculating
+provider message bytes; committed context always contains actual revision identities.
+Parity tests independently recalculate costs from committed inputs and compare them
+with preview and reservation for Unicode drafts, output limits, webpages, images,
+and conversation lineage. Invalid drafts, unfinished generated references, and
+oversized context fail consistently in both paths.

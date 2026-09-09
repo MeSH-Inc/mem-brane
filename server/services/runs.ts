@@ -1,20 +1,17 @@
+import { planRun, type RunPlanLimits } from './run-plan.js';
 import { decodeRecord, decodeJson, runRecord, runOptions, type RunRecord } from '../db/records.js';
 import type { Placement, Geometry } from '../../shared/types/domain.js';
 import { submissionReceipt } from '../../shared/schemas/index.js';
 import { createContext, readInputs, type ContextEntry } from './contexts.js';
-import { reserveCost, type CostPolicy } from './costs.js';
+import { reserveCost, quoteCost } from './costs.js';
 import { createHash } from 'node:crypto';
 import type { DB } from '../db/index.js';
 import type { SubmissionReceipt, SubmitRun, SpawnArtifact } from '../../shared/types/domain.js';
 import { canRunOnBrane, DomainError, requireOwned } from '../domain/access.js';
 import { createBlock, now, uid, updateBlockLiveState, type RevisionService } from './content.js';
-export interface RunLimits {
-  costPolicy?: CostPolicy;
-  models: string[];
-  maxTokens: number;
+export interface RunLimits extends RunPlanLimits {
   userConcurrency: number;
   queueLimit?: number;
-  maxContextCharacters: number;
 }
 function checkLimits(db: DB, actor: string, model: string, limits: RunLimits) {
   if (!limits.models.includes(model)) throw new DomainError(400, 'Model is not allowed');
@@ -59,44 +56,20 @@ export function submitRun(
       return run;
     }
     checkLimits(db, actor, input.model, limits);
+    const plan = planRun(db, actor, input, limits, derivation?.sources);
     const edits = input.edits.map((edit) => ({
       blockId: edit.blockId,
       ...updateBlockLiveState(db, actor, edit),
     }));
-    const frozen: ContextEntry[] = [];
-    const continuation = input.continueFrom
-      ? (db
-          .prepare(
-            'SELECT m.conversation_id FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id WHERE m.id=? AND c.owner_id=?',
-          )
-          .get(input.continueFrom, actor) as { conversation_id: string } | undefined)
-      : undefined;
-    if (input.continueFrom && !continuation)
-      throw new DomainError(404, 'Conversation point not found');
-    for (const [index, blockId] of (derivation?.sources ?? []).entries()) {
-      const r = snapshots.snapshotBlock(actor, blockId);
-      frozen.push({
-        kind: 'source',
-        label: index === 0 ? 'Primary source' : `Source ${index + 1}`,
+    const frozen: ContextEntry[] = plan.entries.map((entry) => {
+      const blockId =
+        entry.blockId ?? createBlock(db, actor, 'text', { format: 'text', text: input.prompt }).id;
+      return {
+        kind: entry.kind,
+        label: entry.label,
         role: 'user',
-        revisionId: r.id,
-      });
-    }
-    for (const [index, blockId] of input.references.entries()) {
-      const r = snapshots.snapshotBlock(actor, blockId);
-      frozen.push({
-        kind: 'reference',
-        label: `Reference ${index + 1}`,
-        role: 'user',
-        revisionId: r.id,
-      });
-    }
-    const prompt = createBlock(db, actor, 'text', { format: 'text', text: input.prompt });
-    frozen.push({
-      kind: 'prompt',
-      label: 'Prompt',
-      role: 'user',
-      revisionId: snapshots.snapshotBlock(actor, prompt.id).id,
+        revisionId: snapshots.snapshotBlock(actor, blockId).id,
+      };
     });
     const anchor = derivation
       ? readAnchor(db, actor, input.braneId, derivation.anchorPlacementId, derivation.sources[0])
@@ -124,8 +97,8 @@ export function submitRun(
           },
       'generated',
     );
-    const conversationId = continuation?.conversation_id ?? uid();
-    if (!continuation)
+    const conversationId = plan.conversationId ?? uid();
+    if (!plan.conversationId)
       db.prepare('INSERT INTO conversations VALUES (?,?,?)').run(conversationId, actor, now());
     const contextId = createContext(db, actor, input.continueFrom, frozen);
     const runId = uid();
@@ -141,7 +114,7 @@ export function submitRun(
       input.model,
       JSON.stringify({
         ...(derivation ? { action: derivation.action, actionVersion: 1 } : {}),
-        maxOutputTokens: Math.min(input.maxOutputTokens ?? limits.maxTokens, limits.maxTokens),
+        maxOutputTokens: plan.maxOutputTokens,
       }),
       output.id,
       conversationId,
@@ -154,22 +127,7 @@ export function submitRun(
         anchor.id,
         output.placement.id,
       );
-    const inputs = readInputs(db, runId);
-    const characters = inputs.reduce(
-      (total, input) => total + JSON.stringify(input.content).length,
-      0,
-    );
-    if (characters > limits.maxContextCharacters)
-      throw new DomainError(400, 'Context is too large');
-    reserveCost(
-      db,
-      actor,
-      runId,
-      input.model,
-      inputs,
-      Math.min(input.maxOutputTokens ?? limits.maxTokens, limits.maxTokens),
-      limits.costPolicy,
-    );
+    reserveCost(db, actor, runId, plan.quote, limits.costPolicy);
     db.prepare('INSERT INTO submission_receipts VALUES (?,?)').run(
       runId,
       JSON.stringify({ runId, outputBlockId: output.id, edits }),
@@ -249,9 +207,12 @@ export function retryRun(db: DB, actor: string, id: string, key: string, limits:
       db,
       actor,
       newId,
-      old.model,
-      readInputs(db, newId),
-      decodeJson(runOptions, old.options_json).maxOutputTokens,
+      quoteCost(
+        old.model,
+        readInputs(db, newId),
+        decodeJson(runOptions, old.options_json).maxOutputTokens,
+        limits.costPolicy,
+      ),
       limits.costPolicy,
     );
     return readStoredRun(db, newId);

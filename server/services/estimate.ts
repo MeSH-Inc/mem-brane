@@ -1,79 +1,24 @@
 import type { Estimate } from '../../shared/contracts.js';
-import { contentReader } from './representations.js';
-import { modelCompatibility } from '../../shared/representations.js';
 import type { DB } from '../db/index.js';
-import type { SubmitRun, RunInput } from '../../shared/types/domain.js';
-import { canRunOnBrane, requireOwned, DomainError } from '../domain/access.js';
-import { readLineage, lineageInputs } from './contexts.js';
-import {
-  budgetState,
-  costMicro,
-  estimatedInputTokens,
-  priceFor,
-  type CostPolicy,
-} from './costs.js';
+import type { SubmitRun } from '../../shared/types/domain.js';
+import { budgetState, canAffordQuote } from './costs.js';
+import { planRun, type RunPlanLimits } from './run-plan.js';
+
 export function estimateRun(
   db: DB,
   actor: string,
   input: SubmitRun,
-  outputLimit: number,
-  policy: CostPolicy,
+  limits: RunPlanLimits,
 ): Estimate {
-  canRunOnBrane(db, actor, input.braneId);
-  const inputs: RunInput[] = [];
-  const reader = contentReader(db, actor, 'full');
-  const add = (
-    content: RunInput['content'],
-    kind: RunInput['kind'],
-    label: string,
-    role: RunInput['role'] = 'user',
-    revision_id = '00000000-0000-0000-0000-000000000000',
-  ) => inputs.push({ position: inputs.length, kind, label, role, revision_id, content });
-  if (input.continueFrom)
-    inputs.push(
-      ...lineageInputs(db, actor, readLineage(db, actor, input.continueFrom, reader), reader),
-    );
-  const local = input.references
-    .map((blockId, i) => {
-      requireOwned(db, 'blocks', actor, blockId);
-      const row = (db
-        .prepare('SELECT content_json FROM block_live_state WHERE block_id=?')
-        .get(blockId) ??
-        db
-          .prepare(
-            'SELECT content_json FROM block_revisions WHERE block_id=? ORDER BY created_at DESC LIMIT 1',
-          )
-          .get(blockId)) as { content_json: string } | undefined;
-      return { row, blockId, i };
-    })
-    .filter(
-      (item): item is typeof item & { row: { content_json: string } } => item.row !== undefined,
-    );
-  reader.prefetch(local.map((item) => item.row.content_json));
-  for (const { row, blockId, i } of local) {
-    const content = reader.read(row.content_json),
-      edit = input.edits.find((e) => e.blockId === blockId);
-    if (edit) content.text = edit.text;
-    add(content, 'reference', `Reference ${i + 1}`);
-  }
-  add({ format: 'text', text: input.prompt }, 'prompt', 'Prompt');
-  const price = priceFor(input.model, policy),
-    tokens = estimatedInputTokens(inputs, price),
-    reservedMicrousd = costMicro(
-      tokens,
-      Math.min(input.maxOutputTokens ?? outputLimit, outputLimit),
-      price,
-    ),
-    budget = budgetState(db, actor, policy);
-  for (const input of inputs) {
-    const incompatible = modelCompatibility(input.content, price.vision);
-    if (incompatible) throw new DomainError(400, incompatible);
-  }
-  return {
-    estimatedInputTokens: tokens,
-    reservedMicrousd,
-    canAfford: reservedMicrousd <= budget.availableMicrousd,
-    budget,
-    price,
-  };
+  return db.transaction(() => {
+    const { quote } = planRun(db, actor, input, limits);
+    const budget = budgetState(db, actor, limits.costPolicy);
+    return {
+      estimatedInputTokens: quote.inputTokens,
+      reservedMicrousd: quote.amount,
+      canAfford: canAffordQuote(quote, budget, limits.costPolicy),
+      budget,
+      price: quote.price,
+    };
+  })();
 }

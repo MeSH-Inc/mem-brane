@@ -179,8 +179,7 @@ export function createApi(
   );
   app.post('/runs/estimate', async (c) => {
     const input = runSchema.parse(await c.req.json());
-    if (!config.models.includes(input.model)) throw new DomainError(400, 'Model is not allowed');
-    return c.json(estimateRun(db, c.get('actor'), input, config.MAX_OUTPUT_TOKENS, costPolicy));
+    return c.json(estimateRun(db, c.get('actor'), input, limits));
   });
   app.post('/artifacts/spawn', async (c) => {
     const run = spawnArtifact(

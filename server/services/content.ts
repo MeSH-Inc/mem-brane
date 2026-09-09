@@ -121,7 +121,7 @@ export function createTextBlock(
 ) {
   return createBlock(db, actor, 'text', { format: 'text', text: '' }, braneId, geometry);
 }
-export function updateBlockLiveState(db: DB, actor: string, edit: Edit): SavedText {
+export function planBlockEdit(db: DB, actor: string, edit: Edit): SavedText {
   const block = requireOwned(db, 'blocks', actor, edit.blockId);
   if (edit.text.length > MAX_BLOCK_TEXT_CHARACTERS)
     throw new DomainError(400, 'Artifact text exceeds the character limit');
@@ -146,6 +146,12 @@ export function updateBlockLiveState(db: DB, actor: string, edit: Edit): SavedTe
   if (state.version !== edit.version)
     throw new DomainError(409, 'This block changed. Reload before saving your draft.');
   if (JSON.stringify(content) === state.content_json) return { version: state.version, content };
+  return { version: edit.version + 1, content };
+}
+export function updateBlockLiveState(db: DB, actor: string, edit: Edit): SavedText {
+  const planned = planBlockEdit(db, actor, edit);
+  if (planned.version === edit.version) return planned;
+  const { content } = planned;
   const result = db
     .prepare(
       'UPDATE block_live_state SET content_json=?, version=version+1, updated_at=? WHERE block_id=? AND version=?',
@@ -153,43 +159,63 @@ export function updateBlockLiveState(db: DB, actor: string, edit: Edit): SavedTe
     .run(JSON.stringify(content), now(), edit.blockId, edit.version);
   if (!result.changes)
     throw new DomainError(409, 'This block changed. Reload before saving your draft.');
-  if (block.kind === 'webpage')
+  if (content.format === 'webpage')
     db.prepare("UPDATE ingestions SET status='manual' WHERE block_id=?").run(edit.blockId);
   return { version: edit.version + 1, content };
 }
 export interface RevisionService {
   snapshotBlock(actor: string, blockId: string): Revision;
 }
-export function revisions(db: DB): RevisionService {
-  return {
-    snapshotBlock: db.transaction((actor: string, blockId: string): Revision => {
-      const block = requireOwned(db, 'blocks', actor, blockId);
-      const live = db
+/** Resolve snapshot content without creating history; drafts use the same edit validation. */
+export function readSnapshotCandidate(db: DB, actor: string, blockId: string, draft?: SavedText) {
+  const block = requireOwned(db, 'blocks', actor, blockId);
+  const live = draft
+    ? { content_json: JSON.stringify(draft.content), version: draft.version }
+    : db
         .prepare<unknown[], { content_json: string; version: number }>(
           'SELECT content_json,version FROM block_live_state WHERE block_id=?',
         )
         .get(blockId);
-      if (!live) {
-        const existing = db
-          .prepare<unknown[], RevisionRow>(
-            'SELECT * FROM block_revisions WHERE block_id=? ORDER BY created_at DESC LIMIT 1',
-          )
-          .get(blockId);
-        if (!existing)
-          throw new DomainError(409, 'Only finalized responses can be used as context');
-        return revisionDto(db, existing);
-      }
-      const content: Content = decodeContent(db, live.content_json);
-      if (block.kind === 'webpage' && content.status !== 'ready')
-        throw new DomainError(409, 'Webpage is not ready; paste content or wait for import');
-      const existing = db
-        .prepare('SELECT * FROM block_revisions WHERE block_id=? AND source_version=?')
-        .get(blockId, live.version) as RevisionRow | undefined;
-      if (existing) return revisionDto(db, existing);
+  if (!live) {
+    const existing = db
+      .prepare<unknown[], RevisionRow>(
+        'SELECT * FROM block_revisions WHERE block_id=? ORDER BY created_at DESC LIMIT 1',
+      )
+      .get(blockId);
+    if (!existing) throw new DomainError(409, 'Only finalized responses can be used as context');
+    const revision = revisionDto(db, existing);
+    return {
+      revision,
+      content: revision.content,
+      contentJson: existing.content_json,
+      sourceVersion: undefined,
+    };
+  }
+  const content = decodeContent(db, live.content_json);
+  if (block.kind === 'webpage' && content.status !== 'ready')
+    throw new DomainError(409, 'Webpage is not ready; paste content or wait for import');
+  const existing = db
+    .prepare<unknown[], RevisionRow>(
+      'SELECT * FROM block_revisions WHERE block_id=? AND source_version=?',
+    )
+    .get(blockId, live.version);
+  return {
+    revision: existing ? revisionDto(db, existing) : undefined,
+    content,
+    contentJson: live.content_json,
+    sourceVersion: live.version,
+  };
+}
+export function revisions(db: DB): RevisionService {
+  return {
+    snapshotBlock: db.transaction((actor: string, blockId: string): Revision => {
+      const candidate = readSnapshotCandidate(db, actor, blockId);
+      if (candidate.revision) return candidate.revision;
+      const { content, contentJson, sourceVersion } = candidate;
       const revision = { id: uid(), block_id: blockId, content, created_at: now() };
       db.prepare(
         'INSERT INTO block_revisions (id,block_id,content_json,created_at,source_version) VALUES (?,?,?,?,?)',
-      ).run(revision.id, blockId, live.content_json, revision.created_at, live.version);
+      ).run(revision.id, blockId, contentJson, revision.created_at, sourceVersion);
       return revision;
     }),
   };

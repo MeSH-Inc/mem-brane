@@ -111,7 +111,7 @@ it('uncertain liability can only be released using an auditable explicit reconci
 it('preview does not materialize history and immutable estimates cannot be rewritten', async () => {
   const { estimateRun } = await import('../server/services/estimate');
   const before = (db.prepare('SELECT count(*) n FROM block_revisions').get() as any).n;
-  const preview = estimateRun(db, actor, input(), 100, policy);
+  const preview = estimateRun(db, actor, input(), limits);
   expect(preview.reservedMicrousd).toBeGreaterThan(0);
   expect((db.prepare('SELECT count(*) n FROM block_revisions').get() as any).n).toBe(before);
   expect((db.prepare('SELECT count(*) n FROM runs').get() as any).n).toBe(0);

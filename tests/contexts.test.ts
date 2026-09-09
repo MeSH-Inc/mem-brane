@@ -120,7 +120,7 @@ it('stores an 80-turn chain linearly while preserving expanded context and estim
     continueFrom: last.id,
   };
   const policy = { dailyLimitUsd: 1, prices: {} };
-  const estimate = estimateRun(db, actor, input, 100, policy);
+  const estimate = estimateRun(db, actor, input, { ...limits, costPolicy: policy });
   const next = submitRun(db, revisions(db), actor, input, limits);
   expect(estimate.estimatedInputTokens).toBe(
     estimatedInputTokens(readInputs(db, next.id), priceFor('mock', policy)),

@@ -72,10 +72,7 @@ export function budgetState(db: DB, actor: string, policy?: CostPolicy, time = D
     availableMicrousd: Math.min(global, Math.max(0, limit - committed)),
   };
 }
-export function reserveCost(
-  db: DB,
-  actor: string,
-  runId: string,
+export function quoteCost(
   model: string,
   inputs: RunInput[],
   outputLimit: number,
@@ -86,16 +83,35 @@ export function reserveCost(
     const incompatible = modelCompatibility(input.content, price.vision);
     if (incompatible) throw new DomainError(400, incompatible);
   }
-  const input = estimatedInputTokens(inputs, price),
-    amount = costMicro(input, outputLimit, price),
-    time = Date.now(),
+  const inputTokens = estimatedInputTokens(inputs, price);
+  return {
+    model,
+    price,
+    outputLimit,
+    inputTokens,
+    amount: costMicro(inputTokens, outputLimit, price),
+  };
+}
+export type CostQuote = ReturnType<typeof quoteCost>;
+export function canAffordQuote(quote: CostQuote, budget: Budget, policy?: CostPolicy): boolean {
+  return (
+    quote.amount <= budget.availableMicrousd &&
+    (quote.model === 'mock' ||
+      policy?.globalDailyLimitUsd === undefined ||
+      usdLimit(policy.globalDailyLimitUsd) > 0)
+  );
+}
+export function reserveCost(
+  db: DB,
+  actor: string,
+  runId: string,
+  quote: CostQuote,
+  policy?: CostPolicy,
+) {
+  const { price, inputTokens: input, amount, outputLimit } = quote;
+  const time = Date.now(),
     budget = budgetState(db, actor, policy, time);
-  if (model !== 'mock' && policy?.globalDailyLimitUsd !== undefined) {
-    const limit = usdLimit(policy.globalDailyLimitUsd);
-    if (amount > Math.max(0, limit - committedCost(db, budget.day)) || limit === 0)
-      throw new DomainError(429, 'Operator model budget is fully committed');
-  }
-  if (amount > budget.availableMicrousd)
+  if (!canAffordQuote(quote, budget, policy))
     throw new DomainError(
       429,
       'Daily model budget is fully committed, including uncertain previous calls',
