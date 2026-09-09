@@ -28,7 +28,7 @@ beforeEach(() => {
       disconnect() {}
     },
   );
-  useInteraction.getState().resetContext();
+  useInteraction.setState({ selectedPlacements: [] });
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -76,6 +76,8 @@ function render(s = state, onGeometry = noop) {
     root.render(
       <StrictMode>
         <BraneCanvas
+          onContext={() => {}}
+          onContinue={() => {}}
           state={s}
           spawning={[]}
           retrySpawns={[]}

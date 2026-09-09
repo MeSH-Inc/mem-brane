@@ -8,7 +8,7 @@ import {
   type DiscardDraftResult,
 } from '../services/drafts';
 const recovery = new DraftRecovery(indexedDraftStorage());
-interface Interaction {
+export interface Interaction {
   actor?: string;
   recovered: string[];
   availableDrafts: Draft[];
@@ -22,19 +22,13 @@ interface Interaction {
   rebase: (id: string, version: number, text: string) => void;
   selectedPlacements: string[];
   drafts: Record<string, string>;
-  references: string[];
-  continueFrom?: string;
   tool: CanvasTool;
   inspector: boolean;
   setSelectedPlacements: (ids: string[]) => void;
   draft: (id: string, text: string, version: number, baseText: string) => void;
   clearDraft: (id: string, text: string) => void;
-  addReferences: (ids: string[]) => void;
-  setReferences: (ids: string[]) => void;
-  setContinue: (id?: string) => void;
   setTool: (tool: CanvasTool) => void;
   setInspector: (open: boolean) => void;
-  resetContext: () => void;
 }
 export const useInteraction = create<Interaction>((set, get) => ({
   recovered: [],
@@ -107,7 +101,6 @@ export const useInteraction = create<Interaction>((set, get) => ({
   },
   selectedPlacements: [],
   drafts: {},
-  references: [],
   tool: 'write',
   inspector: true,
   setSelectedPlacements: (ids) =>
@@ -154,10 +147,6 @@ export const useInteraction = create<Interaction>((set, get) => ({
           .catch(() => set({ recoveryError: 'Could not clear the saved local draft.' }));
       return { drafts, draftRecords, recovered: s.recovered.filter((blockId) => blockId !== id) };
     }),
-  addReferences: (ids) => set((s) => ({ references: [...new Set([...s.references, ...ids])] })),
-  setReferences: (references) => set({ references }),
-  setContinue: (continueFrom) => set({ continueFrom }),
   setTool: (tool) => set({ tool }),
   setInspector: (inspector) => set({ inspector }),
-  resetContext: () => set({ references: [], continueFrom: undefined, selectedPlacements: [] }),
 }));

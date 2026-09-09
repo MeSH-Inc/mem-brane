@@ -116,7 +116,7 @@ it('runs real auth, uploads, SSE and worker shutdown against an isolated server'
     await expect
       .poll(
         async () =>
-          (await (await fetch(`${origin}/api/runs/${run.id}`, { headers: { cookie } })).json())
+          (await (await fetch(`${origin}/api/runs/${run.runId}`, { headers: { cookie } })).json())
             .status,
       )
       .toBe('running');
@@ -124,7 +124,7 @@ it('runs real auth, uploads, SSE and worker shutdown against an isolated server'
     expect(await exit).toEqual([0, null]);
     const db = openDatabase(database);
     try {
-      expect((db.prepare('SELECT status FROM runs WHERE id=?').get(run.id) as any).status).toBe(
+      expect((db.prepare('SELECT status FROM runs WHERE id=?').get(run.runId) as any).status).toBe(
         'interrupted',
       );
       expect((db.prepare('SELECT count(*) n FROM assets').get() as any).n).toBe(1);

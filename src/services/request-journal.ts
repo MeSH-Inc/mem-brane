@@ -6,9 +6,10 @@ export class RequestJournal<T> {
   constructor(
     private key: string,
     validate: (value: unknown) => boolean,
+    private storage: Pick<Storage, 'getItem' | 'setItem'> = sessionStorage,
   ) {
     try {
-      const raw = JSON.parse(sessionStorage.getItem(key) ?? '[]');
+      const raw = JSON.parse(storage.getItem(key) ?? '[]');
       if (
         !Array.isArray(raw) ||
         raw.some(
@@ -45,7 +46,7 @@ export class RequestJournal<T> {
   private write(next: Map<string, T>) {
     if (this.error) throw new Error(this.error);
     try {
-      sessionStorage.setItem(this.key, JSON.stringify([...next]));
+      this.storage.setItem(this.key, JSON.stringify([...next]));
     } catch {
       throw new Error(
         'Could not preserve the request for safe retry. Keep this tab open and restore browser storage before retrying.',

@@ -167,3 +167,14 @@ export interface SpawnArtifact {
   model: string;
   edits: Edit[];
 }
+
+export interface EditReceipt {
+  blockId: string;
+  version: number;
+  content: TextContent | WebpageContent;
+}
+export interface SubmissionReceipt {
+  runId: string;
+  outputBlockId: string;
+  edits: EditReceipt[];
+}

@@ -40,7 +40,6 @@ type CardData = {
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
 type CardNode = Node<CardData>;
-const addContext = (id: string) => useInteraction.getState().addReferences([id]);
 const defaultViewport = { x: 20, y: 20, zoom: 1 };
 function Card({ id, data, selected }: NodeProps<CardNode>) {
   return (
@@ -96,6 +95,8 @@ function Card({ id, data, selected }: NodeProps<CardNode>) {
 }
 const nodeTypes = { card: Card };
 interface Props {
+  onContext: (ids: string[]) => void;
+  onContinue: (id: string) => void;
   onImport?: (files: File[], point?: { x: number; y: number }) => void;
   onInsertionReady?: (getPoint: () => { x: number; y: number }) => void;
   state: BraneState;
@@ -114,7 +115,8 @@ function Inner(props: Props) {
   const { screenToFlowPosition, fitView, getViewport } = useReactFlow();
   const selected = useInteraction((s) => s.selectedPlacements);
   const tool = useInteraction((s) => s.tool);
-  const setContinue = useInteraction((s) => s.setContinue);
+  const addContext = useCallback((id: string) => props.onContext([id]), [props.onContext]);
+  const setContinue = props.onContinue;
   // Only in-progress geometry is local. Completed gestures update the domain owner.
   const [geometry, setGeometry] = useState<Record<string, Geometry>>({});
   const geometryRef = useRef(geometry);
@@ -216,6 +218,7 @@ function Inner(props: Props) {
     props.onSpawn,
     props.spawning,
     props.retrySpawns,
+    addContext,
     setContinue,
     props.onGeometry,
     props.onFocus,

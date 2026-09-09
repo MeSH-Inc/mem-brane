@@ -36,7 +36,7 @@ it('rehydrates immutable uncertain intent and clears it only after acknowledgeme
     await second.send(prepare, async (value) => {
       expect(value).toEqual(original);
     }),
-  ).toEqual(original);
+  ).toEqual({ request: original, receipt: undefined });
   expect(prepare).not.toHaveBeenCalled();
   expect(new Submission(journal()).state.status).toBe('idle');
 });
@@ -93,7 +93,7 @@ it('clears definite rejections so corrected intent can use a new key after reloa
       async () => ({ key: 'new', prompt: 'Corrected' }),
       async () => {},
     ),
-  ).toEqual({ key: 'new', prompt: 'Corrected' });
+  ).toEqual({ request: { key: 'new', prompt: 'Corrected' }, receipt: undefined });
 });
 it('isolates identity scopes and blocks malformed recovery rather than silently losing its key', async () => {
   journal().set('run', original);

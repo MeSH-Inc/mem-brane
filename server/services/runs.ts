@@ -2,7 +2,7 @@ import { createContext, readInputs, type ContextEntry } from './contexts.js';
 import { reserveCost, releaseUninvokedCost, type CostPolicy } from './costs.js';
 import { createHash } from 'node:crypto';
 import type { DB } from '../db/index.js';
-import type { SubmitRun, SpawnArtifact } from '../../shared/types/domain.js';
+import type { SubmissionReceipt, SubmitRun, SpawnArtifact } from '../../shared/types/domain.js';
 import { canRunOnBrane, DomainError, requireOwned } from '../domain/access.js';
 import { createBlock, now, uid, updateBlockLiveState, type RevisionService } from './content.js';
 export interface RunLimits {
@@ -55,7 +55,10 @@ export function submitRun(
       return existing;
     }
     checkLimits(db, actor, input.model, limits);
-    for (const edit of input.edits) updateBlockLiveState(db, actor, edit);
+    const edits = input.edits.map((edit) => ({
+      blockId: edit.blockId,
+      ...updateBlockLiveState(db, actor, edit),
+    }));
     const frozen: ContextEntry[] = [];
     const continuation = input.continueFrom
       ? (db
@@ -159,6 +162,10 @@ export function submitRun(
       inputs,
       Math.min(input.maxOutputTokens ?? limits.maxTokens, limits.maxTokens),
       limits.costPolicy,
+    );
+    db.prepare('INSERT INTO submission_receipts VALUES (?,?)').run(
+      runId,
+      JSON.stringify({ runId, outputBlockId: output.id, edits }),
     );
     return db.prepare('SELECT * FROM runs WHERE id=?').get(runId) as any;
   })();
@@ -307,4 +314,13 @@ export function spawnArtifact(
       action: input.action,
     },
   );
+}
+
+export function readSubmissionReceipt(db: DB, actor: string, runId: string): SubmissionReceipt {
+  requireOwned(db, 'runs', actor, runId);
+  const row = db
+    .prepare('SELECT receipt_json FROM submission_receipts WHERE run_id=?')
+    .get(runId) as { receipt_json: string } | undefined;
+  if (!row) throw new DomainError(409, 'This run has no submission receipt');
+  return JSON.parse(row.receipt_json) as SubmissionReceipt;
 }

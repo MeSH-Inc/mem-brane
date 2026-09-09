@@ -1,21 +1,14 @@
 import { SavedDrafts } from '../components/SavedDrafts';
-import { RequestJournal } from '../services/request-journal';
-import { submitRun, spawnArtifact } from '../../shared/schemas';
-import { useWorkspaceDraft } from '../services/workspace-drafts';
-import { modelCompatibility } from '../../shared/representations';
+import { WorkspaceController } from '../services/workspace';
 import { PdfContent } from '../components/PdfContent';
 import { imports } from '../services/imports';
 import { acceptedFiles, pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapters';
 import { ImportTray } from '../components/ImportTray';
-import { TextSaves } from '../services/text-saves';
-import { Submission } from '../services/submission';
 import { canvasTools } from '../canvas/tools';
 import { selectedBlockIds } from '../canvas/selection';
 import {
   useCallback,
-  useLayoutEffect,
   useEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -23,22 +16,13 @@ import {
   Suspense,
 } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import type {
-  BraneState,
-  RunInput,
-  SubmitRun,
-  SpawnArtifact,
-  Run,
-} from '../../shared/types/domain';
-import { PlacementSaves } from '../services/placement-saves';
-import type { Geometry, Placement } from '../../shared/types/domain';
-import { api, ApiError } from '../services/api';
+import type { Geometry } from '../../shared/types/domain';
+import { api } from '../services/api';
 import { useInteraction } from '../stores/interaction';
 import { BlockContent } from '../components/BlockContent';
 import { SpawnButton } from '../components/SpawnButton';
 import { ArtifactActions } from '../components/ArtifactActions';
 import { RunHistory } from '../components/RunHistory';
-import type { ConversationMessage } from '../../shared/types/conversation';
 import { draftDisposition } from '../services/drafts';
 import { useMobile } from '../lib/useMobile';
 const BraneCanvas = lazy(() =>
@@ -53,386 +37,91 @@ export function BraneView(props: BraneViewProps) {
 }
 
 function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
-  const [serverState, setState] = useState<BraneState>();
-  const [placementSaves] = useState(
+  const actor = useInteraction((s) => s.actor);
+  const [controller] = useState(
     () =>
-      new PlacementSaves({
-        write: (id, geometry, version) =>
-          api<Placement>(`/placements/${id}`, { ...geometry, version }, 'PATCH'),
-        read: (id) => api<Placement>(`/placements/${id}`),
+      new WorkspaceController(actor, braneId, {
+        request: api,
+        storage: sessionStorage,
+        drafts: useInteraction,
+        imports,
+        events: window,
       }),
   );
-  const geometryRevision = useSyncExternalStore(
-    placementSaves.subscribe,
-    placementSaves.getSnapshot,
-  );
-  const state = useMemo(
-    () =>
-      serverState
-        ? { ...serverState, placements: placementSaves.project(serverState.placements) }
-        : undefined,
-    [serverState, placementSaves, geometryRevision],
-  );
+  useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  useEffect(() => {
+    useInteraction.setState({ selectedPlacements: [] });
+    controller.start();
+    return () => controller.dispose();
+  }, [controller]);
+  const {
+    state,
+    workspace,
+    error,
+    notice,
+    newBlock,
+    revealedBlock,
+    models,
+    busy,
+    inspected,
+    estimate,
+    lineage,
+    budget,
+    vision,
+    placementSaves,
+    pendingRuns,
+    spawnRequests,
+    submission,
+    spawning,
+    retrySpawns,
+    importTasks,
+    pendingAttachments,
+    compatibilityError,
+    refresh,
+    saveBlock,
+    edit,
+    saveGeometry,
+    geometry,
+    save,
+    run,
+    setError,
+  } = controller;
   const placementFailures = placementSaves.failures();
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  const [error, setError] = useState(''),
-    [notice, setNotice] = useState(''),
-    [newBlock, setNewBlock] = useState<string>(),
-    [revealedBlock, setRevealedBlock] = useState<string>(),
-    [models, setModels] = useState<string[]>(['mock']),
-    [busy, setBusy] = useState(false),
-    [inspected, setInspected] = useState<{
-      id: string;
-      inputs: RunInput[];
-      cost?: { status: string; reserved_microusd: number; confirmed_microusd: number | null };
-    }>(),
-    [webOpen, setWebOpen] = useState(false),
-    [url, setUrl] = useState('');
-  const [estimate, setEstimate] = useState<{ reservedMicrousd: number; canAfford: boolean }>();
-  const [managed, setManaged] = useState<string>(),
-    [lineage, setLineage] = useState<ConversationMessage[]>([]),
-    [budget, setBudget] = useState<{ availableMicrousd: number; limitMicrousd: number }>(),
-    [vision, setVision] = useState<Record<string, { vision: boolean }>>({});
-  const actor = useInteraction((s) => s.actor);
-  const workspace = useWorkspaceDraft(actor, braneId);
-  const prompt = workspace.draft.prompt ?? '';
-  const model = workspace.draft.model ?? 'mock';
-  const titleDraft = workspace.draft.title;
-  const setPrompt = (value: string | ((current: string) => string)) =>
-    workspace.update({
-      prompt: typeof value === 'function' ? value(workspace.current.current.prompt ?? '') : value,
-    });
-  const setModel = (model: string) => workspace.update({ model });
-  const setTitleDraft = (title: string | undefined) => workspace.update({ title });
-  useLayoutEffect(() => {
-    useInteraction.setState({
-      references: workspace.current.current.references ?? [],
-      continueFrom: workspace.current.current.continueFrom,
-      selectedPlacements: [],
-    });
-    return useInteraction.subscribe((next, previous) => {
-      if (next.references !== previous.references || next.continueFrom !== previous.continueFrom)
-        workspace.update({ references: next.references, continueFrom: next.continueFrom });
-    });
-  }, []);
+  const {
+    prompt = '',
+    model = 'mock',
+    title: titleDraft,
+    references = [],
+    continueFrom,
+  } = controller.draft;
+  const setPrompt = (prompt: string) => controller.updateDraft({ prompt });
+  const setModel = (model: string) => controller.updateDraft({ model });
+  const setTitleDraft = (title: string) => controller.updateDraft({ title });
+  const [webOpen, setWebOpen] = useState(false),
+    [url, setUrl] = useState(''),
+    [managed, setManaged] = useState<string>();
   const mobile = useMobile();
   const ui = {
-    addReferences: useInteraction((s) => s.addReferences),
-    clearDraft: useInteraction((s) => s.clearDraft),
-    continueFrom: useInteraction((s) => s.continueFrom),
+    addReferences: controller.addReferences,
+    references,
+    continueFrom,
+    setReferences: controller.setReferences,
+    setContinue: controller.setContinue,
     draftRecords: useInteraction((s) => s.draftRecords),
     drafts: useInteraction((s) => s.drafts),
     inspector: useInteraction((s) => s.inspector),
-    rebase: useInteraction((s) => s.rebase),
     recovered: useInteraction((s) => s.recovered),
     availableDrafts: useInteraction((s) => s.availableDrafts),
-    refreshDrafts: useInteraction((s) => s.refreshDrafts),
-    recoverDraft: useInteraction((s) => s.recoverDraft),
-    discardDraft: useInteraction((s) => s.discardDraft),
+    refreshDrafts: controller.refreshDrafts,
+    discardDraft: controller.discardDraft,
     recoveryError: useInteraction((s) => s.recoveryError),
-    references: useInteraction((s) => s.references),
     selectedPlacements: useInteraction((s) => s.selectedPlacements),
-    setContinue: useInteraction((s) => s.setContinue),
     setInspector: useInteraction((s) => s.setInspector),
-    setReferences: useInteraction((s) => s.setReferences),
     setTool: useInteraction((s) => s.setTool),
     tool: useInteraction((s) => s.tool),
   };
-  const compatibilityError = ui.references
-    .map((id) => state?.blocks.find((block) => block.id === id))
-    .flatMap((block) =>
-      block ? [modelCompatibility(block.content, vision[model]?.vision ?? false)] : [],
-    )
-    .find(Boolean);
   const selectedBlocks = selectedBlockIds(state?.placements ?? [], ui.selectedPlacements);
   const navigate = useNavigate();
-  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const [textSaves] = useState(() => new TextSaves((edit) => api('/blocks/live', edit, 'PATCH')));
-  const [pendingRuns] = useState(
-    () =>
-      new RequestJournal<SubmitRun>(
-        JSON.stringify(['mem-brane-pending-runs', actor, braneId]),
-        (value) => submitRun.safeParse(value).success,
-      ),
-  );
-  const [submission] = useState(() => new Submission<SubmitRun>(pendingRuns));
-  const [spawnRequests] = useState(
-    () =>
-      new RequestJournal<SpawnArtifact>(
-        JSON.stringify(['mem-brane-pending-spawns', actor, braneId]),
-        (value) => spawnArtifact.safeParse(value).success,
-      ),
-  );
-  const spawningRef = useRef(new Set<string>());
-  const [spawning, setSpawning] = useState<string[]>([]);
-  const [retrySpawns, setRetrySpawns] = useState<string[]>(() => [...spawnRequests.keys()]);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const pickerTarget = useRef<'canvas' | 'composer'>('canvas');
-  const importRevision = useSyncExternalStore(imports.subscribe, imports.getSnapshot);
-  const importTasks = imports.list(braneId);
-  const pendingAttachments = importTasks.some(
-    (task) =>
-      task.intent.target === 'composer' &&
-      !(task.status === 'ready' && task.delivered) &&
-      task.status !== 'rejected',
-  );
-  const canvasInsertion = useRef<() => { x: number; y: number }>(() => ({ x: 100, y: 100 }));
-  const acceptFiles = useCallback(
-    (files: File[], target: 'canvas' | 'composer', point?: { x: number; y: number }) => {
-      const at = { ...(point ?? canvasInsertion.current()) };
-      if (!point) {
-        const occupied = [
-          ...(stateRef.current?.placements ?? []),
-          ...imports
-            .list(braneId)
-            .filter((task) => task.status !== 'rejected')
-            .map((task) => task.intent.geometry),
-        ];
-        const width = Math.min(3, files.length) * 350;
-        const height = Math.ceil(files.length / 3) * 330;
-        for (
-          let attempt = 0;
-          attempt < 500 &&
-          occupied.some(
-            (g) =>
-              at.x < g.x + g.width + 20 &&
-              at.x + width > g.x &&
-              at.y < g.y + g.height + 20 &&
-              at.y + height > g.y,
-          );
-          attempt++
-        )
-          at.y += 330;
-      }
-      void imports
-        .enqueue(files, { braneId, target, geometry: { ...at, width: 320, height: 300 } })
-        .catch((error) => setError(error.message));
-    },
-    [braneId],
-  );
-  const attachFiles = useCallback(
-    (files: File[], point?: { x: number; y: number }) => acceptFiles(files, 'canvas', point),
-    [acceptFiles],
-  );
-
-  const refreshGeneration = useRef(0);
-  const refresh = useCallback(async () => {
-    const generation = ++refreshGeneration.current;
-    void api('/budget')
-      .then(setBudget)
-      .catch(() => {});
-    const next = textSaves.reconcile(await api<BraneState>(`/branes/${braneId}`));
-    if (generation !== refreshGeneration.current) return;
-    placementSaves.observe(next.placements);
-    stateRef.current = next;
-    setState(next);
-  }, [braneId, placementSaves, textSaves]);
-  useEffect(() => {
-    void refresh().catch((e) => setError(e.message));
-    void api('/config')
-      .then((c) => {
-        setModels(c.models);
-        setBudget(c.budget);
-        setVision(c.modelCapabilities);
-        imports.maxBytes = c.imports?.maxBytes ?? imports.maxBytes;
-        if (!workspace.current.current.model) setModel(c.defaultModel);
-      })
-      .catch((e) => setError(e.message));
-    setInspected(undefined);
-    setError('');
-    setNotice('');
-  }, [braneId, refresh]);
-  useEffect(() => {
-    let active = true;
-    const ready = imports
-      .list(braneId)
-      .filter((task) => task.status === 'ready' && !task.delivered);
-    if (ready.length)
-      void refresh()
-        .then(() => {
-          if (!active) return;
-          for (const task of ready) {
-            if (task.intent.target === 'composer' && task.result)
-              ui.addReferences([task.result.blockId]);
-            void imports.delivered(task.id);
-          }
-        })
-        .catch((error) => {
-          if (active) setError(error.message);
-        });
-    return () => {
-      active = false;
-    };
-  }, [braneId, importRevision, refresh]);
-  useEffect(() => {
-    let active = true;
-    setEstimate(undefined);
-    if (!prompt.trim()) return;
-    const timer = setTimeout(() => {
-      void api('/runs/estimate', {
-        braneId,
-        key: crypto.randomUUID(),
-        model,
-        prompt,
-        references: ui.references,
-        continueFrom: ui.continueFrom,
-        edits: Object.values(ui.draftRecords).map((d) => ({
-          blockId: d.blockId,
-          text: d.text,
-          version: d.baseVersion,
-        })),
-      })
-        .then((result) => {
-          if (active) setEstimate(result);
-        })
-        .catch(() => {});
-    }, 400);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [braneId, model, prompt, ui.references, ui.continueFrom, ui.draftRecords]);
-  useEffect(() => {
-    if (!ui.continueFrom) {
-      setLineage([]);
-      return;
-    }
-    void api<ConversationMessage[]>(`/context/lineage/${ui.continueFrom}`)
-      .then(setLineage)
-      .catch((e) => setError(e.message));
-  }, [ui.continueFrom]);
-  useEffect(() => {
-    const reconcile = () => {
-      void refresh().catch((e) => setError(e.message));
-    };
-    const onRun = (event: Event) => {
-      const data = (event as CustomEvent).detail;
-      if (data.braneId !== braneId && !stateRef.current?.runs.some((run) => run.id === data.runId))
-        return;
-      if (data.status) {
-        reconcile();
-      } else if (data.text !== undefined)
-        setState((s) =>
-          s
-            ? {
-                ...s,
-                runs: s.runs.map((r) => (r.id === data.runId ? { ...r, partial: data.text } : r)),
-              }
-            : s,
-        );
-    };
-    window.addEventListener('brane:reconcile', reconcile);
-    window.addEventListener('brane:run', onRun);
-    const interval = setInterval(() => {
-      if (stateRef.current?.blocks.some((b) => b.content.status === 'pending')) reconcile();
-    }, 2000);
-    return () => {
-      window.removeEventListener('brane:reconcile', reconcile);
-      window.removeEventListener('brane:run', onRun);
-      clearInterval(interval);
-    };
-  }, [braneId, refresh]);
-  const saveBlock = useCallback((id: string) => {
-    clearTimeout(timers.current[id]);
-    const work = textSaves.serialize(async () => {
-      const interaction = useInteraction.getState();
-      const text = interaction.drafts[id];
-      if (text === undefined) return;
-      const block = stateRef.current?.blocks.find((b) => b.id === id);
-      if (!block) return;
-      const draft = interaction.draftRecords[id];
-      if (draft && draftDisposition(draft, block) === 'saved') {
-        interaction.clearDraft(id, text);
-        return;
-      }
-      if (draft && draftDisposition(draft, block) === 'conflict')
-        throw new Error('Resolve the changed block below before saving or running.');
-      await interaction.flushRecovery().catch(() => {});
-      const result = await textSaves
-        .save({ blockId: id, text, version: draft?.baseVersion ?? block.version })
-        .catch(async (error) => {
-          if (error instanceof ApiError && error.status === 409) {
-            const next = textSaves.reconcile(
-              await api<BraneState>(`/branes/${stateRef.current!.brane.id}`),
-            );
-            stateRef.current = next;
-            setState(next);
-          }
-          throw error;
-        });
-      if (stateRef.current) {
-        const next = textSaves.reconcile(stateRef.current);
-        stateRef.current = next;
-        setState(next);
-      }
-      // A recovered copy selected during this save has its own base and identity.
-      if (useInteraction.getState().draftRecords[id]?.key !== draft?.key) return;
-      useInteraction.getState().clearDraft(id, text);
-      if (useInteraction.getState().drafts[id] !== undefined)
-        useInteraction.getState().rebase(id, result.version, result.content.text);
-    });
-    return work;
-  }, []);
-  const edit = useCallback(
-    (id: string, text: string) => {
-      const block = stateRef.current?.blocks.find((b) => b.id === id);
-      useInteraction.getState().draft(id, text, block?.version ?? 0, block?.content.text ?? '');
-      clearTimeout(timers.current[id]);
-      timers.current[id] = setTimeout(() => {
-        void saveBlock(id).catch((e) => setError(e.message));
-      }, 650);
-    },
-    [saveBlock],
-  );
-  const flush = useCallback(async () => {
-    for (const block of stateRef.current?.blocks ?? []) await saveBlock(block.id);
-    await textSaves.flush();
-  }, [saveBlock]);
-  useEffect(() => {
-    const before = (e: BeforeUnloadEvent) => {
-      if (Object.keys(useInteraction.getState().drafts).length || placementSaves.hasPending()) {
-        e.preventDefault();
-      }
-    };
-    window.addEventListener('beforeunload', before);
-    return () => {
-      window.removeEventListener('beforeunload', before);
-    };
-  }, []);
-  const create = useCallback(
-    async (g = { x: 100, y: 100, width: 320, height: 220 }) => {
-      try {
-        const b = await api('/blocks/text', { braneId, geometry: g });
-        setNewBlock(b.id);
-        await refresh();
-        if (matchMedia('(max-width: 760px)').matches)
-          void navigate({
-            to: '/b/$braneId',
-            params: { braneId },
-            search: { focus: b.id, view: 'focus' },
-          });
-      } catch (e) {
-        setError((e as Error).message);
-      }
-    },
-    [braneId, refresh, navigate],
-  );
-  const saveGeometry = useCallback(
-    (id: string, geometry: Geometry) => {
-      const placement = stateRef.current?.placements.find((p) => p.id === id);
-      if (!placement) return Promise.reject(new Error('Placement no longer exists.'));
-      return placementSaves.save(placement, geometry);
-    },
-    [placementSaves],
-  );
-  const geometry = useCallback(
-    (id: string, g: Geometry) => {
-      // The queue exposes failure and explicit recovery controls in the route.
-      void saveGeometry(id, g).catch(() => {});
-    },
-    [saveGeometry],
-  );
   const focusBlock = useCallback(
     (id: string) => {
       void navigate({
@@ -443,136 +132,34 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     },
     [braneId, navigate],
   );
-  async function save() {
-    const savedTitle = titleDraft ?? stateRef.current!.brane.title;
-    try {
-      await placementSaves.flush();
-      await flush();
-      await api(`/branes/${braneId}`, { title: savedTitle }, 'PATCH');
-      await refresh();
-      if (workspace.current.current.title === savedTitle) setTitleDraft(undefined);
-      setNotice('Brane saved');
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
+  const create = useCallback(
+    async (geometry?: Geometry) => {
+      const id = await controller.create(geometry);
+      if (id && mobile) focusBlock(id);
+    },
+    [controller, mobile, focusBlock],
+  );
   const spawn = useCallback(
     (blockId: string, placementId: string) => {
-      if (spawningRef.current.has(blockId)) return;
-      spawningRef.current.add(blockId);
-      setSpawning([...spawningRef.current]);
-      clearTimeout(timers.current[blockId]);
-      setError('');
-      // Join the autosave queue: earlier writes finish first, later writes wait until
-      // the source edit and frozen input have committed together.
-      const work = textSaves.serialize(async () => {
-        let request = spawnRequests.get(blockId);
-        if (!request) {
-          const block = stateRef.current?.blocks.find((b) => b.id === blockId);
-          if (!block) throw new Error('Source artifact is no longer available.');
-          const draft = useInteraction.getState().draftRecords[blockId];
-          if (draft && draftDisposition(draft, block) === 'conflict')
-            throw new Error('Resolve the changed source before spawning.');
-          request = {
-            braneId,
-            key: crypto.randomUUID(),
-            sourceBlockIds: [blockId],
-            anchorPlacementId: placementId,
-            action: 'develop',
-            model,
-            edits:
-              draft && draftDisposition(draft, block) !== 'saved'
-                ? [{ blockId, text: draft.text, version: draft.baseVersion }]
-                : [],
-          };
-          spawnRequests.set(blockId, request);
-        }
-        const result = await api<Run>('/artifacts/spawn', request);
-        spawnRequests.delete(blockId);
-        for (const edit of request.edits) {
-          const current = stateRef.current;
-          if (current) {
-            const next = {
-              ...current,
-              blocks: current.blocks.map((b) =>
-                b.id === edit.blockId && b.version <= edit.version
-                  ? {
-                      ...b,
-                      version: edit.version + 1,
-                      content: { ...b.content, text: edit.text },
-                    }
-                  : b,
-              ),
-            };
-            const reconciled = textSaves.reconcile(next);
-            stateRef.current = reconciled;
-            setState(reconciled);
-          }
-          const interaction = useInteraction.getState();
-          if (interaction.draftRecords[edit.blockId]?.baseVersion === edit.version) {
-            interaction.clearDraft(edit.blockId, edit.text);
-            interaction.rebase(edit.blockId, edit.version + 1, edit.text);
-          }
-        }
-        setNotice('Artifact spawned · source context frozen');
-        await refresh();
-        setRevealedBlock(result.output_block_id);
-        if (mobile) focusBlock(result.output_block_id);
+      void controller.spawn(blockId, placementId).then((id) => {
+        if (id && mobile) focusBlock(id);
       });
-      void work
-        .catch((e) => {
-          let message = e.message;
-          if (e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408) {
-            try {
-              spawnRequests.delete(blockId);
-            } catch (storageError) {
-              message += ' ' + (storageError as Error).message;
-            }
-          }
-          setError(message);
-          if (e instanceof ApiError && e.status === 409) void refresh().catch(() => {});
-        })
-        .finally(() => {
-          spawningRef.current.delete(blockId);
-          setSpawning([...spawningRef.current]);
-          setRetrySpawns([...spawnRequests.keys()]);
-        });
     },
-    [braneId, model, refresh, mobile, focusBlock],
+    [controller, mobile, focusBlock],
   );
-  async function run() {
-    if (
-      busy ||
-      (submission.state.status !== 'uncertain' && (pendingAttachments || compatibilityError))
-    )
-      return;
-    setBusy(true);
-    setError('');
-    try {
-      const accepted = await submission.send(
-        async () => {
-          await flush();
-          return {
-            braneId,
-            key: crypto.randomUUID(),
-            model,
-            prompt,
-            references: ui.references,
-            continueFrom: ui.continueFrom,
-            edits: [],
-          };
-        },
-        (input) => api('/runs', input),
-      );
-      setPrompt((current) => (current === accepted.prompt ? '' : current));
-      setNotice('Run submitted · context frozen');
-      await refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const fileInput = useRef<HTMLInputElement>(null);
+  const pickerTarget = useRef<'canvas' | 'composer'>('canvas');
+  const canvasInsertion = useRef<() => { x: number; y: number }>(() => ({ x: 100, y: 100 }));
+  const acceptFiles = useCallback(
+    (files: File[], target: 'canvas' | 'composer', point?: { x: number; y: number }) => {
+      controller.acceptFiles(files, target, point ?? canvasInsertion.current(), !point);
+    },
+    [controller],
+  );
+  const attachFiles = useCallback(
+    (files: File[], point?: { x: number; y: number }) => acceptFiles(files, 'canvas', point),
+    [acceptFiles],
+  );
   const focusMode = view === 'focus' || (!view && mobile);
   const focused = state?.blocks.find((b) => b.id === focus) ?? state?.blocks[0];
   if (!state) return <div className="loading">{error || 'Opening brane…'}</div>;
@@ -641,10 +228,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
         blocks={state.blocks}
         onRefresh={ui.refreshDrafts}
         onDiscard={ui.discardDraft}
-        onRecover={(draft) => {
-          clearTimeout(timers.current[draft.blockId]);
-          ui.recoverDraft(draft);
-        }}
+        onRecover={controller.recoverDraft}
       />
       {state.blocks
         .filter(
@@ -675,7 +259,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               )}
               <button
                 onClick={() => {
-                  ui.clearDraft(b.id, draft.text);
+                  controller.useServerText(b.id);
                   setError('');
                 }}
               >
@@ -684,8 +268,8 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               <button
                 onClick={async () => {
                   try {
-                    if (conflict) ui.rebase(b.id, b.version, b.content.text);
-                    await saveBlock(b.id);
+                    if (conflict) await controller.overwriteDraft(b.id);
+                    else await saveBlock(b.id);
                     setError('');
                   } catch (e) {
                     setError((e as Error).message);
@@ -777,10 +361,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               onSubmit={async (e) => {
                 e.preventDefault();
                 try {
-                  await api('/ingest', { braneId, url });
+                  await controller.importWebpage(url);
                   setWebOpen(false);
                   setUrl('');
-                  await refresh();
                 } catch (err) {
                   setError((err as Error).message);
                 }
@@ -906,6 +489,8 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               }
             >
               <BraneCanvas
+                onContext={controller.addReferences}
+                onContinue={controller.setContinue}
                 onImport={attachFiles}
                 onInsertionReady={(getPoint) => {
                   canvasInsertion.current = getPoint;
@@ -1056,9 +641,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                           const block = state.blocks.find((b) => b.id === m.block_id);
                           if (block) focusBlock(block.id);
                           else
-                            void api(`/revisions/${m.revision_id}`).then((r) =>
-                              setNotice(r.content.text.slice(0, 180)),
-                            );
+                            void controller
+                              .previewRevision(m.revision_id)
+                              .catch((e) => setError(e.message));
                         }}
                       >
                         {m.role}: {m.content.text.slice(0, 55)}
@@ -1121,11 +706,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 <div className="run-item" key={r.id}>
                   <button
                     className="run-inspect"
-                    onClick={() =>
-                      void api(`/runs/${r.id}`)
-                        .then(setInspected)
-                        .catch((e) => setError(e.message))
-                    }
+                    onClick={() => void controller.inspect(r.id).catch((e) => setError(e.message))}
                   >
                     <span className={`status-dot ${r.status}`} />
                     <div>
@@ -1140,8 +721,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   {['queued', 'claimed', 'running', 'cancel_requested'].includes(r.status) && (
                     <button
                       onClick={async () => {
-                        await api(`/runs/${r.id}/cancel`, {});
-                        await refresh();
+                        await controller.cancelRun(r.id);
                       }}
                     >
                       Cancel run
@@ -1151,8 +731,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     <button
                       onClick={async () => {
                         try {
-                          await api(`/runs/${r.id}/retry`, { key: crypto.randomUUID() });
-                          await refresh();
+                          await controller.retryRun(r.id);
                         } catch (e) {
                           setError((e as Error).message);
                         }
@@ -1171,13 +750,14 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               key={braneId}
               braneId={braneId}
               onInspect={async (id) => {
-                setInspected(await api(`/runs/${id}`));
+                await controller.inspect(id);
               }}
             />
             {inspected && (
               <div className="frozen-inspector">
                 <div className="section-label">
-                  EXACT SUBMITTED INPUTS <button onClick={() => setInspected(undefined)}>×</button>
+                  EXACT SUBMITTED INPUTS{' '}
+                  <button onClick={() => void controller.inspect()}>×</button>
                 </div>
                 {inspected.cost && (
                   <p className="cost-detail">

@@ -32,7 +32,13 @@ import {
   now,
   uid,
 } from '../services/content.js';
-import { spawnArtifact, submitRun, cancelRun, retryRun } from '../services/runs.js';
+import {
+  readSubmissionReceipt,
+  spawnArtifact,
+  submitRun,
+  cancelRun,
+  retryRun,
+} from '../services/runs.js';
 import { readInputs, readLineage } from '../services/contexts.js';
 import {
   geometry,
@@ -208,7 +214,7 @@ export function createApi(
       braneId: run.brane_id,
       status: run.status,
     });
-    return c.json(run, 201);
+    return c.json(readSubmissionReceipt(db, c.get('actor'), run.id), 201);
   });
   app.post('/runs', async (c) => {
     const run = submitRun(
@@ -224,7 +230,7 @@ export function createApi(
       braneId: run.brane_id,
       status: run.status,
     });
-    return c.json(run, 201);
+    return c.json(readSubmissionReceipt(db, c.get('actor'), run.id), 201);
   });
   app.get('/runs/:id', (c) => {
     const run = requireOwned(db, 'runs', c.get('actor'), id.parse(c.req.param('id')));

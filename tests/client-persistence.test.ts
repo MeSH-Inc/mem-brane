@@ -71,7 +71,7 @@ it.each([400, 403, 409, 429])(
         async () => ({ key: 'new', prompt: 'corrected' }),
         async () => {},
       ),
-    ).toEqual({ key: 'new', prompt: 'corrected' });
+    ).toEqual({ request: { key: 'new', prompt: 'corrected' }, receipt: undefined });
   },
 );
 it.each([new Error('offline'), new ApiError(500, 'unknown'), new ApiError(408, 'timeout')])(
@@ -96,7 +96,7 @@ it.each([new Error('offline'), new ApiError(500, 'unknown'), new ApiError(408, '
         expect(retry).toEqual({ key: 'original', references: ['a'] });
       },
     );
-    expect(accepted.key).toBe('original');
+    expect(accepted.request.key).toBe('original');
   },
 );
 it('prevents a second submit while preparation is in flight', async () => {

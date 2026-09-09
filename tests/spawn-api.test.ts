@@ -52,8 +52,8 @@ it('exposes authenticated Spawn, frozen inspection, durable links, and idempoten
     expect(response.status).toBe(201);
     const run = await response.json();
     const duplicate = await app.request('/api/artifacts/spawn', { method: 'POST', headers, body });
-    expect((await duplicate.json()).id).toBe(run.id);
-    const inspection = await (await app.request(`/api/runs/${run.id}`, { headers })).json();
+    expect((await duplicate.json()).runId).toBe(run.runId);
+    const inspection = await (await app.request(`/api/runs/${run.runId}`, { headers })).json();
     expect(inspection.inputs[0]).toMatchObject({
       kind: 'source',
       content: { format: 'text', text: 'Unsaved API source' },
@@ -61,7 +61,7 @@ it('exposes authenticated Spawn, frozen inspection, durable links, and idempoten
     expect(inspection.cost).toBeTruthy();
     const state = await (await app.request(`/api/branes/${brane.id}`, { headers })).json();
     expect(state.derivations).toHaveLength(1);
-    expect(state.blocks.find((b: any) => b.id === run.output_block_id)).toMatchObject({
+    expect(state.blocks.find((b: any) => b.id === run.outputBlockId)).toMatchObject({
       kind: 'text',
       origin: 'generated',
     });

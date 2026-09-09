@@ -129,11 +129,11 @@ Paid admission atomically reserves a conservative usage bound. Recorded costs us
 
 A block can have several placements, including across branes. Removing a placement leaves the block intact. Generated artifacts have no editable live state; streamed checkpoints become an immutable output revision only after successful completion.
 
-A run freezes context at submission. Pending source edits can be applied in the same transaction using expected versions. Workers assemble provider messages from those frozen inputs, so later edits and layout changes cannot alter the recorded request. Requests are reconstructable; real model output is not guaranteed deterministic.
+A run freezes context at submission. Run and Spawn apply pending source edits in that same transaction using expected versions. Their durable receipts return the actual accepted edit versions, including unchanged versions for no-op edits. Workers assemble provider messages from those frozen inputs, so later edits and layout changes cannot alter the recorded request. Requests are reconstructable; real model output is not guaranteed deterministic.
 
 Spawn's **Develop** action answers explicit requests or expands an idea into a self-contained artifact. The current UI spawns from one source; the service supports ordered multiple sources. Derivation connectors project provenance from run inputs and outputs. They do not define a workflow or trigger downstream regeneration.
 
-React Flow nodes project domain records. Zustand owns transient selection, tools, text drafts and context composition. The canvas owns in-progress gesture geometry; a per-placement save queue serializes completed moves and coalesces waiting updates. Version conflicts preserve the newest local geometry and offer explicit retry or use-saved-placement actions. Delayed responses and older refreshes cannot overwrite newer acknowledged geometry.
+React Flow nodes project domain records. Zustand owns transient selection, tools and text drafts. An actor/brane-scoped workspace controller owns saving, recovery, imports, streamed updates and the authoritative composer context. The canvas owns in-progress gesture geometry; a per-placement save queue serializes completed moves and coalesces waiting updates. Version conflicts preserve the newest local geometry and offer explicit retry or use-saved-placement actions. Delayed responses and older refreshes cannot overwrite newer acknowledged geometry.
 
 Text autosave uses version checks. IndexedDB retains recoverable drafts with their original server version, scoped by actor and block. Text conflict recovery offers server text or explicit overwrite. Placement intents are held in memory, with an unsaved-change warning; they are not durable across reloads. This is local recovery, not automatic merging or multiplayer collaboration.
 
@@ -141,7 +141,7 @@ Text autosave uses version checks. IndexedDB retains recoverable drafts with the
 
 One server process runs SQLite-backed generation and webpage-import workers. Generation submission deduplicates per-user request keys, and workers claim queued runs atomically, maintain leases and checkpoint streamed text. Provider calls run outside database transactions.
 
-One authenticated browser SSE connection multiplexes updates. Reconnection reloads authoritative state, so final results survive missed events. Navigation does not cancel work. Explicit retry creates a new run from the original frozen inputs. Retrying an uncertain Spawn submission reuses its request key while the client remains mounted; that is separate from retrying a failed generation.
+One authenticated browser SSE connection multiplexes updates. Reconnection reloads authoritative state, so final results survive missed events. Navigation does not cancel work. Explicit retry creates a new run from the original frozen inputs. Retrying an uncertain Run or Spawn submission reuses its journaled request and key across navigation and reload; that is separate from retrying a failed generation.
 
 Expired claims can be requeued before invocation. Expired running work becomes interrupted and is never automatically retried because provider completion and billing may be uncertain. Shutdown aborts active calls best-effort and records interruption. Run exactly one server/worker process; this is not a distributed worker system.
 
@@ -155,7 +155,7 @@ src/routes/         workspace, Focus view and context inspector
 src/canvas/         node projection, tool policy and gesture lifetime
 src/components/     editors, artifact actions and rendering
 src/stores/         transient interaction state
-src/services/       API client, draft recovery and placement save queue
+src/services/       workspace controller, submission journals and save/recovery services
 src/lib/            responsive presentation helpers
 server/app/         configuration and process lifecycle
 server/api/         validated endpoints and request limits

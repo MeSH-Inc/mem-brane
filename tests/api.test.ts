@@ -87,14 +87,14 @@ it('exposes brane and run domain operations with frozen context inspection', asy
   });
   expect(r.status).toBe(201);
   const run = await r.json();
-  const inspect = await app.request(`/api/runs/${run.id}`, { headers: headers() });
+  const inspect = await app.request(`/api/runs/${run.runId}`, { headers: headers() });
   const inspected = await inspect.json();
   expect(inspected.inputs[0].content.text).toBe('Frozen from API');
   expect(inspected.inputs[0]).not.toHaveProperty('content_json');
   const reload = await app.request(`/api/branes/${brane.id}`, { headers: headers() });
-  expect((await reload.json()).runs[0].id).toBe(run.id);
+  expect((await reload.json()).runs[0].id).toBe(run.runId);
   const history = await app.request(`/api/branes/${brane.id}/runs?limit=1`, { headers: headers() });
-  expect(await history.json()).toMatchObject({ items: [{ id: run.id }], nextCursor: null });
+  expect(await history.json()).toMatchObject({ items: [{ id: run.runId }], nextCursor: null });
   expect(
     (await app.request(`/api/branes/${brane.id}/runs?limit=51`, { headers: headers() })).status,
   ).toBe(400);

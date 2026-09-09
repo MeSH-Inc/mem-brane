@@ -1,5 +1,3 @@
-import { useRef, useState } from 'react';
-
 export interface WorkspaceDraft {
   prompt?: string;
   model?: string;
@@ -7,44 +5,43 @@ export interface WorkspaceDraft {
   references?: string[];
   continueFrom?: string;
 }
+export type WorkspaceStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
-// sessionStorage survives reload/navigation and is isolated per browser tab.
-// A duplicated tab starts with a copy, then evolves independently.
-// The owner must remount with a new key when actor or brane changes.
-export function useWorkspaceDraft(actor: string | undefined, braneId: string) {
-  const key = JSON.stringify(['mem-brane-workspace-draft', 1, actor, braneId]);
-  const [error, setError] = useState('');
-  const [draft, render] = useState<WorkspaceDraft>(() => {
-    if (!actor) return {};
+// One authoritative composer per actor/brane, persisted within the browser tab.
+export class WorkspaceDrafts {
+  draft: WorkspaceDraft = {};
+  error = '';
+  private key: string;
+  constructor(
+    actor: string | undefined,
+    braneId: string,
+    private storage: WorkspaceStorage,
+  ) {
+    this.key = JSON.stringify(['mem-brane-workspace-draft', 1, actor, braneId]);
     try {
-      const value = JSON.parse(sessionStorage.getItem(key) ?? '{}');
-      if (!value || typeof value !== 'object' || Array.isArray(value))
-        throw new Error('Invalid draft');
+      const value = JSON.parse(storage.getItem(this.key) ?? '{}');
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
       for (const field of ['prompt', 'model', 'title', 'continueFrom'])
-        if (value[field] !== undefined && typeof value[field] !== 'string')
-          throw new Error('Invalid draft');
+        if (value[field] !== undefined && typeof value[field] !== 'string') throw new Error();
       if (
         value.references !== undefined &&
         (!Array.isArray(value.references) ||
           value.references.some((id: unknown) => typeof id !== 'string'))
       )
-        throw new Error('Invalid references');
-      return value;
+        throw new Error();
+      this.draft = value;
     } catch {
-      setError('Workspace draft recovery is unavailable. Keep this tab open until work is saved.');
-      return {};
-    }
-  });
-  const current = useRef(draft);
-  function update(patch: Partial<WorkspaceDraft>) {
-    current.current = { ...current.current, ...patch };
-    render(current.current);
-    if (!actor) return;
-    try {
-      sessionStorage.setItem(key, JSON.stringify(current.current));
-    } catch {
-      setError('Could not preserve this workspace draft. Keep this tab open until work is saved.');
+      this.error =
+        'Workspace draft recovery is unavailable. Keep this tab open until work is saved.';
     }
   }
-  return { draft, current, update, error };
+  update(patch: Partial<WorkspaceDraft>) {
+    this.draft = { ...this.draft, ...patch };
+    try {
+      this.storage.setItem(this.key, JSON.stringify(this.draft));
+    } catch {
+      this.error =
+        'Could not preserve this workspace draft. Keep this tab open until work is saved.';
+    }
+  }
 }

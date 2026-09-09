@@ -127,3 +127,15 @@ export const content = z.discriminatedUnion('format', [
       'PDF pages must be complete and ordered',
     ),
 ]);
+
+export const submissionReceipt = z.object({
+  runId: id,
+  outputBlockId: id,
+  edits: z.array(
+    z.object({
+      blockId: id,
+      version: z.number().int().nonnegative(),
+      content: z.union([content.options[0], content.options[1]]),
+    }),
+  ),
+});
