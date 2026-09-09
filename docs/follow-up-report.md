@@ -36,7 +36,7 @@ This work preserves the concurrent canvas-selection and generated-artifact/Spawn
 
 ## Recommended next round
 
-1. Finish the saved-draft lifecycle controls described in the [interruption/conflict checkpoint](operations/interruption-conflict-checkpoint.md): expose explicit removal of retained copies and protect newer concurrent writes with transactional comparison. Independent Block recovery, three-way evidence and tab-session retry recovery are complete.
+1. Stop the current refactor and run the bounded product-use evaluation in the [refactor closeout](operations/refactor-closeout.md). Safe saved-copy removal is complete, including transactional protection against newer writes. Prioritize one observed task failure rather than another general architecture sweep.
 2. Add an operator budget dashboard for pricing freshness, uncertain liabilities and evidence-backed reconciliation, including cached-token/tier-specific pricing if the chosen provider needs it.
 3. Extend the new browser regression suite with offline network transitions, repeated recovery after process shutdown, and interactions between multi-tab drafts and Spawn.
 4. Strengthen asset operations with bounded retrieval, explicit retention policies and a restore drill covering SQLite plus object bytes. Keep live-bucket verification optional until authorized.

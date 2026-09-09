@@ -81,7 +81,7 @@ redesign is needed for these results.
 
 ## Recommended follow-up
 
-The next bounded local round should finish **saved-draft lifecycle controls**:
+Completed by the [refactor closeout](refactor-closeout.md), which records safe saved-copy removal and recommends stopping this refactor project. The original bounded follow-up was **saved-draft lifecycle controls**:
 
 1. Make retained copies distinguishable by block, saved time and preview, and offer
    explicit removal of an unwanted copy. Compare the exact record being removed
