@@ -1,3 +1,4 @@
+import { SavedDrafts } from '../components/SavedDrafts';
 import { RequestJournal } from '../services/request-journal';
 import { submitRun, spawnArtifact } from '../../shared/schemas';
 import { useWorkspaceDraft } from '../services/workspace-drafts';
@@ -128,6 +129,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     availableDrafts: useInteraction((s) => s.availableDrafts),
     refreshDrafts: useInteraction((s) => s.refreshDrafts),
     recoverDraft: useInteraction((s) => s.recoverDraft),
+    discardDraft: useInteraction((s) => s.discardDraft),
     recoveryError: useInteraction((s) => s.recoveryError),
     references: useInteraction((s) => s.references),
     selectedPlacements: useInteraction((s) => s.selectedPlacements),
@@ -634,27 +636,16 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           {ui.recoveryError}
         </div>
       )}
-      <details className="draft-recovery">
-        <summary>Other saved drafts ({availableDrafts.length})</summary>
-        <button onClick={() => void ui.refreshDrafts()}>Refresh saved drafts</button>
-        <p>Recover a copy to edit here. The original stays available to its tab.</p>
-        {availableDrafts.map((d) => (
-          <section key={d.key} aria-label="Saved draft">
-            <small>
-              {new Date(d.updatedAt).toLocaleString()} · version {d.baseVersion}
-            </small>
-            <pre>{d.text}</pre>
-            <button
-              onClick={() => {
-                clearTimeout(timers.current[d.blockId]);
-                ui.recoverDraft(d);
-              }}
-            >
-              Recover a copy
-            </button>
-          </section>
-        ))}
-      </details>
+      <SavedDrafts
+        drafts={availableDrafts}
+        blocks={state.blocks}
+        onRefresh={ui.refreshDrafts}
+        onDiscard={ui.discardDraft}
+        onRecover={(draft) => {
+          clearTimeout(timers.current[draft.blockId]);
+          ui.recoverDraft(draft);
+        }}
+      />
       {state.blocks
         .filter(
           (b) =>

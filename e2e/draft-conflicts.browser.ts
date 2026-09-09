@@ -73,6 +73,7 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
     await saved(page, 'Tab A: take the north route')
       .getByRole('button', { name: 'Recover a copy' })
       .click();
+    await text(page).fill('Tab A: take the north route (revised)');
     await page.unroute('**/api/blocks/live');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect
@@ -81,7 +82,7 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
           (await (await page.request.get(`${origin}/api/branes/${brane.id}`)).json()).blocks[0]
             .content.text,
       )
-      .toBe('Tab A: take the north route');
+      .toBe('Tab A: take the north route (revised)');
     // The second tab is stale; Spawn must reject its original version and show the conflict.
     await saved(other, 'Tab B: take the south route')
       .getByRole('button', { name: 'Recover a copy' })
@@ -95,7 +96,7 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
     await expect(comparison.locator('pre')).toHaveText([
       '',
       'Tab B: take the south route',
-      'Tab A: take the north route',
+      'Tab A: take the north route (revised)',
     ]);
     await expect
       .poll(
@@ -119,6 +120,55 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
     await page.getByText(/^Other saved drafts \(/).click();
     await expect(saved(page, 'Tab A: take the north route')).toHaveCount(1);
     await expect(saved(page, 'Tab B: take the south route')).toHaveCount(1);
+    // Retire the original after its recovered copy was saved; server text is untouched.
+    await saved(page, 'Tab A: take the north route')
+      .getByRole('button', { name: 'Remove saved copy' })
+      .click();
+    await expect(saved(page, 'Tab A: take the north route')).toHaveCount(0);
+    await expect(saved(page, 'Tab B: take the south route')).toHaveCount(1);
+    expect(
+      (await (await page.request.get(`${origin}/api/branes/${brane.id}`)).json()).blocks[0].content
+        .text,
+    ).toBe('Tab B: take the south route');
+
+    // Keep a stale recovery view open while its owner edits the same persisted record.
+    await other.route('**/api/blocks/live', (route) => route.abort('internetdisconnected'));
+    await text(other).fill('Live retained copy');
+    await expect(other.getByRole('alert')).toContainText('Failed to fetch');
+    await page.getByRole('button', { name: 'Refresh saved drafts' }).click();
+    await expect(saved(page, 'Live retained copy')).toHaveCount(1);
+    await text(other).fill('Newer live copy must survive removal');
+    // Observe durable completion without refreshing the stale list under test.
+    await expect
+      .poll(() =>
+        other.evaluate(async () => {
+          const db = await new Promise<IDBDatabase>((resolve, reject) => {
+            const request = indexedDB.open('mem-brane-drafts', 1);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+          const records = await new Promise<any[]>((resolve, reject) => {
+            const request = db.transaction('drafts').objectStore('drafts').getAll();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+          db.close();
+          return records.some((d) => d.text === 'Newer live copy must survive removal');
+        }),
+      )
+      .toBe(true);
+    await saved(page, 'Live retained copy')
+      .getByRole('button', { name: 'Remove saved copy' })
+      .click();
+    await expect(
+      page.getByText('This copy changed elsewhere and was kept.', { exact: false }),
+    ).toBeVisible();
+    await expect(saved(page, 'Newer live copy must survive removal')).toHaveCount(1);
+    await expect(text(other)).toHaveValue('Newer live copy must survive removal');
+    await page.reload();
+    await page.getByText(/^Other saved drafts \(/).click();
+    await expect(saved(page, 'Tab A: take the north route')).toHaveCount(0);
+    await expect(saved(page, 'Newer live copy must survive removal')).toHaveCount(1);
     await other.close();
   } finally {
     if (child.exitCode === null && child.signalCode === null) {

@@ -8,10 +8,12 @@ export interface Draft {
   baseText: string;
   updatedAt: number;
 }
+export type DiscardDraftResult = 'removed' | 'missing' | 'changed';
 export interface DraftStorage {
   list(actor: string): Promise<Draft[]>;
   put(draft: Draft): Promise<void>;
   remove(key: string): Promise<void>;
+  removeIfUnchanged(expected: Draft): Promise<DiscardDraftResult>;
 }
 export function indexedDraftStorage(): DraftStorage {
   let database: Promise<IDBDatabase> | undefined;
@@ -45,6 +47,34 @@ export function indexedDraftStorage(): DraftStorage {
     remove: async (key) => {
       await transaction('readwrite', (s) => s.delete(key));
     },
+    removeIfUnchanged: async (expected) => {
+      const snapshot = structuredClone(expected);
+      const db = await open();
+      return new Promise<DiscardDraftResult>((resolve, reject) => {
+        // IndexedDB serializes overlapping read/write transactions across tabs.
+        // Read, compare every field and delete within this same transaction.
+        const tx = db.transaction('drafts', 'readwrite');
+        const store = tx.objectStore('drafts');
+        const read = store.get(snapshot.key);
+        let result: DiscardDraftResult = 'missing';
+        read.onsuccess = () => {
+          const current: Draft | undefined = read.result;
+          if (!current) return;
+          if (
+            (Object.keys(snapshot) as (keyof Draft)[]).every(
+              (field) => current[field] === snapshot[field],
+            ) &&
+            Object.keys(current).length === Object.keys(snapshot).length
+          ) {
+            store.delete(snapshot.key);
+            result = 'removed';
+          } else result = 'changed';
+        };
+        tx.oncomplete = () => resolve(result);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+    },
   };
 }
 export class DraftRecovery {
@@ -60,6 +90,16 @@ export class DraftRecovery {
   remove(key: string) {
     this.tail = this.tail.catch(() => {}).then(() => this.storage.remove(key));
     return this.tail;
+  }
+  discard(expected: Draft) {
+    const snapshot = structuredClone(expected);
+    const result = this.tail.catch(() => {}).then(() => this.storage.removeIfUnchanged(snapshot));
+    // The caller receives removal failures; they must not poison later recovery reads.
+    this.tail = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
   }
   flush() {
     return this.tail;

@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import type { CanvasTool } from '../canvas/tools';
-import { DraftRecovery, indexedDraftStorage, draftKey, type Draft } from '../services/drafts';
+import {
+  DraftRecovery,
+  indexedDraftStorage,
+  draftKey,
+  type Draft,
+  type DiscardDraftResult,
+} from '../services/drafts';
 const recovery = new DraftRecovery(indexedDraftStorage());
 interface Interaction {
   actor?: string;
@@ -8,6 +14,7 @@ interface Interaction {
   availableDrafts: Draft[];
   refreshDrafts: () => Promise<void>;
   recoverDraft: (draft: Draft) => void;
+  discardDraft: (draft: Draft) => Promise<DiscardDraftResult>;
   draftRecords: Record<string, Draft>;
   recoveryError?: string;
   initialize: (actor: string) => Promise<void>;
@@ -57,6 +64,18 @@ export const useInteraction = create<Interaction>((set, get) => ({
         recoveryError: 'Draft recovery is unavailable. Keep this tab open until edits are saved.',
       });
     }
+  },
+  discardDraft: async (source) => {
+    const actor = get().actor;
+    if (!actor || source.actor !== actor) throw new Error('This draft belongs to another account.');
+    if (Object.values(get().draftRecords).some((d) => d.key === source.key))
+      throw new Error('This draft is being edited here. Save it or choose server text first.');
+    const result = await recovery.discard(source);
+    if (get().actor !== actor) return result;
+    if (result !== 'changed')
+      set((s) => ({ availableDrafts: s.availableDrafts.filter((d) => d.key !== source.key) }));
+    await get().refreshDrafts();
+    return result;
   },
   recoverDraft: (source) => {
     const state = get();
