@@ -1,3 +1,4 @@
+import { cancelRun } from '../server/services/run-lifecycle';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase, type DB } from '../server/db/index';
 import {
@@ -11,9 +12,10 @@ import {
   readBrane,
   uid,
 } from '../server/services/content';
-import { submitRun, retryRun, cancelRun } from '../server/services/runs';
+import { submitRun, retryRun } from '../server/services/runs';
 import { readInputs } from '../server/services/contexts';
-import { claimRun, recoverStale, RunWorker } from '../server/jobs/worker';
+import { RunWorker } from '../server/jobs/worker';
+import { claimRun, recoverStale } from '../server/services/run-lifecycle';
 import { EventHub } from '../server/sse/hub';
 import { buildMessages } from '../server/llm/model';
 import { requireOwned } from '../server/domain/access';

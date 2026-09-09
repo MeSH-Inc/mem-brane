@@ -2,7 +2,7 @@ import { decodeRecord, decodeJson, runRecord, runOptions, type RunRecord } from 
 import type { Placement, Geometry } from '../../shared/types/domain.js';
 import { submissionReceipt } from '../../shared/schemas/index.js';
 import { createContext, readInputs, type ContextEntry } from './contexts.js';
-import { reserveCost, releaseUninvokedCost, type CostPolicy } from './costs.js';
+import { reserveCost, type CostPolicy } from './costs.js';
 import { createHash } from 'node:crypto';
 import type { DB } from '../db/index.js';
 import type { SubmissionReceipt, SubmitRun, SpawnArtifact } from '../../shared/types/domain.js';
@@ -175,15 +175,6 @@ export function submitRun(
       JSON.stringify({ runId, outputBlockId: output.id, edits }),
     );
     return readStoredRun(db, runId);
-  })();
-}
-export function cancelRun(db: DB, actor: string, id: string) {
-  return db.transaction(() => {
-    requireOwned(db, 'runs', actor, id);
-    db.prepare(
-      "UPDATE runs SET status=CASE WHEN status='queued' THEN 'cancelled' ELSE 'cancel_requested' END,finished_at=CASE WHEN status='queued' THEN ? ELSE finished_at END WHERE id=? AND status IN ('queued','claimed','running')",
-    ).run(now(), id);
-    if (readStoredRun(db, id).status === 'cancelled') releaseUninvokedCost(db, id);
   })();
 }
 export function retryRun(db: DB, actor: string, id: string, key: string, limits: RunLimits) {

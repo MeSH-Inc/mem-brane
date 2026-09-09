@@ -2,7 +2,9 @@
 
 queued → claimed → running → completed | failed | interrupted
 
-queued/claimed/running → cancel_requested → cancelled
+queued/claimed → cancelled
+
+running → cancel_requested → cancelled
 
 Submission atomically freezes inputs and creates a queued Run under a per-user idempotency key. An identical duplicate returns the original Run; a changed payload conflicts. A worker atomically selects and conditionally claims queued work in a short transaction, acquiring a lease. Before the external call it persists running and creates a RunAttempt. Provider I/O is outside transactions.
 
@@ -24,3 +26,27 @@ if an adapter ignores cancellation; late chunks and late results cannot update S
 Infrastructure failures stop admission and trigger an unsuccessful process shutdown.
 Shutdown closes event streams, drains HTTP requests and interrupts workers before
 closing SQLite. A twenty-second process deadline bounds an unresponsive shutdown.
+
+## Transaction ownership
+
+`server/services/run-lifecycle.ts` owns claims, attempt starts, lease renewal,
+checkpoints, completion, cancellation, and expiry. Each operation holds an immediate
+SQLite transaction. The worker owns transport, timers, and post-commit notifications;
+it contains no lifecycle SQL. Admission and explicit retry remain in `runs.ts`.
+
+Every executing-worker write checks run ID, worker ID, active attempt ID, status,
+and a lease deadline strictly greater than the operation time. Expiry wins at the
+deadline. An expired lease cannot be renewed, and stale attempts cannot checkpoint,
+complete, or overwrite a terminal outcome. Recovery emits committed state changes.
+
+Cancellation before an attempt starts immediately clears the lease and releases the
+reservation. During execution it requests cancellation; stopping or expiry records
+matching run/attempt outcomes and retains uncertain cost. A known preflight failure
+releases cost. Successful finalization commits the checkpoint, immutable revision,
+conversation messages, output link, usage, attempt outcome, and cost settlement together.
+Accounting errors roll back the entire transition. Lease expiry never retries provider
+execution automatically.
+
+Deterministic lifecycle tests cover cancellation and expiry across execution stages,
+stale attempt fencing, terminal idempotence, and injected accounting failures. Worker
+integration tests separately cover ignored cancellation, deadlines, and process death.

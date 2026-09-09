@@ -1,12 +1,15 @@
-import { decodeRecord, decodeJson, runRecord, runOptions, type RunRecord } from '../db/records.js';
+import { decodeJson, runOptions, type RunRecord } from '../db/records.js';
 import { fitsArtifactContent } from '../../shared/limits.js';
 import { abortable } from '../app/abort.js';
 import {
-  settleCost,
-  holdUncertainCost,
-  releaseUninvokedCost,
-  releaseFailedPreflightCost,
-} from '../services/costs.js';
+  claimRun,
+  recoverStale,
+  startAttempt,
+  renewAttempt,
+  saveCheckpoint,
+  completeAttempt,
+  stopAttempt,
+} from '../services/run-lifecycle.js';
 import { BeforeInvocationError } from '../llm/errors.js';
 import { lifecycleLog } from '../app/logging.js';
 import type { DB } from '../db/index.js';
@@ -23,50 +26,6 @@ export interface WorkerOptions {
   idleMs?: number;
   canClaim?: () => boolean;
   onFatal?: (error: unknown) => void;
-}
-export function recoverStale(db: DB, time = now()) {
-  return db.transaction(() => {
-    const stale = db
-      .prepare(
-        "SELECT id,status FROM runs WHERE lease_until<? AND status IN ('running','cancel_requested')",
-      )
-      .all(time) as { id: string; status: string }[];
-    for (const run of stale) {
-      if (db.prepare('SELECT 1 FROM run_attempts WHERE run_id=?').get(run.id))
-        holdUncertainCost(db, run.id);
-      else releaseUninvokedCost(db, run.id);
-      lifecycleLog('lease_expired', { runId: run.id, status: run.status });
-    }
-    db.prepare(
-      "UPDATE run_attempts SET finished_at=?,outcome='interrupted' WHERE finished_at IS NULL AND run_id IN (SELECT id FROM runs WHERE lease_until<? AND status IN ('running','cancel_requested'))",
-    ).run(time, time);
-    db.prepare(
-      "UPDATE runs SET status='queued',lease_owner=NULL,lease_until=NULL WHERE status='claimed' AND lease_until<?",
-    ).run(time);
-    db.prepare(
-      "UPDATE runs SET status=CASE WHEN status='cancel_requested' THEN 'cancelled' ELSE 'interrupted' END,error='Worker lease expired; provider completion is uncertain',finished_at=?,lease_owner=NULL,lease_until=NULL WHERE status IN ('running','cancel_requested') AND lease_until<?",
-    ).run(time, time);
-  })();
-}
-export function claimRun(db: DB, workerId: string, leaseMs: number) {
-  return db
-    .transaction(() => {
-      const row = db
-        .prepare("SELECT * FROM runs WHERE status='queued' ORDER BY created_at LIMIT 1")
-        .get();
-      if (!row) return null;
-      const run = decodeRecord(runRecord, row);
-      const leaseUntil = now() + leaseMs;
-      const claimed = db
-        .prepare(
-          "UPDATE runs SET status='claimed',lease_owner=?,lease_until=? WHERE id=? AND status='queued'",
-        )
-        .run(workerId, leaseUntil, run.id);
-      return claimed.changes
-        ? { ...run, status: 'claimed' as const, lease_owner: workerId, lease_until: leaseUntil }
-        : null;
-    })
-    .immediate();
 }
 export class RunWorker {
   readonly id = uid();
@@ -100,7 +59,7 @@ export class RunWorker {
   tick() {
     if (this.stopping) return;
     try {
-      recoverStale(this.db);
+      this.recover();
       while (this.active.size < this.options.concurrency && (this.options.canClaim?.() ?? true)) {
         const run = claimRun(this.db, this.id, this.options.leaseMs);
         if (!run) break;
@@ -118,6 +77,17 @@ export class RunWorker {
       this.fail(error);
     }
   }
+  private recover() {
+    for (const run of recoverStale(this.db)) {
+      lifecycleLog('lease_expired', { runId: run.id, status: run.status });
+      this.hub.publish(run.owner_id, {
+        type: 'run',
+        runId: run.id,
+        braneId: run.brane_id,
+        status: run.status,
+      });
+    }
+  }
   async stop() {
     this.stopping = true;
     if (this.timer) clearInterval(this.timer);
@@ -129,7 +99,8 @@ export class RunWorker {
     let text = '',
       savedText = '',
       savedAt = now();
-    const attemptId = uid();
+    const token = startAttempt(db, run.id, this.id);
+    if (!token) return;
     const publish = (status?: RunRecord['status']) => {
       if (status) lifecycleLog('run_status', { runId: run.id, status, workerId: this.id });
       this.hub.publish(run.owner_id, {
@@ -141,57 +112,17 @@ export class RunWorker {
       });
     };
     const checkpoint = () => {
-      db.prepare(
-        'INSERT INTO run_checkpoints VALUES (?,?,?) ON CONFLICT(run_id) DO UPDATE SET text=excluded.text,updated_at=excluded.updated_at',
-      ).run(run.id, text, now());
+      if (!saveCheckpoint(db, token, text)) throw new Error('Run no longer owned');
       savedText = text;
       savedAt = now();
     };
-    const started = db.transaction(() => {
-      const result = db
-        .prepare(
-          "UPDATE runs SET status='running',started_at=? WHERE id=? AND status='claimed' AND lease_owner=?",
-        )
-        .run(now(), run.id, this.id);
-      if (!result.changes) {
-        db.prepare(
-          "UPDATE runs SET status='cancelled',finished_at=? WHERE id=? AND status='cancel_requested'",
-        ).run(now(), run.id);
-        return false;
-      }
-      db.prepare(
-        'INSERT INTO run_attempts (id,run_id,worker_id,started_at,heartbeat_at) VALUES (?,?,?,?,?)',
-      ).run(attemptId, run.id, this.id, now(), now());
-      return true;
-    })();
-    if (!started) {
-      releaseUninvokedCost(db, run.id);
-      publish('cancelled');
-      return;
-    }
     publish('running');
     const heartbeat = setInterval(
       () => {
         try {
-          const current = db
-            .prepare<unknown[], Pick<RunRecord, 'status' | 'lease_owner'>>(
-              'SELECT status,lease_owner FROM runs WHERE id=?',
-            )
-            .get(run.id);
-          if (
-            !current ||
-            current.status === 'cancel_requested' ||
-            current.lease_owner !== this.id ||
-            current.status !== 'running'
-          )
+          if (!renewAttempt(db, token, this.options.leaseMs)) {
             controller.abort(new Error('Run stopped'));
-          else {
-            db.prepare('UPDATE runs SET lease_until=? WHERE id=? AND lease_owner=?').run(
-              now() + this.options.leaseMs,
-              run.id,
-              this.id,
-            );
-            db.prepare('UPDATE run_attempts SET heartbeat_at=? WHERE id=?').run(now(), attemptId);
+            return;
           }
           if (text !== savedText && now() - savedAt >= this.options.checkpointMs) checkpoint();
         } catch (error) {
@@ -242,103 +173,22 @@ export class RunWorker {
       controller.signal.throwIfAborted();
       if (!fitsArtifactContent({ text: result.text }))
         throw new Error('Generated text exceeds the character limit');
-      db.transaction(() => {
-        const current = db
-          .prepare<unknown[], Pick<RunRecord, 'status' | 'lease_owner'>>(
-            'SELECT status,lease_owner FROM runs WHERE id=?',
-          )
-          .get(run.id);
-        if (!current || current.status !== 'running' || current.lease_owner !== this.id)
-          throw new Error('Run no longer owned');
-        text = result.text;
-        checkpoint();
-        const revisionId = uid(),
-          userMessage = uid(),
-          assistantMessage = uid();
-        db.prepare(
-          'INSERT INTO block_revisions (id,block_id,content_json,created_at) VALUES (?,?,?,?)',
-        ).run(revisionId, run.output_block_id, JSON.stringify({ format: 'text', text }), now());
-        const context = db
-          .prepare(
-            "SELECT c.parent_message_id,e.revision_id FROM context_manifests c JOIN context_entries e ON e.context_id=c.id AND e.kind='prompt' WHERE c.id=?",
-          )
-          .get(run.context_id) as { parent_message_id: string | null; revision_id: string };
-        db.prepare(
-          'INSERT INTO conversation_messages (id,conversation_id,parent_id,role,revision_id,created_at,run_id) VALUES (?,?,?,?,?,?,?)',
-        ).run(
-          userMessage,
-          run.conversation_id,
-          context.parent_message_id,
-          'user',
-          context.revision_id,
-          now(),
-          run.id,
-        );
-        db.prepare(
-          'INSERT INTO conversation_messages (id,conversation_id,parent_id,role,revision_id,created_at,run_id) VALUES (?,?,?,?,?,?,?)',
-        ).run(
-          assistantMessage,
-          run.conversation_id,
-          userMessage,
-          'assistant',
-          revisionId,
-          now(),
-          run.id,
-        );
-        db.prepare('INSERT INTO run_outputs VALUES (?,?,?)').run(
-          run.id,
-          revisionId,
-          assistantMessage,
-        );
-        db.prepare(
-          "UPDATE runs SET status='completed',usage_json=?,finished_at=?,lease_owner=NULL,lease_until=NULL WHERE id=?",
-        ).run(result.usage ? JSON.stringify(result.usage) : null, now(), run.id);
-        db.prepare("UPDATE run_attempts SET finished_at=?,outcome='completed' WHERE id=?").run(
-          now(),
-          attemptId,
-        );
-        settleCost(db, run.id, result.usage, run.model === 'mock');
-      })();
+      if (!completeAttempt(db, token, result)) throw new Error('Run no longer owned');
+      text = result.text;
       publish('completed');
     } catch (error) {
-      const current = db
-        .prepare<unknown[], Pick<RunRecord, 'status' | 'lease_owner'>>(
-          'SELECT status,lease_owner FROM runs WHERE id=?',
-        )
-        .get(run.id);
-      if (current?.lease_owner === this.id) {
-        const status =
-          current.status === 'cancel_requested'
-            ? 'cancelled'
-            : this.stopping
-              ? 'interrupted'
-              : 'failed';
-        db.transaction(() => {
-          checkpoint();
-          if (error instanceof BeforeInvocationError) releaseFailedPreflightCost(db, run.id);
-          else holdUncertainCost(db, run.id);
-          db.prepare(
-            'UPDATE runs SET status=?,error=?,finished_at=?,lease_owner=NULL,lease_until=NULL WHERE id=?',
-          ).run(
-            status,
-            status === 'failed'
-              ? error instanceof BeforeInvocationError
-                ? 'Model preparation failed; no provider call was made'
-                : 'Model request failed; completion or billing may be uncertain'
-              : status === 'interrupted'
-                ? 'Server stopped; provider completion is uncertain'
-                : null,
-            now(),
-            run.id,
-          );
-          db.prepare('UPDATE run_attempts SET finished_at=?,outcome=? WHERE id=?').run(
-            now(),
-            status,
-            attemptId,
-          );
-        })();
-        publish(status);
-      }
+      const status = stopAttempt(
+        db,
+        token,
+        text,
+        error instanceof BeforeInvocationError
+          ? 'preflight'
+          : this.stopping
+            ? 'shutdown'
+            : 'failed',
+      );
+      if (status) publish(status);
+      else this.recover();
       if (!controller.signal.aborted)
         console.error(
           'Run execution failed',

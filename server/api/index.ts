@@ -1,3 +1,4 @@
+import { cancelRun } from '../services/run-lifecycle.js';
 import { readConfiguration } from '../services/configuration.js';
 import type { RunIdentity } from '../../shared/contracts.js';
 import { readPdfPages } from '../services/representations.js';
@@ -34,13 +35,7 @@ import {
   now,
   uid,
 } from '../services/content.js';
-import {
-  readSubmissionReceipt,
-  spawnArtifact,
-  submitRun,
-  cancelRun,
-  retryRun,
-} from '../services/runs.js';
+import { readSubmissionReceipt, spawnArtifact, submitRun, retryRun } from '../services/runs.js';
 import { readInputs, readLineage } from '../services/contexts.js';
 import {
   geometry,

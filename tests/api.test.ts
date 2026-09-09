@@ -1,6 +1,6 @@
 import { createClient } from '../src/services/client';
 import { ApiError } from '../src/services/api';
-import { claimRun } from '../server/jobs/worker';
+import { claimRun } from '../server/services/run-lifecycle';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import { openDatabase, type DB } from '../server/db/index';

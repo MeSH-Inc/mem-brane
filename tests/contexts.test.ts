@@ -1,7 +1,8 @@
+import { cancelRun } from '../server/services/run-lifecycle';
 import { beforeEach, afterEach, expect, it } from 'vitest';
 import { openDatabase, type DB } from '../server/db';
 import { createBrane, createTextBlock, revisions, uid } from '../server/services/content';
-import { submitRun, retryRun, cancelRun } from '../server/services/runs';
+import { submitRun, retryRun } from '../server/services/runs';
 import { readInputs, readLineage } from '../server/services/contexts';
 import { seedHistory } from '../scripts/fixtures/history';
 import { estimateRun } from '../server/services/estimate';

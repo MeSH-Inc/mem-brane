@@ -1,3 +1,4 @@
+import { cancelRun } from '../server/services/run-lifecycle';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { openDatabase, type DB } from '../server/db/index';
 import {
@@ -11,7 +12,7 @@ import {
   removePlacement,
   uid,
 } from '../server/services/content';
-import { spawnArtifact, retryRun, cancelRun } from '../server/services/runs';
+import { spawnArtifact, retryRun } from '../server/services/runs';
 import { readInputs } from '../server/services/contexts';
 import { RunWorker } from '../server/jobs/worker';
 import { EventHub } from '../server/sse/hub';
