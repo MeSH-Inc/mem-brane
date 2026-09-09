@@ -1,3 +1,5 @@
+import { RequestJournal } from '../services/request-journal';
+import { submitRun, spawnArtifact } from '../../shared/schemas';
 import { useWorkspaceDraft } from '../services/workspace-drafts';
 import { modelCompatibility } from '../../shared/representations';
 import { PdfContent } from '../components/PdfContent';
@@ -145,11 +147,24 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   const navigate = useNavigate();
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [textSaves] = useState(() => new TextSaves((edit) => api('/blocks/live', edit, 'PATCH')));
-  const [submission] = useState(() => new Submission<SubmitRun>());
-  const spawnRequests = useRef(new Map<string, SpawnArtifact>());
+  const [pendingRuns] = useState(
+    () =>
+      new RequestJournal<SubmitRun>(
+        JSON.stringify(['mem-brane-pending-runs', actor, braneId]),
+        (value) => submitRun.safeParse(value).success,
+      ),
+  );
+  const [submission] = useState(() => new Submission<SubmitRun>(pendingRuns));
+  const [spawnRequests] = useState(
+    () =>
+      new RequestJournal<SpawnArtifact>(
+        JSON.stringify(['mem-brane-pending-spawns', actor, braneId]),
+        (value) => spawnArtifact.safeParse(value).success,
+      ),
+  );
   const spawningRef = useRef(new Set<string>());
   const [spawning, setSpawning] = useState<string[]>([]);
-  const [retrySpawns, setRetrySpawns] = useState<string[]>([]);
+  const [retrySpawns, setRetrySpawns] = useState<string[]>(() => [...spawnRequests.keys()]);
   const fileInput = useRef<HTMLInputElement>(null);
   const pickerTarget = useRef<'canvas' | 'composer'>('canvas');
   const importRevision = useSyncExternalStore(imports.subscribe, imports.getSnapshot);
@@ -349,6 +364,8 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
         stateRef.current = next;
         setState(next);
       }
+      // A recovered copy selected during this save has its own base and identity.
+      if (useInteraction.getState().draftRecords[id]?.key !== draft?.key) return;
       useInteraction.getState().clearDraft(id, text);
       if (useInteraction.getState().drafts[id] !== undefined)
         useInteraction.getState().rebase(id, result.version, result.content.text);
@@ -447,7 +464,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
       // Join the autosave queue: earlier writes finish first, later writes wait until
       // the source edit and frozen input have committed together.
       const work = textSaves.serialize(async () => {
-        let request = spawnRequests.current.get(blockId);
+        let request = spawnRequests.get(blockId);
         if (!request) {
           const block = stateRef.current?.blocks.find((b) => b.id === blockId);
           if (!block) throw new Error('Source artifact is no longer available.');
@@ -466,10 +483,10 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 ? [{ blockId, text: draft.text, version: draft.baseVersion }]
                 : [],
           };
-          spawnRequests.current.set(blockId, request);
+          spawnRequests.set(blockId, request);
         }
         const result = await api<Run>('/artifacts/spawn', request);
-        spawnRequests.current.delete(blockId);
+        spawnRequests.delete(blockId);
         for (const edit of request.edits) {
           const current = stateRef.current;
           if (current) {
@@ -490,13 +507,10 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
             setState(reconciled);
           }
           const interaction = useInteraction.getState();
-          interaction.clearDraft(edit.blockId, edit.text);
-          interaction.rebase(
-            edit.blockId,
-            stateRef.current?.blocks.find((b) => b.id === edit.blockId)?.version ??
-              edit.version + 1,
-            edit.text,
-          );
+          if (interaction.draftRecords[edit.blockId]?.baseVersion === edit.version) {
+            interaction.clearDraft(edit.blockId, edit.text);
+            interaction.rebase(edit.blockId, edit.version + 1, edit.text);
+          }
         }
         setNotice('Artifact spawned · source context frozen');
         await refresh();
@@ -505,21 +519,31 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
       });
       void work
         .catch((e) => {
-          if (e instanceof ApiError && e.status >= 400 && e.status < 500)
-            spawnRequests.current.delete(blockId);
-          setError(e.message);
+          let message = e.message;
+          if (e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408) {
+            try {
+              spawnRequests.delete(blockId);
+            } catch (storageError) {
+              message += ' ' + (storageError as Error).message;
+            }
+          }
+          setError(message);
           if (e instanceof ApiError && e.status === 409) void refresh().catch(() => {});
         })
         .finally(() => {
           spawningRef.current.delete(blockId);
           setSpawning([...spawningRef.current]);
-          setRetrySpawns([...spawnRequests.current.keys()]);
+          setRetrySpawns([...spawnRequests.keys()]);
         });
     },
     [braneId, model, refresh, mobile, focusBlock],
   );
   async function run() {
-    if (busy || pendingAttachments || compatibilityError) return;
+    if (
+      busy ||
+      (submission.state.status !== 'uncertain' && (pendingAttachments || compatibilityError))
+    )
+      return;
     setBusy(true);
     setError('');
     try {
@@ -550,6 +574,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   const focusMode = view === 'focus' || (!view && mobile);
   const focused = state?.blocks.find((b) => b.id === focus) ?? state?.blocks[0];
   if (!state) return <div className="loading">{error || 'Opening brane…'}</div>;
+  const availableDrafts = ui.availableDrafts.filter((d) =>
+    state.blocks.some((b) => b.id === d.blockId),
+  );
   return (
     <>
       <div className="brane-toolbar">
@@ -608,27 +635,25 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
         </div>
       )}
       <details className="draft-recovery">
-        <summary>Other saved drafts</summary>
+        <summary>Other saved drafts ({availableDrafts.length})</summary>
         <button onClick={() => void ui.refreshDrafts()}>Refresh saved drafts</button>
         <p>Recover a copy to edit here. The original stays available to its tab.</p>
-        {ui.availableDrafts
-          .filter((d) => state.blocks.some((b) => b.id === d.blockId))
-          .map((d) => (
-            <section key={d.key} aria-label="Saved draft">
-              <small>
-                {new Date(d.updatedAt).toLocaleString()} · version {d.baseVersion}
-              </small>
-              <pre>{d.text}</pre>
-              <button
-                onClick={() => {
-                  clearTimeout(timers.current[d.blockId]);
-                  ui.recoverDraft(d);
-                }}
-              >
-                Recover a copy
-              </button>
-            </section>
-          ))}
+        {availableDrafts.map((d) => (
+          <section key={d.key} aria-label="Saved draft">
+            <small>
+              {new Date(d.updatedAt).toLocaleString()} · version {d.baseVersion}
+            </small>
+            <pre>{d.text}</pre>
+            <button
+              onClick={() => {
+                clearTimeout(timers.current[d.blockId]);
+                ui.recoverDraft(d);
+              }}
+            >
+              Recover a copy
+            </button>
+          </section>
+        ))}
       </details>
       {state.blocks
         .filter(
@@ -781,9 +806,13 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               <button>Import webpage</button>
             </form>
           )}
-          {(error || workspace.error) && (
+          {(error ||
+            workspace.error ||
+            pendingRuns.error ||
+            spawnRequests.error ||
+            submission.state.status === 'uncertain') && (
             <div role="alert" className="error-banner">
-              {error || workspace.error}
+              {error || workspace.error || pendingRuns.error || spawnRequests.error}
               <button
                 onClick={() => {
                   setError('');
@@ -799,6 +828,12 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 </p>
               )}
             </div>
+          )}
+          {retrySpawns.length > 0 && (
+            <p>
+              Spawn delivery is uncertain. Retry Spawn checks the original request, including its
+              original source edits.
+            </p>
           )}
           {importTasks.length > 0 && <ImportTray tasks={importTasks} />}
           {imports.recoveryError && (
@@ -944,7 +979,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 onKeyDown={(e) => {
                   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                     e.preventDefault();
-                    if (prompt.trim()) void run();
+                    if (prompt.trim() || submission.state.status === 'uncertain') void run();
                   }
                 }}
               />
@@ -952,9 +987,8 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 className="primary run-button"
                 disabled={
                   busy ||
-                  pendingAttachments ||
-                  !!compatibilityError ||
-                  (submission.state.status !== 'uncertain' && !prompt.trim())
+                  (submission.state.status !== 'uncertain' &&
+                    (pendingAttachments || !!compatibilityError || !prompt.trim()))
                 }
                 onClick={() => void run()}
               >

@@ -57,6 +57,14 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
     await page
       .getByRole('textbox', { name: 'Block text', exact: true })
       .fill('Field notes: the north trail floods after heavy rain.');
+    await expect
+      .poll(
+        async () =>
+          (await (await page.request.get(`${origin}/api/branes/${brane.id}`)).json()).blocks.find(
+            (b: any) => b.id === block.id,
+          ).content.text,
+      )
+      .toBe('Field notes: the north trail floods after heavy rain.');
     await page.getByRole('button', { name: '+ Use as context', exact: true }).click();
     await prompt.fill('Plan a safe route using the evidence');
     await title.fill('Unfinished field study');

@@ -62,7 +62,7 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
       await expect(p.getByRole('alert')).toContainText('Failed to fetch');
     for (const p of [page, other]) {
       await p.reload();
-      await p.getByText('Other saved drafts', { exact: true }).click();
+      await p.getByText(/^Other saved drafts \(/).click();
       await expect(p.getByRole('region', { name: 'Saved draft' })).toHaveCount(2);
       await expect(text(p)).toHaveValue('');
     }
@@ -116,7 +116,7 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
       )
       .toBe('completed');
     await page.reload();
-    await page.getByText('Other saved drafts', { exact: true }).click();
+    await page.getByText(/^Other saved drafts \(/).click();
     await expect(saved(page, 'Tab A: take the north route')).toHaveCount(1);
     await expect(saved(page, 'Tab B: take the south route')).toHaveCount(1);
     await other.close();

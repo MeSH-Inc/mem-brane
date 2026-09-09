@@ -20,7 +20,7 @@ export function SpawnButton({
   return (
     <button
       className="spawn-button"
-      disabled={busy || !ready}
+      disabled={busy || (!retry && !ready)}
       title={
         ready
           ? 'Generate a new artifact from this. Develops the selected artifact using the current model.'
