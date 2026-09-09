@@ -5,11 +5,14 @@ const recovery = new DraftRecovery(indexedDraftStorage());
 interface Interaction {
   actor?: string;
   recovered: string[];
+  availableDrafts: Draft[];
+  refreshDrafts: () => Promise<void>;
+  recoverDraft: (draft: Draft) => void;
   draftRecords: Record<string, Draft>;
   recoveryError?: string;
   initialize: (actor: string) => Promise<void>;
   flushRecovery: () => Promise<void>;
-  rebase: (id: string, version: number) => void;
+  rebase: (id: string, version: number, text: string) => void;
   selectedPlacements: string[];
   drafts: Record<string, string>;
   references: string[];
@@ -17,7 +20,7 @@ interface Interaction {
   tool: CanvasTool;
   inspector: boolean;
   setSelectedPlacements: (ids: string[]) => void;
-  draft: (id: string, text: string, version: number) => void;
+  draft: (id: string, text: string, version: number, baseText: string) => void;
   clearDraft: (id: string, text: string) => void;
   addReferences: (ids: string[]) => void;
   setReferences: (ids: string[]) => void;
@@ -28,28 +31,55 @@ interface Interaction {
 }
 export const useInteraction = create<Interaction>((set, get) => ({
   recovered: [],
+  availableDrafts: [],
   draftRecords: {},
   initialize: async (actor) => {
-    set({ actor, drafts: {}, draftRecords: {}, recovered: [], recoveryError: undefined });
+    set({
+      actor,
+      drafts: {},
+      draftRecords: {},
+      recovered: [],
+      availableDrafts: [],
+      recoveryError: undefined,
+    });
+    await get().refreshDrafts();
+  },
+  refreshDrafts: async () => {
+    const actor = get().actor;
+    if (!actor) return;
     try {
       const records = await recovery.load(actor);
       if (get().actor !== actor) return;
-      set({
-        recovered: records.map((d) => d.blockId),
-        draftRecords: Object.fromEntries(records.map((d) => [d.blockId, d])),
-        drafts: Object.fromEntries(records.map((d) => [d.blockId, d.text])),
-      });
+      const active = new Set(Object.values(get().draftRecords).map((d) => d.key));
+      set({ availableDrafts: records.filter((d) => !active.has(d.key)) });
     } catch {
       set({
         recoveryError: 'Draft recovery is unavailable. Keep this tab open until edits are saved.',
       });
     }
   },
+  recoverDraft: (source) => {
+    const state = get();
+    if (source.actor !== state.actor) return;
+    // Copy rather than claim: another live tab may still own the source record.
+    const record = { ...source, key: draftKey(), updatedAt: Date.now() };
+    set({
+      drafts: { ...state.drafts, [source.blockId]: source.text },
+      draftRecords: { ...state.draftRecords, [source.blockId]: record },
+      recovered: [...new Set([...state.recovered, source.blockId])],
+    });
+    void recovery
+      .save(record)
+      .then(() => get().refreshDrafts())
+      .catch(() =>
+        set({ recoveryError: 'Could not preserve your recovered draft. Keep this tab open.' }),
+      );
+  },
   flushRecovery: () => recovery.flush(),
-  rebase: (id, version) => {
+  rebase: (id, version, text) => {
     const record = get().draftRecords[id];
     if (record) {
-      const next = { ...record, baseVersion: version };
+      const next = { ...record, baseVersion: version, baseText: text };
       set((s) => ({ draftRecords: { ...s.draftRecords, [id]: next } }));
       void recovery
         .save(next)
@@ -69,15 +99,16 @@ export const useInteraction = create<Interaction>((set, get) => ({
         ? state
         : { selectedPlacements };
     }),
-  draft: (id, text, version) => {
+  draft: (id, text, version, baseText) => {
     const state = get();
     if (!state.actor) return;
     const record: Draft = {
-      key: draftKey(state.actor, id),
+      key: state.draftRecords[id]?.key ?? draftKey(),
       actor: state.actor,
       blockId: id,
       text,
       baseVersion: state.draftRecords[id]?.baseVersion ?? version,
+      baseText: state.draftRecords[id]?.baseText ?? baseText,
       updatedAt: Date.now(),
     };
     set({

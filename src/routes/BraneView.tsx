@@ -123,6 +123,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     inspector: useInteraction((s) => s.inspector),
     rebase: useInteraction((s) => s.rebase),
     recovered: useInteraction((s) => s.recovered),
+    availableDrafts: useInteraction((s) => s.availableDrafts),
+    refreshDrafts: useInteraction((s) => s.refreshDrafts),
+    recoverDraft: useInteraction((s) => s.recoverDraft),
     recoveryError: useInteraction((s) => s.recoveryError),
     references: useInteraction((s) => s.references),
     selectedPlacements: useInteraction((s) => s.selectedPlacements),
@@ -348,15 +351,14 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
       }
       useInteraction.getState().clearDraft(id, text);
       if (useInteraction.getState().drafts[id] !== undefined)
-        useInteraction.getState().rebase(id, result.version);
+        useInteraction.getState().rebase(id, result.version, result.content.text);
     });
     return work;
   }, []);
   const edit = useCallback(
     (id: string, text: string) => {
-      useInteraction
-        .getState()
-        .draft(id, text, stateRef.current?.blocks.find((b) => b.id === id)?.version ?? 0);
+      const block = stateRef.current?.blocks.find((b) => b.id === id);
+      useInteraction.getState().draft(id, text, block?.version ?? 0, block?.content.text ?? '');
       clearTimeout(timers.current[id]);
       timers.current[id] = setTimeout(() => {
         void saveBlock(id).catch((e) => setError(e.message));
@@ -493,6 +495,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
             edit.blockId,
             stateRef.current?.blocks.find((b) => b.id === edit.blockId)?.version ??
               edit.version + 1,
+            edit.text,
           );
         }
         setNotice('Artifact spawned · source context frozen');
@@ -505,6 +508,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           if (e instanceof ApiError && e.status >= 400 && e.status < 500)
             spawnRequests.current.delete(blockId);
           setError(e.message);
+          if (e instanceof ApiError && e.status === 409) void refresh().catch(() => {});
         })
         .finally(() => {
           spawningRef.current.delete(blockId);
@@ -603,6 +607,29 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           {ui.recoveryError}
         </div>
       )}
+      <details className="draft-recovery">
+        <summary>Other saved drafts</summary>
+        <button onClick={() => void ui.refreshDrafts()}>Refresh saved drafts</button>
+        <p>Recover a copy to edit here. The original stays available to its tab.</p>
+        {ui.availableDrafts
+          .filter((d) => state.blocks.some((b) => b.id === d.blockId))
+          .map((d) => (
+            <section key={d.key} aria-label="Saved draft">
+              <small>
+                {new Date(d.updatedAt).toLocaleString()} · version {d.baseVersion}
+              </small>
+              <pre>{d.text}</pre>
+              <button
+                onClick={() => {
+                  clearTimeout(timers.current[d.blockId]);
+                  ui.recoverDraft(d);
+                }}
+              >
+                Recover a copy
+              </button>
+            </section>
+          ))}
+      </details>
       {state.blocks
         .filter(
           (b) =>
@@ -621,7 +648,12 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               <p>{draft.text.slice(0, 140)}</p>
               {conflict && (
                 <details>
-                  <summary>Compare server text</summary>
+                  <summary>Compare original, my draft and server text</summary>
+                  <h4>Original text (version {draft.baseVersion})</h4>
+                  <pre>{draft.baseText}</pre>
+                  <h4>My draft</h4>
+                  <pre>{draft.text}</pre>
+                  <h4>Server text (version {b.version})</h4>
                   <pre>{b.content.text}</pre>
                 </details>
               )}
@@ -636,7 +668,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               <button
                 onClick={async () => {
                   try {
-                    if (conflict) ui.rebase(b.id, b.version);
+                    if (conflict) ui.rebase(b.id, b.version, b.content.text);
                     await saveBlock(b.id);
                     setError('');
                   } catch (e) {

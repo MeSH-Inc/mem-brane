@@ -5,6 +5,7 @@ export interface Draft {
   blockId: string;
   text: string;
   baseVersion: number;
+  baseText: string;
   updatedAt: number;
 }
 export interface DraftStorage {
@@ -64,7 +65,7 @@ export class DraftRecovery {
     return this.tail;
   }
 }
-export const draftKey = (actor: string, blockId: string) => `${actor}:${blockId}`;
+export const draftKey = () => crypto.randomUUID();
 export function draftDisposition(
   draft: Draft,
   current: { version: number; content: { text: string } },

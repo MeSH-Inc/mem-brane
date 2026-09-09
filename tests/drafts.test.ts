@@ -8,11 +8,12 @@ import {
   type Draft,
 } from '../src/services/drafts';
 const record = (text = 'Offline draft'): Draft => ({
-  key: draftKey('alice', 'block'),
+  key: 'test-draft',
   actor: 'alice',
   blockId: 'block',
   text,
   baseVersion: 3,
+  baseText: 'Original',
   updatedAt: Date.now(),
 });
 it('recovers offline text and its original version after a new storage instance', async () => {
@@ -37,4 +38,14 @@ it('never treats a remotely changed version as permission to overwrite', () => {
   expect(draftDisposition(record(), { version: 4, content: { text: 'Offline draft' } })).toBe(
     'saved',
   );
+});
+
+it('keeps independent drafts when another editing session saves and clears its copy', async () => {
+  const storage = indexedDraftStorage();
+  const a = { ...record('Tab A'), key: draftKey() };
+  const b = { ...record('Tab B'), key: draftKey() };
+  await Promise.all([storage.put(a), storage.put(b)]);
+  await storage.remove(a.key);
+  expect(await storage.list('alice')).toContainEqual(b);
+  await storage.remove(b.key);
 });
