@@ -221,11 +221,11 @@ describe('run cost and lifecycle', () => {
   });
   it('atomically claims once and recovers claimed versus running leases differently', () => {
     const a = submit();
-    expect(claimRun(db, 'worker-a', 1000).id).toBe(a.id);
+    expect(claimRun(db, 'worker-a', 1000)?.id).toBe(a.id);
     expect(claimRun(db, 'worker-b', 1000)).toBeNull();
     db.prepare('UPDATE runs SET lease_until=0 WHERE id=?').run(a.id);
     recoverStale(db);
-    expect(claimRun(db, 'worker-b', 1000).id).toBe(a.id);
+    expect(claimRun(db, 'worker-b', 1000)?.id).toBe(a.id);
     db.prepare("UPDATE runs SET status='running',lease_until=0 WHERE id=?").run(a.id);
     recoverStale(db);
     expect(requireOwned(db, 'runs', actor, a.id).status).toBe('interrupted');

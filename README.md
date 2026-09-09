@@ -160,7 +160,7 @@ src/lib/            responsive presentation helpers
 server/app/         configuration and process lifecycle
 server/api/         validated endpoints and request limits
 server/auth/        authentication integration
-server/db/          WAL connection and migration runner
+server/db/          WAL connection, migrations and typed record decoders
 server/domain/      authorization and domain errors
 server/services/    artifacts, snapshots, placements, context, costs and runs
 server/jobs/        claiming, leases, checkpoints and finalization
@@ -168,7 +168,7 @@ server/llm/         frozen-message assembly and provider invocation
 server/sse/         actor-scoped update hub
 server/storage/     filesystem and S3-compatible adapters
 server/ingestion/   bounded, DNS-pinned webpage imports
-shared/             domain types and request schemas
+shared/             domain types, command schemas and public response contracts
 migrations/         schema changes and immutable-history guards
 scripts/            migration, seed, backup and cost reconciliation
 tests/              unit, API, migration, recovery and invariant tests
@@ -206,3 +206,5 @@ Start with [principles](docs/architecture/00-principles.md) and [invariants](doc
 The [scaffold report](docs/scaffold-report.md) and [follow-up implementation notes](docs/follow-up-report.md) are historical implementation records. Use the current source, scripts and architecture documents for present behavior.
 
 Operational limits, durable upload reconciliation, run deadlines, and the database-plus-assets restore verifier are documented in [the operations guide](docs/deployment.md#admission-and-restoration-controls).
+
+Command types derive from their schemas; HTTP responses are validated through typed client methods. See [type boundaries](docs/architecture/14-type-boundaries.md) for persistence records, public DTOs and local contract verification.

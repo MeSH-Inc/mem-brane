@@ -38,7 +38,20 @@ for (const mode of ['explicit Focus', 'mobile default'] as const) {
           path === '/api/branes/b'
             ? state
             : path === '/api/config'
-              ? { models: ['mock'], defaultModel: 'mock', modelCapabilities: {}, budget: {} }
+              ? {
+                  models: ['mock'],
+                  defaultModel: 'mock',
+                  modelCapabilities: {},
+                  imports: { maxBytes: 5000 },
+                  maxOutputTokens: 100,
+                  dailySpendEnforced: true,
+                  budget: {
+                    day: '2026-09-08',
+                    committedMicrousd: 0,
+                    availableMicrousd: 0,
+                    limitMicrousd: 0,
+                  },
+                }
               : {},
       });
     });

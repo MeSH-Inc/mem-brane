@@ -1,11 +1,6 @@
 import { EventEmitter } from 'node:events';
-export interface RunEvent {
-  type: 'run';
-  runId: string;
-  braneId: string;
-  status?: string;
-  text?: string;
-}
+import type { RunEvent } from '../../shared/contracts.js';
+export type { RunEvent } from '../../shared/contracts.js';
 export class EventHub {
   private events = new EventEmitter();
   private shutdown = new AbortController();

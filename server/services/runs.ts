@@ -1,3 +1,6 @@
+import { decodeRecord, decodeJson, runRecord, runOptions, type RunRecord } from '../db/records.js';
+import type { Placement, Geometry } from '../../shared/types/domain.js';
+import { submissionReceipt } from '../../shared/schemas/index.js';
 import { createContext, readInputs, type ContextEntry } from './contexts.js';
 import { reserveCost, releaseUninvokedCost, type CostPolicy } from './costs.js';
 import { createHash } from 'node:crypto';
@@ -19,7 +22,7 @@ function checkLimits(db: DB, actor: string, model: string, limits: RunLimits) {
     .prepare(
       "SELECT count(*) n FROM runs WHERE owner_id=? AND status IN ('queued','claimed','running','cancel_requested')",
     )
-    .get(actor) as any;
+    .get(actor) as { n: number };
   const queued = db
     .prepare(
       "SELECT count(*) n FROM runs WHERE status IN ('queued','claimed','running','cancel_requested')",
@@ -48,11 +51,12 @@ export function submitRun(
     canRunOnBrane(db, actor, input.braneId);
     const existing = db
       .prepare('SELECT * FROM runs WHERE owner_id=? AND submission_key=?')
-      .get(actor, input.key) as any;
+      .get(actor, input.key);
     if (existing) {
-      if (existing.request_hash !== hash)
+      const run = decodeRecord(runRecord, existing);
+      if (run.request_hash !== hash)
         throw new DomainError(409, 'Submission key was used for a different request');
-      return existing;
+      return run;
     }
     checkLimits(db, actor, input.model, limits);
     const edits = input.edits.map((edit) => ({
@@ -109,8 +113,11 @@ export function submitRun(
             x: 520,
             y:
               100 +
-              (db.prepare('SELECT count(*) n FROM runs WHERE brane_id=?').get(input.braneId) as any)
-                .n *
+              (
+                db.prepare('SELECT count(*) n FROM runs WHERE brane_id=?').get(input.braneId) as {
+                  n: number;
+                }
+              ).n *
                 60,
             width: 380,
             height: 300,
@@ -167,7 +174,7 @@ export function submitRun(
       runId,
       JSON.stringify({ runId, outputBlockId: output.id, edits }),
     );
-    return db.prepare('SELECT * FROM runs WHERE id=?').get(runId) as any;
+    return readStoredRun(db, runId);
   })();
 }
 export function cancelRun(db: DB, actor: string, id: string) {
@@ -176,8 +183,7 @@ export function cancelRun(db: DB, actor: string, id: string) {
     db.prepare(
       "UPDATE runs SET status=CASE WHEN status='queued' THEN 'cancelled' ELSE 'cancel_requested' END,finished_at=CASE WHEN status='queued' THEN ? ELSE finished_at END WHERE id=? AND status IN ('queued','claimed','running')",
     ).run(now(), id);
-    if ((db.prepare('SELECT status FROM runs WHERE id=?').get(id) as any).status === 'cancelled')
-      releaseUninvokedCost(db, id);
+    if (readStoredRun(db, id).status === 'cancelled') releaseUninvokedCost(db, id);
   })();
 }
 export function retryRun(db: DB, actor: string, id: string, key: string, limits: RunLimits) {
@@ -186,19 +192,27 @@ export function retryRun(db: DB, actor: string, id: string, key: string, limits:
     canRunOnBrane(db, actor, old.brane_id);
     const duplicate = db
       .prepare('SELECT * FROM runs WHERE owner_id=? AND submission_key=?')
-      .get(actor, key) as any;
+      .get(actor, key);
     if (duplicate) {
-      if (duplicate.retry_of !== id) throw new DomainError(409, 'Submission key already used');
-      return duplicate;
+      const run = decodeRecord(runRecord, duplicate);
+      if (run.retry_of !== id) throw new DomainError(409, 'Submission key already used');
+      return run;
     }
     if (!['failed', 'interrupted', 'cancelled'].includes(old.status))
       throw new DomainError(409, 'Only stopped runs can be retried');
     checkLimits(db, actor, old.model, limits);
-    if (JSON.parse(old.options_json).maxOutputTokens > limits.maxTokens)
+    if (decodeJson(runOptions, old.options_json).maxOutputTokens > limits.maxTokens)
       throw new DomainError(409, 'Retry exceeds the current output limit; submit a new run');
-    const layout = db.prepare('SELECT * FROM run_placements WHERE run_id=?').get(id) as any;
+    const layout = db
+      .prepare<
+        unknown[],
+        { anchor_placement_id: string | null; output_placement_id: string | null }
+      >('SELECT * FROM run_placements WHERE run_id=?')
+      .get(id);
     const anchor = layout?.anchor_placement_id
-      ? (db.prepare('SELECT * FROM placements WHERE id=?').get(layout.anchor_placement_id) as any)
+      ? db
+          .prepare<unknown[], Placement>('SELECT * FROM placements WHERE id=?')
+          .get(layout.anchor_placement_id)
       : undefined;
     const output = createBlock(
         db,
@@ -246,28 +260,32 @@ export function retryRun(db: DB, actor: string, id: string, key: string, limits:
       newId,
       old.model,
       readInputs(db, newId),
-      JSON.parse(old.options_json).maxOutputTokens,
+      decodeJson(runOptions, old.options_json).maxOutputTokens,
       limits.costPolicy,
     );
-    return db.prepare('SELECT * FROM runs WHERE id=?').get(newId) as any;
+    return readStoredRun(db, newId);
   })();
 }
 
 function readAnchor(db: DB, actor: string, braneId: string, placementId: string, sourceId: string) {
   canRunOnBrane(db, actor, braneId);
   const anchor = db
-    .prepare('SELECT * FROM placements WHERE id=? AND brane_id=? AND block_id=?')
-    .get(placementId, braneId, sourceId) as any;
+    .prepare<unknown[], Placement>(
+      'SELECT * FROM placements WHERE id=? AND brane_id=? AND block_id=?',
+    )
+    .get(placementId, braneId, sourceId);
   if (!anchor)
     throw new DomainError(400, 'Spawn anchor must place the primary source in this brane');
   return anchor;
 }
-function childGeometry(db: DB, anchor: any) {
+function childGeometry(db: DB, anchor: Placement) {
   const x = anchor.x + anchor.width + 80;
   let y = anchor.y;
   const occupied = db
-    .prepare('SELECT x,y,width,height FROM placements WHERE brane_id=? ORDER BY y')
-    .all(anchor.brane_id) as any[];
+    .prepare<unknown[], Geometry>(
+      'SELECT x,y,width,height FROM placements WHERE brane_id=? ORDER BY y',
+    )
+    .all(anchor.brane_id);
   for (const p of occupied) {
     if (
       x < p.x + p.width + 24 &&
@@ -322,5 +340,9 @@ export function readSubmissionReceipt(db: DB, actor: string, runId: string): Sub
     .prepare('SELECT receipt_json FROM submission_receipts WHERE run_id=?')
     .get(runId) as { receipt_json: string } | undefined;
   if (!row) throw new DomainError(409, 'This run has no submission receipt');
-  return JSON.parse(row.receipt_json) as SubmissionReceipt;
+  return decodeJson(submissionReceipt, row.receipt_json);
+}
+
+export function readStoredRun(db: DB, id: string): RunRecord {
+  return decodeRecord(runRecord, db.prepare('SELECT * FROM runs WHERE id=?').get(id));
 }

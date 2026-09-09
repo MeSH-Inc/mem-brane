@@ -1,3 +1,4 @@
+import type { Estimate } from '../../shared/contracts.js';
 import { contentReader } from './representations.js';
 import { modelCompatibility } from '../../shared/representations.js';
 import type { DB } from '../db/index.js';
@@ -17,7 +18,7 @@ export function estimateRun(
   input: SubmitRun,
   outputLimit: number,
   policy: CostPolicy,
-) {
+): Estimate {
   canRunOnBrane(db, actor, input.braneId);
   const inputs: RunInput[] = [];
   const reader = contentReader(db, actor, 'full');
@@ -42,10 +43,12 @@ export function estimateRun(
           .prepare(
             'SELECT content_json FROM block_revisions WHERE block_id=? ORDER BY created_at DESC LIMIT 1',
           )
-          .get(blockId)) as any;
+          .get(blockId)) as { content_json: string } | undefined;
       return { row, blockId, i };
     })
-    .filter((item) => item.row);
+    .filter(
+      (item): item is typeof item & { row: { content_json: string } } => item.row !== undefined,
+    );
   reader.prefetch(local.map((item) => item.row.content_json));
   for (const { row, blockId, i } of local) {
     const content = reader.read(row.content_json),

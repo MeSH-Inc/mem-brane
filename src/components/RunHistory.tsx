@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RunPage } from '../../shared/types/history';
-import { api } from '../services/api';
+import { client } from '../services/client';
 
 // Mount with the brane ID as its key. History is fetched only when explicitly opened.
 export function RunHistory({
@@ -26,9 +26,7 @@ export function RunHistory({
     setLoading(true);
     setError('');
     try {
-      const next = await api<RunPage>(
-        `/branes/${braneId}/runs${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
-      );
+      const next = await client.runPage(braneId, cursor);
       if (generation !== request.current) return;
       setPage((previous) => ({
         items: cursor ? [...previous.items, ...next.items] : next.items,

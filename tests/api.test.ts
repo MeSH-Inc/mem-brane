@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { createClient } from '../src/services/client';
+import { ApiError } from '../src/services/api';
+import { claimRun } from '../server/jobs/worker';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import { openDatabase, type DB } from '../server/db/index';
 import { createAuth } from '../server/auth/index';
@@ -362,4 +365,80 @@ it('retains upload recovery intent when bytes succeed but metadata commit fails'
   const intent = db.prepare('SELECT * FROM upload_intents').get() as any;
   expect(intent.size).toBeGreaterThan(12);
   expect(stored.has(intent.id)).toBe(true);
+});
+
+it('serves validated configuration, workspace and run DTOs without internal row fields', async () => {
+  const client = createClient(async (path, body, method = body === undefined ? 'GET' : 'POST') => {
+    const response = await app.request(`/api${path}`, {
+      method,
+      headers: headers(),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!response.ok) throw new ApiError(response.status, 'Fixture request failed');
+    return response.json() as Promise<unknown>;
+  });
+  const configuration = await client.configuration();
+  expect(configuration.models).toContain(configuration.defaultModel);
+  expect(configuration.imports.maxBytes).toBeGreaterThan(0);
+  const brane = await client.createBrane('Typed workspace');
+  const source = await client.createText(brane.id, { x: 0, y: 0, width: 320, height: 220 });
+  const submitted = await client.submit({
+    braneId: brane.id,
+    key: uid(),
+    model: 'mock',
+    prompt: 'Typed request',
+    references: [source.id],
+    edits: [{ blockId: source.id, text: 'Frozen text', version: 0 }],
+  });
+  const workspace = await client.workspace(brane.id);
+  expect(workspace.blocks.find((block) => block.id === source.id)?.content.text).toBe(
+    'Frozen text',
+  );
+  const detail = await client.run(submitted.runId);
+  expect(detail.inputs[0].content.text).toBe('Frozen text');
+  expect(detail.output).toBeNull();
+  expect(detail.checkpoint).toBeNull();
+  expect(detail.cost?.status).toBe('reserved');
+  const raw = await (
+    await app.request(`/api/runs/${submitted.runId}`, { headers: headers() })
+  ).json();
+  for (const field of [
+    'owner_id',
+    'submission_key',
+    'request_hash',
+    'lease_owner',
+    'lease_until',
+    'options_json',
+    'context_id',
+  ])
+    expect(raw).not.toHaveProperty(field);
+  const claim = claimRun(db, 'typed-worker', 1000)!;
+  expect(claim.lease_until).toBeGreaterThan(Date.now());
+  expect(db.prepare('SELECT lease_until FROM runs WHERE id=?').get(claim.id)).toEqual({
+    lease_until: claim.lease_until,
+  });
+});
+it('reports invalid persisted run data as a server failure, not a bad request', async () => {
+  const brane = createBrane(db, actor);
+  const result = await app.request('/api/runs', {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({
+      braneId: brane.id,
+      key: uid(),
+      model: 'mock',
+      prompt: 'Test',
+      references: [],
+    }),
+  });
+  const receipt = await result.json();
+  db.prepare("UPDATE runs SET lease_until='invalid timestamp' WHERE id=?").run(receipt.runId);
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const response = await app.request(`/api/runs/${receipt.runId}`, { headers: headers() });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'An unexpected error occurred' });
+  } finally {
+    log.mockRestore();
+  }
 });

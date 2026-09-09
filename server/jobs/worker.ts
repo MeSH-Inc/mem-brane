@@ -1,3 +1,4 @@
+import { decodeRecord, decodeJson, runRecord, runOptions, type RunRecord } from '../db/records.js';
 import { fitsArtifactContent } from '../../shared/limits.js';
 import { abortable } from '../app/abort.js';
 import {
@@ -50,16 +51,20 @@ export function recoverStale(db: DB, time = now()) {
 export function claimRun(db: DB, workerId: string, leaseMs: number) {
   return db
     .transaction(() => {
-      const run = db
+      const row = db
         .prepare("SELECT * FROM runs WHERE status='queued' ORDER BY created_at LIMIT 1")
-        .get() as any;
-      if (!run) return null;
+        .get();
+      if (!row) return null;
+      const run = decodeRecord(runRecord, row);
+      const leaseUntil = now() + leaseMs;
       const claimed = db
         .prepare(
           "UPDATE runs SET status='claimed',lease_owner=?,lease_until=? WHERE id=? AND status='queued'",
         )
-        .run(workerId, now() + leaseMs, run.id);
-      return claimed.changes ? { ...run, status: 'claimed', lease_owner: workerId } : null;
+        .run(workerId, leaseUntil, run.id);
+      return claimed.changes
+        ? { ...run, status: 'claimed' as const, lease_owner: workerId, lease_until: leaseUntil }
+        : null;
     })
     .immediate();
 }
@@ -119,13 +124,13 @@ export class RunWorker {
     for (const c of this.active.values()) c.abort(new Error('Server shutdown'));
     await Promise.allSettled(this.promises);
   }
-  private async perform(run: any, controller: AbortController) {
+  private async perform(run: RunRecord, controller: AbortController) {
     const db = this.db;
     let text = '',
       savedText = '',
       savedAt = now();
     const attemptId = uid();
-    const publish = (status?: string) => {
+    const publish = (status?: RunRecord['status']) => {
       if (status) lifecycleLog('run_status', { runId: run.id, status, workerId: this.id });
       this.hub.publish(run.owner_id, {
         type: 'run',
@@ -169,9 +174,12 @@ export class RunWorker {
       () => {
         try {
           const current = db
-            .prepare('SELECT status,lease_owner FROM runs WHERE id=?')
-            .get(run.id) as any;
+            .prepare<unknown[], Pick<RunRecord, 'status' | 'lease_owner'>>(
+              'SELECT status,lease_owner FROM runs WHERE id=?',
+            )
+            .get(run.id);
           if (
+            !current ||
             current.status === 'cancel_requested' ||
             current.lease_owner !== this.id ||
             current.status !== 'running'
@@ -211,7 +219,7 @@ export class RunWorker {
           {
             actor: run.owner_id,
             model: run.model,
-            maxOutputTokens: JSON.parse(run.options_json).maxOutputTokens,
+            maxOutputTokens: decodeJson(runOptions, run.options_json).maxOutputTokens,
             inputs: readInputs(db, run.id),
             signal: controller.signal,
           },
@@ -236,9 +244,11 @@ export class RunWorker {
         throw new Error('Generated text exceeds the character limit');
       db.transaction(() => {
         const current = db
-          .prepare('SELECT status,lease_owner FROM runs WHERE id=?')
-          .get(run.id) as any;
-        if (current.status !== 'running' || current.lease_owner !== this.id)
+          .prepare<unknown[], Pick<RunRecord, 'status' | 'lease_owner'>>(
+            'SELECT status,lease_owner FROM runs WHERE id=?',
+          )
+          .get(run.id);
+        if (!current || current.status !== 'running' || current.lease_owner !== this.id)
           throw new Error('Run no longer owned');
         text = result.text;
         checkpoint();
@@ -292,9 +302,11 @@ export class RunWorker {
       publish('completed');
     } catch (error) {
       const current = db
-        .prepare('SELECT status,lease_owner FROM runs WHERE id=?')
-        .get(run.id) as any;
-      if (current.lease_owner === this.id) {
+        .prepare<unknown[], Pick<RunRecord, 'status' | 'lease_owner'>>(
+          'SELECT status,lease_owner FROM runs WHERE id=?',
+        )
+        .get(run.id);
+      if (current?.lease_owner === this.id) {
         const status =
           current.status === 'cancel_requested'
             ? 'cancelled'

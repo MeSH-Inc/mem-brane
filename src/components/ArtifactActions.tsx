@@ -1,8 +1,8 @@
 import { PdfContent } from './PdfContent';
 import { useEffect, useRef, useState } from 'react';
 import type { Block, Brane, Placement, Revision, Geometry } from '../../shared/types/domain';
-import type { RevisionPage, RevisionSummary } from '../../shared/types/history';
-import { api } from '../services/api';
+import type { RevisionSummary } from '../../shared/types/history';
+import { client } from '../services/client';
 export function ArtifactActions({
   block,
   placements,
@@ -39,7 +39,7 @@ export function ArtifactActions({
     }
     setSelectedId(id);
     try {
-      const revision = await api<Revision>(`/revisions/${id}`);
+      const revision = await client.revision(id);
       if (request === revisionRequest.current) setSelected(revision);
     } catch (error) {
       if (request === revisionRequest.current) setRevisionError((error as Error).message);
@@ -53,9 +53,7 @@ export function ArtifactActions({
     const request = ++historyRequest.current;
     setLoading(true);
     try {
-      const page = await api<RevisionPage>(
-        `/blocks/${block.id}/revisions${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
-      );
+      const page = await client.revisionPage(block.id, cursor);
       if (request !== historyRequest.current) return;
       setHistory((previous) => (cursor ? [...previous, ...page.items] : page.items));
       setNextCursor(page.nextCursor);
@@ -71,7 +69,8 @@ export function ArtifactActions({
     setSelected(undefined);
     setRevisionError('');
     setNextCursor(null);
-    void api<Brane[]>('/branes')
+    void client
+      .branes()
       .then(setBranes)
       .catch((e) => setError(e.message));
     void load().catch((e) => setError(e.message));
@@ -105,7 +104,7 @@ export function ArtifactActions({
           onClick={() =>
             void action(async () => {
               await onSave();
-              await api(`/blocks/${block.id}/snapshot`, {});
+              await client.snapshot(block.id);
               await load();
             }, 'Snapshot saved')
           }
@@ -129,10 +128,11 @@ export function ArtifactActions({
           onClick={() =>
             void action(
               () =>
-                api('/placements', {
-                  braneId: target,
-                  blockId: block.id,
-                  geometry: { x: 140, y: 140, width: 320, height: 240 },
+                client.createPlacement(target, block.id, {
+                  x: 140,
+                  y: 140,
+                  width: 320,
+                  height: 240,
                 }),
               'Same block placed in the chosen brane',
             )
@@ -154,7 +154,7 @@ export function ArtifactActions({
               onClick={() =>
                 void action(async () => {
                   await onSave();
-                  await api(`/placements/${p.id}`, undefined, 'DELETE');
+                  await client.removePlacement(p.id);
                 }, 'Placement removed; the block and its history are retained')
               }
             >

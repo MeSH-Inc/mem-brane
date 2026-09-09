@@ -67,10 +67,14 @@ async function fixture() {
       return {
         models: ['mock'],
         defaultModel: 'mock',
-        budget: { availableMicrousd: 1, limitMicrousd: 1 },
-        modelCapabilities: { mock: { vision: true } },
+        imports: { maxBytes: 5000 },
+        maxOutputTokens: 100,
+        dailySpendEnforced: true,
+        budget: { day: '2026-09-08', committedMicrousd: 0, availableMicrousd: 1, limitMicrousd: 1 },
+        modelCapabilities: { mock: { vision: true, pdfText: true } },
       };
-    if (path === '/budget') return { availableMicrousd: 1, limitMicrousd: 1 };
+    if (path === '/budget')
+      return { day: '2026-09-08', committedMicrousd: 0, availableMicrousd: 1, limitMicrousd: 1 };
     if (path === `/branes/${brane}`) {
       if (body) state.brane.title = body.title;
       return structuredClone(state);
@@ -83,7 +87,21 @@ async function fixture() {
       return { version: current.version, content: current.content };
     }
     if (path === '/runs' || path === '/artifacts/spawn') return receipt(body.edits);
-    if (path === '/runs/estimate') return { reservedMicrousd: 1, canAfford: true };
+    if (path === '/runs/estimate')
+      return {
+        estimatedInputTokens: 1,
+        reservedMicrousd: 1,
+        canAfford: true,
+        budget: { day: '2026-09-08', committedMicrousd: 0, availableMicrousd: 1, limitMicrousd: 1 },
+        price: {
+          inputUsdPerMillion: 0,
+          outputUsdPerMillion: 0,
+          vision: true,
+          imageTokenBound: 0,
+          source: 'fixture',
+          verifiedAt: '2026-09-08',
+        },
+      };
     if (path.startsWith('/context/lineage')) return [];
     throw new Error(`Unexpected request ${path}`);
   });

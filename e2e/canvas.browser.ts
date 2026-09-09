@@ -64,11 +64,24 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
       response = {
         models: ['mock'],
         defaultModel: 'mock',
-        modelCapabilities: { mock: { vision: false } },
-        budget: { availableMicrousd: 1000000, limitMicrousd: 1000000 },
+        imports: { maxBytes: 5000 },
+        maxOutputTokens: 100,
+        dailySpendEnforced: true,
+        modelCapabilities: { mock: { vision: false, pdfText: true } },
+        budget: {
+          day: '2026-09-08',
+          committedMicrousd: 0,
+          availableMicrousd: 1000000,
+          limitMicrousd: 1000000,
+        },
       };
     else if (url.pathname === '/api/budget')
-      response = { availableMicrousd: 1000000, limitMicrousd: 1000000 };
+      response = {
+        day: '2026-09-08',
+        committedMicrousd: 0,
+        availableMicrousd: 1000000,
+        limitMicrousd: 1000000,
+      };
     else if (url.pathname.startsWith('/api/placements/') && route.request().method() === 'PATCH') {
       const geometry = route.request().postDataJSON();
       writes.push(geometry);

@@ -1,15 +1,16 @@
+import { createClient, type Client } from './client';
+import type { Budget, Estimate, Configuration, RunDetail, RunEvent } from '../../shared/contracts';
 import type {
   BraneState,
   Geometry,
-  Placement,
-  RunInput,
   SubmitRun,
   SpawnArtifact,
   EditReceipt,
   Edit,
+  SubmissionReceipt,
 } from '../../shared/types/domain';
 import type { ConversationMessage } from '../../shared/types/conversation';
-import { submissionReceipt, submitRun, spawnArtifact } from '../../shared/schemas';
+import { submitRun, spawnArtifact } from '../../shared/schemas';
 import { modelCompatibility } from '../../shared/representations';
 import { api, ApiError } from './api';
 import { PlacementSaves } from './placement-saves';
@@ -42,21 +43,8 @@ export interface WorkspaceDependencies {
   events: EventTarget;
 }
 type Prepared<T> = { payload: T; draftKeys: Record<string, string> };
-type Budget = { availableMicrousd: number; limitMicrousd: number };
-type Estimate = { reservedMicrousd: number; canAfford: boolean };
-type Capabilities = Record<string, { vision: boolean }>;
-type Config = {
-  models: string[];
-  defaultModel: string;
-  budget: Budget;
-  modelCapabilities: Capabilities;
-  imports?: { maxBytes: number };
-};
-export type Inspection = {
-  id: string;
-  inputs: RunInput[];
-  cost?: { status: string; reserved_microusd: number; confirmed_microusd: number | null };
-};
+type Capabilities = Configuration['modelCapabilities'];
+export type Inspection = RunDetail;
 
 // Owns the lifetime of one mounted workspace. React only subscribes and dispatches commands.
 // Already-sent requests may commit after disposal; their journals/drafts remain recoverable.
@@ -67,6 +55,7 @@ export class WorkspaceController {
   readonly pendingRuns: RequestJournal<Prepared<SubmitRun>>;
   readonly spawnRequests: RequestJournal<Prepared<SpawnArtifact>>;
   private spawns = new Map<string, Submission<Prepared<SpawnArtifact>>>();
+  private client: Client;
   private textSaves: TextSaves;
   private serverState?: BraneState;
   private listeners = new Set<() => void>();
@@ -101,13 +90,13 @@ export class WorkspaceController {
     readonly braneId: string,
     private deps: WorkspaceDependencies,
   ) {
+    this.client = createClient(deps.request);
     this.workspace = new WorkspaceDrafts(actor, braneId, deps.storage);
     this.placementSaves = new PlacementSaves({
-      write: (id, geometry, version) =>
-        deps.request<Placement>(`/placements/${id}`, { ...geometry, version }, 'PATCH'),
-      read: (id) => deps.request<Placement>(`/placements/${id}`),
+      write: (id, geometry, version) => this.client.savePlacement(id, { ...geometry, version }),
+      read: (id) => this.client.placement(id),
     });
-    this.textSaves = new TextSaves((edit) => deps.request('/blocks/live', edit, 'PATCH'));
+    this.textSaves = new TextSaves(this.client.saveText);
     this.pendingRuns = new RequestJournal(
       JSON.stringify(['mem-brane-pending-runs', actor, braneId]),
       (v) => validPrepared(v, submitRun),
@@ -233,12 +222,12 @@ export class WorkspaceController {
     }, 2000);
     this.background(this.refresh());
     this.background(
-      this.deps.request<Config>('/config').then((config) => {
+      this.client.configuration().then((config) => {
         if (!this.valid(epoch)) return;
         this.models = config.models;
         this.budget = config.budget;
         this.vision = config.modelCapabilities;
-        this.deps.imports.maxBytes = config.imports?.maxBytes ?? this.deps.imports.maxBytes;
+        this.deps.imports.maxBytes = config.imports.maxBytes;
         if (!this.draft.model) this.updateDraft({ model: config.defaultModel });
         this.emit();
       }),
@@ -280,8 +269,8 @@ export class WorkspaceController {
     const epoch = this.epoch,
       generation = ++this.refreshGeneration,
       streamRevision = this.streamRevision;
-    void this.deps
-      .request<Budget>('/budget')
+    void this.client
+      .budget()
       .then((budget) => {
         if (this.valid(epoch) && generation === this.refreshGeneration) {
           this.budget = budget;
@@ -291,7 +280,7 @@ export class WorkspaceController {
       .catch(() => {});
     let next: BraneState;
     try {
-      next = await this.deps.request<BraneState>(`/branes/${this.braneId}`);
+      next = await this.client.workspace(this.braneId);
     } catch (error) {
       if (this.valid(epoch) && generation === this.refreshGeneration) throw error;
       return;
@@ -315,8 +304,8 @@ export class WorkspaceController {
     if (!this.valid(epoch) || !this.draft.prompt?.trim()) return;
     this.estimateTimer = setTimeout(() => {
       const request = this.runRequest();
-      void this.deps
-        .request<Estimate>('/runs/estimate', request)
+      void this.client
+        .estimate(request)
         .then((estimate) => {
           if (this.valid(epoch) && generation === this.estimateGeneration) {
             this.estimate = estimate;
@@ -331,8 +320,8 @@ export class WorkspaceController {
       epoch = this.epoch;
     this.lineage = [];
     if (!this.draft.continueFrom) return;
-    void this.deps
-      .request<ConversationMessage[]>(`/context/lineage/${this.draft.continueFrom}`)
+    void this.client
+      .lineage(this.draft.continueFrom)
       .then((lineage) => {
         if (this.valid(epoch) && generation === this.lineageGeneration) {
           this.lineage = lineage;
@@ -343,7 +332,7 @@ export class WorkspaceController {
         if (this.valid(epoch) && generation === this.lineageGeneration) this.report(error);
       });
   }
-  onRun = (data: { braneId?: string; runId: string; status?: string; text?: string }) => {
+  onRun = (data: Omit<RunEvent, 'type'>) => {
     if (
       !this.valid(this.epoch) ||
       (data.braneId !== this.braneId && !this.serverState?.runs.some((r) => r.id === data.runId))
@@ -532,7 +521,7 @@ export class WorkspaceController {
       if (!this.valid(epoch)) return;
       await this.flush();
       if (!this.valid(epoch)) return;
-      await this.deps.request(`/branes/${this.braneId}`, { title }, 'PATCH');
+      await this.client.saveTitle(this.braneId, title);
       if (!this.valid(epoch)) return;
       await this.refresh();
       if (!this.valid(epoch)) return;
@@ -582,7 +571,7 @@ export class WorkspaceController {
   private async send<T extends SubmitRun | SpawnArtifact>(
     submission: Submission<Prepared<T>>,
     prepare: () => T,
-    path: string,
+    transport: (request: T) => Promise<SubmissionReceipt>,
   ) {
     const epoch = this.epoch;
     // Submission and ordinary writes share one lane, including preparation and acknowledgement.
@@ -596,9 +585,7 @@ export class WorkspaceController {
           ),
         }),
         async (request) => {
-          const receipt = submissionReceipt.parse(
-            await this.deps.request<unknown>(path, request.payload),
-          );
+          const receipt = await transport(request.payload);
           if (
             receipt.edits.length !== request.payload.edits.length ||
             receipt.edits.some((saved, index) => {
@@ -636,7 +623,7 @@ export class WorkspaceController {
       const accepted = await this.send(
         this.submission,
         () => this.runRequest(true, composer),
-        '/runs',
+        this.client.submit,
       );
       if (!this.valid(epoch)) return;
       if (this.draft.prompt === accepted.request.payload.prompt) this.updateDraft({ prompt: '' });
@@ -679,7 +666,7 @@ export class WorkspaceController {
           model,
           edits: this.edits([blockId]),
         }),
-        '/artifacts/spawn',
+        this.client.spawn,
       );
       if (!this.valid(epoch)) return;
       this.notice = 'Artifact spawned · source context frozen';
@@ -703,10 +690,7 @@ export class WorkspaceController {
     this.requireActive();
     const epoch = this.epoch;
     try {
-      const block = await this.deps.request<{ id: string }>('/blocks/text', {
-        braneId: this.braneId,
-        geometry,
-      });
+      const block = await this.client.createText(this.braneId, geometry);
       if (!this.valid(epoch)) return;
       this.newBlock = block.id;
       await this.refresh();
@@ -718,7 +702,7 @@ export class WorkspaceController {
   previewRevision = async (id: string) => {
     this.requireActive();
     const epoch = this.epoch;
-    const revision = await this.deps.request<{ content: { text: string } }>(`/revisions/${id}`);
+    const revision = await this.client.revision(id);
     if (this.valid(epoch)) {
       this.notice = revision.content.text.slice(0, 180);
       this.emit();
@@ -731,19 +715,19 @@ export class WorkspaceController {
     this.inspected = undefined;
     this.emit();
     if (!id) return;
-    const inspected = await this.deps.request<Inspection>(`/runs/${id}`);
+    const inspected = await this.client.run(id);
     if (this.valid(epoch) && generation === this.inspectionGeneration) {
       this.inspected = inspected;
       this.emit();
     }
   };
-  importWebpage = (url: string) => this.mutate('/ingest', { braneId: this.braneId, url });
-  cancelRun = (id: string) => this.mutate(`/runs/${id}/cancel`, {});
-  retryRun = (id: string) => this.mutate(`/runs/${id}/retry`, { key: crypto.randomUUID() });
-  private mutate = async (path: string, body: unknown) => {
+  importWebpage = (url: string) => this.mutate(() => this.client.importWebpage(this.braneId, url));
+  cancelRun = (id: string) => this.mutate(() => this.client.cancelRun(id));
+  retryRun = (id: string) => this.mutate(() => this.client.retryRun(id, crypto.randomUUID()));
+  private mutate = async (work: () => Promise<unknown>) => {
     this.requireActive();
     const epoch = this.epoch;
-    await this.deps.request(path, body);
+    await work();
     if (this.valid(epoch)) await this.refresh();
   };
 }

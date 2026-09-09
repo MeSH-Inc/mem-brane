@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../services/api';
+import { client } from '../services/client';
 import type { PdfContent as Pdf, PdfSummary, PdfRepresentation } from '../../shared/types/domain';
 export function PdfContent({
   content,
@@ -17,7 +17,8 @@ export function PdfContent({
     setError('');
     if (!identity || requested !== identity) return;
     let active = true;
-    api<PdfRepresentation>(`/representations/${identity}/pages`)
+    client
+      .pdfPages(identity)
       .then((value) => {
         if (active) setLoaded({ id: identity, value });
       })

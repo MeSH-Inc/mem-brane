@@ -1,3 +1,5 @@
+import { decodeJson } from '../db/records.js';
+import type { SavedText } from '../../shared/contracts.js';
 import { encodeContent, decodeContent, contentReader } from './representations.js';
 import { readWorkspaceRuns, readVisibleDerivations } from './run-reads.js';
 import {
@@ -51,8 +53,34 @@ export function createPlacement(
   db.prepare(
     'INSERT INTO placements (id,brane_id,block_id,x,y,width,height,z_index,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
   ).run(id, braneId, blockId, g.x, g.y, g.width, g.height, 0, now());
-  return db.prepare('SELECT * FROM placements WHERE id=?').get(id) as any;
+  return getPlacement(db, actor, id);
 }
+type CreatedBlock = {
+  id: string;
+  kind: BlockKind;
+  origin: 'authored' | 'generated';
+  content: Content;
+  version: number;
+  placement?: Placement;
+};
+export function createBlock(
+  db: DB,
+  actor: string,
+  kind: BlockKind,
+  content: Content,
+  braneId: string,
+  geometry?: Geometry,
+  origin?: 'authored' | 'generated',
+): CreatedBlock & { placement: Placement };
+export function createBlock(
+  db: DB,
+  actor: string,
+  kind: BlockKind,
+  content: Content,
+  braneId?: string,
+  geometry?: Geometry,
+  origin?: 'authored' | 'generated',
+): CreatedBlock;
 export function createBlock(
   db: DB,
   actor: string,
@@ -61,7 +89,7 @@ export function createBlock(
   braneId?: string,
   geometry?: { x: number; y: number; width: number; height: number },
   origin: 'authored' | 'generated' = 'authored',
-) {
+): CreatedBlock {
   if (!fitsArtifactContent(content))
     throw new DomainError(400, 'Artifact text exceeds the character limit');
   content = contentSchema.parse(content);
@@ -93,19 +121,25 @@ export function createTextBlock(
 ) {
   return createBlock(db, actor, 'text', { format: 'text', text: '' }, braneId, geometry);
 }
-export function updateBlockLiveState(db: DB, actor: string, edit: Edit) {
+export function updateBlockLiveState(db: DB, actor: string, edit: Edit): SavedText {
   const block = requireOwned(db, 'blocks', actor, edit.blockId);
   if (edit.text.length > MAX_BLOCK_TEXT_CHARACTERS)
     throw new DomainError(400, 'Artifact text exceeds the character limit');
   if (block.origin === 'generated' || !['text', 'webpage'].includes(block.kind))
     throw new DomainError(400, 'This block is not editable');
   const state = db
-    .prepare('SELECT * FROM block_live_state WHERE block_id=?')
-    .get(edit.blockId) as any;
+    .prepare<unknown[], { content_json: string; version: number }>(
+      'SELECT content_json,version FROM block_live_state WHERE block_id=?',
+    )
+    .get(edit.blockId);
+  if (!state) throw new Error('Editable block has no live state');
+  const previous = decodeJson(contentSchema, state.content_json);
+  if (previous.format !== 'text' && previous.format !== 'webpage')
+    throw new Error('Editable block has invalid content');
   const content = {
-    ...JSON.parse(state.content_json),
+    ...previous,
     text: edit.text,
-    ...(block.kind === 'webpage' ? { status: 'ready', error: undefined } : {}),
+    ...(block.kind === 'webpage' ? { status: 'ready' as const, error: undefined } : {}),
   };
   if (!fitsArtifactContent(content))
     throw new DomainError(400, 'Artifact content exceeds the byte limit');
@@ -131,14 +165,16 @@ export function revisions(db: DB): RevisionService {
     snapshotBlock: db.transaction((actor: string, blockId: string): Revision => {
       const block = requireOwned(db, 'blocks', actor, blockId);
       const live = db
-        .prepare('SELECT content_json,version FROM block_live_state WHERE block_id=?')
-        .get(blockId) as any;
+        .prepare<unknown[], { content_json: string; version: number }>(
+          'SELECT content_json,version FROM block_live_state WHERE block_id=?',
+        )
+        .get(blockId);
       if (!live) {
         const existing = db
-          .prepare(
+          .prepare<unknown[], RevisionRow>(
             'SELECT * FROM block_revisions WHERE block_id=? ORDER BY created_at DESC LIMIT 1',
           )
-          .get(blockId) as any;
+          .get(blockId);
         if (!existing)
           throw new DomainError(409, 'Only finalized responses can be used as context');
         return revisionDto(db, existing);
@@ -243,8 +279,7 @@ export function updatePlacementGeometry(
   return result;
 }
 export function removePlacement(db: DB, actor: string, id: string) {
-  const p = db.prepare('SELECT * FROM placements WHERE id=?').get(id) as any;
-  if (!p) throw new DomainError(404, 'Placement not found');
+  const p = getPlacement(db, actor, id);
   canEditBrane(db, actor, p.brane_id);
   db.prepare('DELETE FROM placements WHERE id=?').run(id);
 }
@@ -262,7 +297,7 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
     )
     .all(id) as Placement[];
   const blockRows = db
-    .prepare(
+    .prepare<unknown[], WorkspaceBlockRow>(
       `SELECT b.id,b.kind,b.origin,l.content_json,l.version,v.content_json final_content,o.message_id
         FROM blocks b LEFT JOIN block_live_state l ON l.block_id=b.id
         LEFT JOIN runs r ON r.output_block_id=b.id
@@ -271,9 +306,10 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
         WHERE b.id IN (SELECT block_id FROM placements WHERE brane_id=?)
         ORDER BY b.created_at,b.id`,
     )
-    .all(id) as any[];
+    .all(id);
   const reader = contentReader(db, actor, 'workspace');
-  const jsonOf = (b: any) => b.content_json ?? b.final_content ?? '{"format":"text","text":""}';
+  const jsonOf = (b: WorkspaceBlockRow) =>
+    b.content_json ?? b.final_content ?? '{"format":"text","text":""}';
   reader.prefetch(blockRows.map(jsonOf));
   const blocks = blockRows.map((b): Block => {
     return {
@@ -282,10 +318,20 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
       origin: b.origin,
       version: b.version ?? 0,
       content: reader.read(jsonOf(b)),
-      messageId: b.message_id,
+      messageId: b.message_id ?? undefined,
     };
   });
   const runs = readWorkspaceRuns(db, actor, id);
   const derivations = readVisibleDerivations(db, actor, id);
   return { brane, placements, blocks, runs, derivations };
+}
+
+interface WorkspaceBlockRow {
+  id: string;
+  kind: BlockKind;
+  origin: Block['origin'];
+  content_json: string | null;
+  version: number | null;
+  final_content: string | null;
+  message_id: string | null;
 }

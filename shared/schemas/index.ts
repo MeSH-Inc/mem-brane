@@ -1,5 +1,15 @@
 import { MAX_BLOCK_TEXT_CHARACTERS } from '../limits.js';
 import { z } from 'zod';
+export const runStatus = z.enum([
+  'queued',
+  'claimed',
+  'running',
+  'completed',
+  'failed',
+  'cancel_requested',
+  'cancelled',
+  'interrupted',
+]);
 export const id = z.string().uuid();
 export const geometry = z.object({
   x: z.number().finite().min(-1e6).max(1e6),

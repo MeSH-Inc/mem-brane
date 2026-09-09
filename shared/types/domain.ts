@@ -1,13 +1,16 @@
+import type { z } from 'zod';
+import type {
+  edit,
+  submitRun,
+  spawnArtifact,
+  geometry,
+  placementEdit,
+  importIntent,
+  submissionReceipt,
+  runStatus,
+} from '../schemas/index';
 export type BlockKind = 'text' | 'image' | 'webpage' | 'pdf';
-export type RunStatus =
-  | 'queued'
-  | 'claimed'
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'cancel_requested'
-  | 'cancelled'
-  | 'interrupted';
+export type RunStatus = z.infer<typeof runStatus>;
 export interface TextContent {
   format: 'text';
   text: string;
@@ -93,7 +96,7 @@ export interface Revision {
   content: Content;
   created_at: number;
 }
-export type Geometry = { x: number; y: number; width: number; height: number };
+export type Geometry = z.infer<typeof geometry>;
 export interface Placement {
   version: number;
   id: string;
@@ -133,21 +136,11 @@ export interface RunInput {
   revision_id: string;
   content: Content;
 }
-export interface Edit {
-  blockId: string;
-  text: string;
-  version: number;
-}
-export interface SubmitRun {
-  braneId: string;
-  key: string;
-  model: string;
-  prompt: string;
-  references: string[];
-  continueFrom?: string;
-  edits: Edit[];
-  maxOutputTokens?: number;
-}
+export type Edit = z.infer<typeof edit>;
+export type SubmitRun = z.infer<typeof submitRun>;
+export type SubmitRunRequest = z.input<typeof submitRun>;
+export type PlacementEdit = z.infer<typeof placementEdit>;
+export type ImportIntent = z.infer<typeof importIntent>;
 
 export interface Derivation {
   runId: string;
@@ -158,23 +151,7 @@ export interface Derivation {
   anchorPlacementId: string | null;
   outputPlacementId: string | null;
 }
-export interface SpawnArtifact {
-  braneId: string;
-  key: string;
-  sourceBlockIds: string[];
-  anchorPlacementId: string;
-  action: 'develop';
-  model: string;
-  edits: Edit[];
-}
-
-export interface EditReceipt {
-  blockId: string;
-  version: number;
-  content: TextContent | WebpageContent;
-}
-export interface SubmissionReceipt {
-  runId: string;
-  outputBlockId: string;
-  edits: EditReceipt[];
-}
+export type SpawnArtifact = z.infer<typeof spawnArtifact>;
+export type SpawnArtifactRequest = z.input<typeof spawnArtifact>;
+export type SubmissionReceipt = z.infer<typeof submissionReceipt>;
+export type EditReceipt = SubmissionReceipt['edits'][number];

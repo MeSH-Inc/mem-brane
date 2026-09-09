@@ -36,7 +36,15 @@ test.beforeEach(async ({ page }) => {
       if (path === '/api/blocks/text') response = { id: 'created' };
     } else if (path === '/api/branes/b') response = state;
     else if (path === '/api/config')
-      response = { models: ['mock'], defaultModel: 'mock', modelCapabilities: {}, budget: {} };
+      response = {
+        models: ['mock'],
+        defaultModel: 'mock',
+        modelCapabilities: {},
+        imports: { maxBytes: 5000 },
+        maxOutputTokens: 100,
+        dailySpendEnforced: true,
+        budget: { day: '2026-09-08', committedMicrousd: 0, availableMicrousd: 0, limitMicrousd: 0 },
+      };
     await route.fulfill({ json: response });
   });
   await page.goto('/e2e/canvas.html');

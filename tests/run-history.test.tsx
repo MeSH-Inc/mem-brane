@@ -7,7 +7,18 @@ import { api } from '../src/services/api';
 vi.mock('../src/services/api', () => ({ api: vi.fn() }));
 it('loads history only on demand, appends older runs and opens their context', async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  const row = (id: string) => ({ id, model: 'mock', status: 'completed', created_at: 0 });
+  const row = (id: string) => ({
+    id,
+    brane_id: 'b',
+    model: 'mock',
+    provider: 'mock',
+    status: 'completed',
+    created_at: 0,
+    output_block_id: 'output',
+    error: null,
+    usage_json: null,
+    retry_of: null,
+  });
   vi.mocked(api).mockImplementation(async (path) =>
     path.endsWith('?cursor=older')
       ? { items: [row('old')], nextCursor: null }
@@ -25,7 +36,7 @@ it('loads history only on demand, appends older runs and opens their context', a
       details.open = true;
       details.dispatchEvent(new Event('toggle'));
     });
-    expect(api).toHaveBeenCalledWith('/branes/b/runs');
+    expect(api).toHaveBeenCalledWith('/branes/b/runs', undefined, undefined);
     await act(async () =>
       Array.from(host.querySelectorAll('button'))
         .find((b) => b.textContent === 'Load older runs')!

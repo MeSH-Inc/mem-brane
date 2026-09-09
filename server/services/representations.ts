@@ -1,18 +1,19 @@
+import { z } from 'zod';
+import { decodeJson, decodeRecord } from '../db/records.js';
+import { pdfSummaryResponse } from '../../shared/contracts.js';
+import { pdfRepresentation } from '../../shared/schemas/index.js';
 import { canonicalJson, representationId } from '../domain/canonical.js';
 import type { DB } from '../db/index.js';
-import type {
-  Content,
-  WorkspaceContent,
-  PdfSummary,
-  PdfRepresentation,
-} from '../../shared/types/domain.js';
+import type { Content, WorkspaceContent, PdfRepresentation } from '../../shared/types/domain.js';
 import { content as contentSchema } from '../../shared/schemas/index.js';
 import { DomainError, requireOwned } from '../domain/access.js';
 
 // DTOs expand for consumers; persisted binary content pins only immutable identities.
 export function encodeContent(db: DB, actor: string, content: Content): string {
   if (content.format !== 'image' && content.format !== 'pdf') return JSON.stringify(content);
-  content = contentSchema.parse(content) as typeof content;
+  content = contentSchema.parse(content);
+  if (content.format !== 'image' && content.format !== 'pdf')
+    throw new Error('Expected binary content');
   const asset = requireOwned(db, 'assets', actor, content.assetId);
   if (asset.digest !== content.assetHash || asset.mime !== content.mimeType)
     throw new DomainError(409, 'Asset metadata does not match canonical bytes');
@@ -34,8 +35,8 @@ export function encodeContent(db: DB, actor: string, content: Content): string {
 }
 
 export function decodeContent(db: DB, json: string): Content {
-  const stored = JSON.parse(json);
-  if (stored.format !== 'image' && stored.format !== 'pdf') return stored;
+  const stored = decodeJson(storedContent, json);
+  if (stored.format === 'text' || stored.format === 'webpage') return stored;
   const row = db
     .prepare(
       `SELECT r.format,r.payload_json,a.id asset_id,a.digest,a.mime
@@ -46,14 +47,14 @@ export function decodeContent(db: DB, json: string): Content {
     | undefined;
   if (!row || row.format !== stored.format)
     throw new Error('Missing or mismatched content representation');
-  return contentSchema.parse({
+  return decodeRecord(contentSchema, {
     format: row.format,
     text: stored.text,
     filename: stored.filename,
     assetId: row.asset_id,
     assetHash: row.digest,
     mimeType: row.mime,
-    ...JSON.parse(row.payload_json),
+    ...decodeJson(z.record(z.string(), z.unknown()), row.payload_json),
   });
 }
 
@@ -65,7 +66,8 @@ export function readPdfPages(db: DB, actor: string, id: string): PdfRepresentati
     )
     .get(id, actor) as { payload_json: string } | undefined;
   if (!row) throw new DomainError(404, 'PDF representation not found');
-  return JSON.parse(row.payload_json).representation;
+  return decodeJson(z.object({ representation: pdfRepresentation }), row.payload_json)
+    .representation;
 }
 
 // Request-scoped: reuse immutable payloads without retaining them across requests.
@@ -87,22 +89,21 @@ export function contentReader(
 };
 export function contentReader(db: DB, actor: string, projection: 'full' | 'workspace') {
   const payloads = new Map<string, Content | WorkspaceContent>();
-  const parsed = new Map<string, Record<string, any>>();
+  const parsed = new Map<string, z.infer<typeof storedContent>>();
   const parse = (json: string) => {
     let value = parsed.get(json);
     if (!value) {
-      value = JSON.parse(json);
-      parsed.set(json, value!);
+      value = decodeJson(storedContent, json);
+      parsed.set(json, value);
     }
-    return value!;
+    return value;
   };
   const prefetch = (jsons: string[]) => {
     const ids = [
       ...new Set(
         jsons
           .map(parse)
-          .filter((c) => c.format === 'image' || c.format === 'pdf')
-          .map((c) => c.representationId as string),
+          .flatMap((c) => (c.format === 'image' || c.format === 'pdf' ? [c.representationId] : [])),
       ),
     ].filter((id) => !payloads.has(id));
     if (!ids.length) return;
@@ -128,13 +129,13 @@ export function contentReader(db: DB, actor: string, projection: 'full' | 'works
         assetId: row.asset_id,
         assetHash: row.digest,
         mimeType: row.mime,
-        ...JSON.parse(row.payload_json),
+        ...decodeJson(z.record(z.string(), z.unknown()), row.payload_json),
       };
       payloads.set(
         row.id,
         projection === 'workspace' && row.format === 'pdf'
-          ? ({ ...base, representationId: row.id } as PdfSummary)
-          : contentSchema.parse(base),
+          ? decodeRecord(pdfSummaryResponse, { ...base, representationId: row.id })
+          : decodeRecord(contentSchema, base),
       );
     }
     if (ids.some((id) => !payloads.has(id))) throw new DomainError(404, 'Representation not found');
@@ -143,7 +144,7 @@ export function contentReader(db: DB, actor: string, projection: 'full' | 'works
     prefetch,
     read(json: string) {
       const stored = parse(json);
-      if (stored.format !== 'image' && stored.format !== 'pdf') return stored as Content;
+      if (stored.format === 'text' || stored.format === 'webpage') return stored;
       prefetch([json]);
       const payload = payloads.get(stored.representationId)!;
       if (payload.format !== stored.format) throw new Error('Mismatched content representation');
@@ -151,3 +152,14 @@ export function contentReader(db: DB, actor: string, projection: 'full' | 'works
     },
   };
 }
+
+const storedContent = z.union([
+  contentSchema.options[0],
+  contentSchema.options[1],
+  z.object({
+    format: z.enum(['image', 'pdf']),
+    text: z.string(),
+    filename: z.string(),
+    representationId: z.string(),
+  }),
+]);

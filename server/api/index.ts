@@ -1,7 +1,9 @@
+import { readConfiguration } from '../services/configuration.js';
+import type { RunIdentity } from '../../shared/contracts.js';
 import { readPdfPages } from '../services/representations.js';
 import { MAX_BLOCK_TEXT_CHARACTERS } from '../../shared/limits.js';
 import { admitImport } from '../services/capacity.js';
-import { readRunPage } from '../services/run-reads.js';
+import { readRunPage, readRunDetail } from '../services/run-reads.js';
 import { Hono } from 'hono';
 import { createRateLimit } from './rate-limit.js';
 import { streamSSE } from 'hono/streaming';
@@ -89,22 +91,7 @@ export function createApi(
     queueLimit: config.RUN_QUEUE_LIMIT,
     maxContextCharacters: config.MAX_CONTEXT_CHARACTERS,
   };
-  app.get('/config', (c) =>
-    c.json({
-      imports: { maxBytes: config.MAX_UPLOAD_BYTES },
-      models: config.models,
-      defaultModel: config.defaultModel,
-      maxOutputTokens: config.MAX_OUTPUT_TOKENS,
-      dailySpendEnforced: true,
-      modelCapabilities: Object.fromEntries(
-        config.models.map((m) => [
-          m,
-          { vision: m === 'mock' || costPolicy.prices[m]?.vision === true, pdfText: true },
-        ]),
-      ),
-      budget: budgetState(db, c.get('actor'), costPolicy),
-    }),
-  );
+  app.get('/config', (c) => c.json(readConfiguration(db, c.get('actor'))));
   app.get('/branes', (c) =>
     c.json(
       db
@@ -232,23 +219,17 @@ export function createApi(
     });
     return c.json(readSubmissionReceipt(db, c.get('actor'), run.id), 201);
   });
-  app.get('/runs/:id', (c) => {
-    const run = requireOwned(db, 'runs', c.get('actor'), id.parse(c.req.param('id')));
-    return c.json({
-      ...run,
-      inputs: readInputs(db, run.id),
-      output: db.prepare('SELECT * FROM run_outputs WHERE run_id=?').get(run.id),
-      cost: db.prepare('SELECT * FROM run_costs WHERE run_id=?').get(run.id),
-      checkpoint: db.prepare('SELECT * FROM run_checkpoints WHERE run_id=?').get(run.id),
-    });
-  });
+  app.get('/runs/:id', (c) =>
+    c.json(readRunDetail(db, c.get('actor'), id.parse(c.req.param('id')))),
+  );
   app.post('/runs/:id/cancel', (c) => {
     cancelRun(db, c.get('actor'), id.parse(c.req.param('id')));
     return c.json({ ok: true });
   });
   app.post('/runs/:id/retry', async (c) => {
     const { key } = z.object({ key: id }).parse(await c.req.json());
-    return c.json(retryRun(db, c.get('actor'), id.parse(c.req.param('id')), key, limits), 201);
+    const run = retryRun(db, c.get('actor'), id.parse(c.req.param('id')), key, limits);
+    return c.json({ runId: run.id, outputBlockId: run.output_block_id } satisfies RunIdentity, 201);
   });
   app.get('/budget', (c) => c.json(budgetState(db, c.get('actor'), costPolicy)));
   app.get('/events', (c) =>
@@ -331,7 +312,7 @@ export function createApi(
       c.header('Content-Disposition', 'attachment; filename="document.pdf"');
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('Cache-Control', 'private, max-age=300');
-    return c.body((await store.get(asset.storage_key)) as any);
+    return c.body(new Uint8Array(await store.get(asset.storage_key)));
   });
   app.post('/ingest', async (c) => {
     const body = z
@@ -372,7 +353,7 @@ export function createApi(
         },
         400,
       );
-    if (error instanceof DomainError) return c.json({ error: error.message }, error.status as any);
+    if (error instanceof DomainError) return c.json({ error: error.message }, error.status);
     console.error('API error', error);
     return c.json({ error: 'An unexpected error occurred' }, 500);
   });

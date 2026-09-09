@@ -1,9 +1,7 @@
-import type { Block, BraneState, Content, Edit } from '../../shared/types/domain';
+import type { Block, BraneState, Edit } from '../../shared/types/domain';
 
-export type SavedText = {
-  version: number;
-  content: Extract<Content, { format: 'text' | 'webpage' }>;
-};
+import type { SavedText } from '../../shared/contracts';
+export type { SavedText } from '../../shared/contracts';
 // This service owns acknowledged text versions and orders text writes with snapshot submissions.
 export class TextSaves {
   private accepted = new Map<string, SavedText>();

@@ -1,7 +1,10 @@
+import type { RunRecord } from '../db/records.js';
+import type { RunSummary, RunDetail } from '../../shared/contracts.js';
+import { readInputs } from './contexts.js';
 import type { DB } from '../db/index.js';
 import type { Run, Derivation } from '../../shared/types/domain.js';
 import type { RunPage } from '../../shared/types/history.js';
-import { canReadBrane, DomainError } from '../domain/access.js';
+import { canReadBrane, DomainError, requireOwned } from '../domain/access.js';
 
 const fields =
   'r.id,r.brane_id,r.status,r.model,r.provider,r.output_block_id,r.error,r.usage_json,r.retry_of,r.created_at';
@@ -76,5 +79,48 @@ export function readRunPage(
   return {
     items: rows.slice(0, limit),
     nextCursor: rows.length > limit ? rows[limit - 1].id : null,
+  };
+}
+
+// Public inspection deliberately excludes ownership, submission hashes and lease machinery.
+export function runSummary(run: RunRecord): RunSummary {
+  return {
+    id: run.id,
+    brane_id: run.brane_id,
+    status: run.status,
+    model: run.model,
+    provider: run.provider,
+    output_block_id: run.output_block_id,
+    error: run.error,
+    usage_json: run.usage_json,
+    retry_of: run.retry_of,
+    created_at: run.created_at,
+  };
+}
+export function readRunDetail(db: DB, actor: string, id: string): RunDetail {
+  const run = requireOwned(db, 'runs', actor, id);
+  return {
+    ...runSummary(run),
+    started_at: run.started_at,
+    finished_at: run.finished_at,
+    inputs: readInputs(db, run.id),
+    output:
+      db
+        .prepare<unknown[], NonNullable<RunDetail['output']>>(
+          'SELECT revision_id,message_id FROM run_outputs WHERE run_id=?',
+        )
+        .get(run.id) ?? null,
+    cost:
+      db
+        .prepare<unknown[], NonNullable<RunDetail['cost']>>(
+          'SELECT status,reserved_microusd,confirmed_microusd FROM run_costs WHERE run_id=?',
+        )
+        .get(run.id) ?? null,
+    checkpoint:
+      db
+        .prepare<unknown[], NonNullable<RunDetail['checkpoint']>>(
+          'SELECT text,updated_at FROM run_checkpoints WHERE run_id=?',
+        )
+        .get(run.id) ?? null,
   };
 }

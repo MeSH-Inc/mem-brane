@@ -1,14 +1,10 @@
 import type { ImportReceipt } from '../../shared/types/imports';
-import type { Geometry } from '../../shared/types/domain';
-import { api, ApiError } from './api';
+import { ApiError } from './api';
+import { client } from './client';
 import { supportedFile } from './import-adapters';
 import { indexedImportStorage, type ImportStorage } from './import-storage';
-export interface ImportIntent {
-  key: string;
-  braneId: string;
-  target: 'canvas' | 'composer';
-  geometry: Geometry;
-}
+export type { ImportIntent } from '../../shared/types/domain';
+import type { ImportIntent } from '../../shared/types/domain';
 export type ImportResult = ImportReceipt;
 export interface ImportTask {
   id: string;
@@ -257,7 +253,7 @@ export const imports = new Imports(indexedImportStorage(), {
     const body = new FormData();
     body.set('file', task.blob!, task.filename);
     body.set('intent', JSON.stringify(task.intent));
-    return api<ImportResult>('/imports', body);
+    return client.importFile(body);
   },
-  status: (key) => api(`/imports/${key}`),
+  status: (key) => client.importStatus(key),
 });

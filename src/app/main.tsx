@@ -11,7 +11,9 @@ import {
 } from '@tanstack/react-router';
 import { z } from 'zod';
 import { imports } from '../services/imports';
-import { api } from '../services/api';
+import { client } from '../services/client';
+import { runEventResponse } from '../../shared/contracts';
+import type { Session } from '../../shared/contracts';
 import { useInteraction } from '../stores/interaction';
 import { BraneView } from '../routes/BraneView';
 import type { Brane } from '../../shared/types/domain';
@@ -52,11 +54,13 @@ function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
           setError('');
           const form = new FormData(e.currentTarget);
           try {
-            await api(`/auth/${signup ? 'sign-up' : 'sign-in'}/email`, {
-              email: form.get('email'),
-              password: form.get('password'),
-              ...(signup ? { name: form.get('name') } : {}),
-            });
+            const credentials = {
+              email: String(form.get('email') ?? ''),
+              password: String(form.get('password') ?? ''),
+            };
+            if (signup)
+              await client.signUp({ ...credentials, name: String(form.get('name') ?? '') });
+            else await client.signIn(credentials);
             onSignedIn();
           } catch (err) {
             setError((err as Error).message);
@@ -113,12 +117,13 @@ function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
   );
 }
 function Shell() {
-  const [session, setSession] = useState<any>(undefined),
+  const [session, setSession] = useState<Session | undefined>(undefined),
     [branes, setBranes] = useState<Brane[]>([]),
     [error, setError] = useState('');
   const navigate = useNavigate();
   const refreshSession = () =>
-    void api('/auth/get-session')
+    void client
+      .session()
       .then(async (value) => {
         if (value?.user) await useInteraction.getState().initialize(value.user.id);
         await imports.activate(value?.user?.id);
@@ -127,7 +132,8 @@ function Shell() {
       })
       .catch(() => setError('The server is unavailable. Reconnect to open your workspace.'));
   const refreshBranes = () =>
-    void api<Brane[]>('/branes')
+    void client
+      .branes()
       .then(setBranes)
       .catch((e) => setError(e.message));
   useEffect(() => {
@@ -140,11 +146,15 @@ function Shell() {
     refreshBranes();
     const events = new EventSource('/api/events');
     events.addEventListener('ready', () => window.dispatchEvent(new Event('brane:reconcile')));
-    events.addEventListener('run', (event) =>
-      window.dispatchEvent(
-        new CustomEvent('brane:run', { detail: JSON.parse((event as MessageEvent).data) }),
-      ),
-    );
+    events.addEventListener('run', (event) => {
+      try {
+        const detail = runEventResponse.parse(JSON.parse((event as MessageEvent).data));
+        window.dispatchEvent(new CustomEvent('brane:run', { detail }));
+      } catch {
+        // SSE is only a hint. A malformed update must be reconciled from storage.
+        window.dispatchEvent(new Event('brane:reconcile'));
+      }
+    });
     window.addEventListener('brane:reconcile', refreshBranes);
     const timer = setInterval(refreshBranes, 10000);
     return () => {
@@ -173,7 +183,7 @@ function Shell() {
           className="new-brane"
           onClick={async () => {
             try {
-              const b = await api<Brane>('/branes', { title: 'Untitled brane' });
+              const b = await client.createBrane('Untitled brane');
               refreshBranes();
               await navigate({ to: '/b/$braneId', params: { braneId: b.id } });
             } catch (e) {
@@ -227,7 +237,7 @@ function Shell() {
             className="icon-button"
             title="Sign out"
             onClick={async () => {
-              await api('/auth/sign-out', {});
+              await client.signOut();
               await imports.activate(undefined);
               setSession(null);
             }}

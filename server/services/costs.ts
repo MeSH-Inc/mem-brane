@@ -1,3 +1,4 @@
+import type { Budget } from '../../shared/contracts.js';
 import { modelCompatibility } from '../../shared/representations.js';
 import type { DB } from '../db/index.js';
 import type { RunInput } from '../../shared/types/domain.js';
@@ -50,7 +51,7 @@ export function estimatedInputTokens(inputs: RunInput[], price: ModelPrice) {
 export function costMicro(input: number, output: number, price: ModelPrice) {
   return Math.ceil(input * price.inputUsdPerMillion + output * price.outputUsdPerMillion);
 }
-export function budgetState(db: DB, actor: string, policy?: CostPolicy, time = Date.now()) {
+export function budgetState(db: DB, actor: string, policy?: CostPolicy, time = Date.now()): Budget {
   const day = new Date(time).toISOString().slice(0, 10);
   const row = db
     .prepare(
