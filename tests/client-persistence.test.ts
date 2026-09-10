@@ -38,13 +38,13 @@ it('serializes text writes and snapshots, and resumes after a rejected operation
   const gate = deferred<void>();
   const order: string[] = [];
   const saves = new TextSaves(async () => ({ version: 1, content: { format: 'text', text: '' } }));
-  const first = saves.serialize(async () => {
+  const first = saves.serialize(['block'], async () => {
     await gate.promise;
     order.push('save');
     throw new Error('conflict');
   });
   const rejected = expect(first).rejects.toThrow('conflict');
-  const second = saves.serialize(async () => {
+  const second = saves.serialize(['block'], async () => {
     order.push('snapshot');
   });
   expect(order).toEqual([]);
@@ -114,4 +114,35 @@ it('prevents a second submit while preparation is in flight', async () => {
   ).rejects.toThrow('in progress');
   gate.resolve('first');
   await first;
+});
+
+it('reserves multi-source barriers without blocking unrelated entities', async () => {
+  const saves = new TextSaves(async () => ({ version: 1, content: { format: 'text', text: '' } }));
+  const gate = deferred<void>();
+  const order: string[] = [];
+  const first = saves.serialize(['a'], async () => {
+    await gate.promise;
+    order.push('a');
+  });
+  const snapshot = saves.serialize(['a', 'b'], async () => {
+    order.push('snapshot');
+  });
+  const b = saves.serialize(['b'], async () => {
+    order.push('b');
+  });
+  await saves.serialize(['c'], async () => {
+    order.push('c');
+  });
+  expect(order).toEqual(['c']);
+  gate.resolve();
+  await Promise.all([first, snapshot, b]);
+  expect(order).toEqual(['c', 'a', 'snapshot', 'b']);
+});
+it('rebases through own acknowledgements but never an observed remote version', () => {
+  const saves = new TextSaves(async () => ({ version: 1, content: { format: 'text', text: '' } }));
+  const edit = { blockId: 'a', text: 'Frozen', version: 0 };
+  saves.reconcile(state(4, 'remote'));
+  expect(saves.afterOwnWrites(edit)).toEqual(edit);
+  saves.acknowledge('a', { version: 1, content: { format: 'text', text: 'Earlier own save' } }, 0);
+  expect(saves.afterOwnWrites(edit)).toEqual({ ...edit, version: 1 });
 });

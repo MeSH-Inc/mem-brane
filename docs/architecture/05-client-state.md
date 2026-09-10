@@ -91,7 +91,13 @@ reload; choosing a different recovered draft never authorizes rebasing it from a
 older request's receipt. Definite rejection retires the journal entry and allows
 corrected intent with a fresh request key.
 
-Both commands join the text write queue for preparation, transport and acknowledgement.
+Both commands capture composer values, source text, source versions and draft
+identities synchronously at activation. They reserve only the affected block lanes
+for transport and acknowledgement. Independent blocks proceed concurrently;
+multi-source requests reserve all sources as one barrier. Later typing cannot
+change an activated request. Earlier receipts from this controller may advance its
+expected versions, but observing another writer never authorizes an implicit rebase.
+Queued ordinary saves are abandoned if their draft has been discarded or replaced.
 Run sends versioned edits for its explicit editable references in the same request
 that freezes context; it does not flush unrelated workspace drafts first. Unchanged
 editable sources also carry version preconditions, closing the window where a

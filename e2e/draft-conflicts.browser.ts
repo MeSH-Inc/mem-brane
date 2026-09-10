@@ -152,6 +152,8 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
     ).toBe('Tab B: take the south route');
 
     // Keep a stale recovery view open while its owner edits the same persisted record.
+    // A successful foreground Spawn reveals its output in Focus; return to the source.
+    await other.locator('.block-outline button').first().click();
     await other.evaluate(() => {
       (window as any).__blockReplicaWrites = true;
     });

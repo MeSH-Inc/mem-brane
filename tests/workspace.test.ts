@@ -477,3 +477,76 @@ it('captures composer intent before waiting for an earlier text write', async ()
   });
   expect(f.c.draft).toMatchObject({ prompt: 'Next prompt', references: [] });
 });
+
+it.each(['run', 'spawn'] as const)(
+  '%s freezes source text before waiting for its own earlier save',
+  async (kind) => {
+    const f = await fixture();
+    const gate = deferred<{ version: number; content: { format: 'text'; text: string } }>();
+    f.intercept((path) => (path === '/blocks/live' ? gate.promise : undefined));
+    f.c.edit(f.block, 'Earlier save');
+    await useInteraction.getState().flushRecovery();
+    const saving = f.c.saveBlock(f.block);
+    await settle();
+    f.c.edit(f.block, 'Text at activation');
+    f.c.updateDraft({ prompt: 'Prompt at activation', references: [f.block] });
+    const submitting = kind === 'run' ? f.c.run() : f.c.spawn(f.block, f.state.placements[0].id);
+    f.c.edit(f.block, 'Text after activation');
+    f.c.updateDraft({ prompt: 'Next prompt' });
+    expect(f.sent.filter((r) => r.path === '/runs' || r.path === '/artifacts/spawn')).toHaveLength(
+      0,
+    );
+    gate.resolve({ version: 1, content: { format: 'text', text: 'Earlier save' } });
+    await saving;
+    await submitting;
+    const sent = f.sent.find((r) => r.path === (kind === 'run' ? '/runs' : '/artifacts/spawn'))!;
+    expect(sent.body.edits).toEqual([{ blockId: f.block, text: 'Text at activation', version: 1 }]);
+    expect(useInteraction.getState().draftRecords[f.block]).toMatchObject({
+      text: 'Text after activation',
+      baseVersion: 2,
+    });
+    expect(f.c.draft.prompt).toBe('Next prompt');
+    expect(f.c.error).toBe('');
+  },
+);
+it('a save for A does not delay Spawn B, and B retains its activation-time source', async () => {
+  const f = await fixture(),
+    b = crypto.randomUUID();
+  f.state.blocks.push({
+    ...f.state.blocks[0],
+    id: b,
+    content: { format: 'text', text: 'B at activation' },
+  });
+  f.state.placements.push({ ...f.state.placements[0], id: crypto.randomUUID(), block_id: b });
+  await f.c.refresh();
+  const gate = deferred<{ version: number; content: { format: 'text'; text: string } }>();
+  f.intercept((path) => (path === '/blocks/live' ? gate.promise : undefined));
+  f.c.edit(f.block, 'A save');
+  await useInteraction.getState().flushRecovery();
+  const saving = f.c.saveBlock(f.block);
+  await settle();
+  const spawning = f.c.spawn(b, f.state.placements[1].id);
+  f.c.edit(b, 'B after activation');
+  await spawning;
+  const sent = f.sent.find((r) => r.path === '/artifacts/spawn')!;
+  expect(sent.body.edits[0].text).toBe('B at activation');
+  gate.resolve({ version: 1, content: { format: 'text', text: 'A save' } });
+  await saving;
+});
+
+it('does not resurrect a discarded draft from a queued save', async () => {
+  const f = await fixture();
+  const gate = deferred<{ version: number; content: { format: 'text'; text: string } }>();
+  f.intercept((path) => (path === '/blocks/live' ? gate.promise : undefined));
+  f.c.edit(f.block, 'First');
+  await useInteraction.getState().flushRecovery();
+  const first = f.c.saveBlock(f.block);
+  await settle();
+  f.c.edit(f.block, 'Discard this queued text');
+  const queued = f.c.saveBlock(f.block);
+  f.c.useServerText(f.block);
+  gate.resolve({ version: 1, content: { format: 'text', text: 'First' } });
+  await Promise.all([first, queued]);
+  expect(f.sent.filter((r) => r.path === '/blocks/live')).toHaveLength(1);
+  expect(useInteraction.getState().draftRecords[f.block]).toBeUndefined();
+});

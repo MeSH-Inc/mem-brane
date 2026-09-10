@@ -180,7 +180,10 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   const spawn = useCallback(
     (blockId: string, placementId: string) => {
       const attention = presentation.getState().attention;
+      const retrying = controller.retrySpawns.includes(blockId);
       void controller.spawn(blockId, placementId).then((id) => {
+        // Reconcile an earlier delivery without reopening its already-created output.
+        if (retrying) return;
         if (
           id &&
           presentation.getState().reveal(attention, { blockId: id, kind: 'reveal' }) &&

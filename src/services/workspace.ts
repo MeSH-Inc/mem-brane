@@ -456,8 +456,8 @@ export class WorkspaceController {
     await this.saveBlock(id);
     this.setError('');
   };
-  private acknowledge(receipt: EditReceipt, key?: string) {
-    this.textSaves.acknowledge(receipt.blockId, receipt);
+  private acknowledge(receipt: EditReceipt, key?: string, expectedVersion?: number) {
+    this.textSaves.acknowledge(receipt.blockId, receipt, expectedVersion);
     if (this.serverState) this.document.install(this.textSaves.reconcile(this.serverState));
     const d = this.deps.drafts.getState(),
       current = d.draftRecords[receipt.blockId];
@@ -472,28 +472,32 @@ export class WorkspaceController {
     this.requireActive();
     this.clearTimer(id);
     const epoch = this.epoch;
-    return this.textSaves.serialize(async () => {
-      if (!this.valid(epoch)) return;
-      const d = this.deps.drafts.getState(),
-        draft = d.draftRecords[id];
-      const block = this.serverState?.blocks.find((b) => b.id === id);
-      if (!draft || !block) return;
-      const disposition = draftDisposition(draft, block);
-      if (disposition === 'saved') {
-        d.clearDraft(id, draft.text);
-        return;
-      }
-      if (disposition === 'conflict')
-        throw new Error('Resolve the changed block below before saving or running.');
+    const d = this.deps.drafts.getState(),
+      draft = d.draftRecords[id];
+    const block = this.serverState?.blocks.find((b) => b.id === id);
+    if (!draft || !block) return Promise.resolve();
+    const disposition = draftDisposition(draft, block);
+    if (disposition === 'saved') {
+      d.clearDraft(id, draft.text);
+      return Promise.resolve();
+    }
+    if (disposition === 'conflict')
+      return Promise.reject(new Error('Resolve the changed block below before saving or running.'));
+    const captured = structuredClone(draft);
+    return this.textSaves.serialize([id], async () => {
+      const current = () =>
+        this.valid(epoch) && this.deps.drafts.getState().draftRecords[id]?.key === captured.key;
+      if (!current()) return;
       await d.flushRecovery().catch(() => {});
-      if (!this.valid(epoch)) return;
+      if (!current()) return;
+      const edit = this.textSaves.afterOwnWrites({
+        blockId: id,
+        text: captured.text,
+        version: captured.baseVersion,
+      });
       try {
-        const saved = await this.textSaves.save({
-          blockId: id,
-          text: draft.text,
-          version: draft.baseVersion,
-        });
-        if (this.valid(epoch)) this.acknowledge({ blockId: id, ...saved }, draft.key);
+        const saved = await this.textSaves.save(edit);
+        if (this.valid(epoch)) this.acknowledge({ blockId: id, ...saved }, captured.key);
       } catch (error) {
         if (this.valid(epoch) && error instanceof ApiError && error.status === 409)
           await this.refresh();
@@ -502,8 +506,7 @@ export class WorkspaceController {
     });
   };
   flush = async () => {
-    for (const block of this.serverState?.blocks ?? []) await this.saveBlock(block.id);
-    await this.textSaves.flush();
+    await Promise.all((this.serverState?.blocks ?? []).map((block) => this.saveBlock(block.id)));
   };
   saveGeometry = (id: string, geometry: Geometry) => {
     this.requireActive();
@@ -576,38 +579,63 @@ export class WorkspaceController {
     transport: (request: T) => Promise<SubmissionReceipt>,
   ) {
     const epoch = this.epoch;
-    // Submission and ordinary writes share one lane, including preparation and acknowledgement.
-    return this.textSaves.serialize(async () => {
-      if (!this.valid(epoch)) throw new Error('Workspace is closed');
-      const accepted = await submission.send(
-        async () => ({
-          payload: prepare(),
-          draftKeys: Object.fromEntries(
-            Object.values(this.deps.drafts.getState().draftRecords).map((d) => [d.blockId, d.key]),
-          ),
-        }),
-        async (request) => {
-          const receipt = await transport(request.payload);
-          if (
-            receipt.edits.length !== request.payload.edits.length ||
-            receipt.edits.some((saved, index) => {
-              const edit = request.payload.edits[index];
-              return (
-                saved.blockId !== edit.blockId ||
-                saved.content.text !== edit.text ||
-                (saved.version !== edit.version && saved.version !== edit.version + 1)
-              );
-            })
-          )
-            throw new Error('Invalid submission acknowledgement; retry the original request.');
-          return receipt;
-        },
-      );
-      if (this.valid(epoch))
-        for (const receipt of accepted.receipt.edits)
-          this.acknowledge(receipt, accepted.request.draftKeys[receipt.blockId]);
-      return accepted;
-    });
+    const captured: Prepared<T> | undefined =
+      submission.state.status === 'uncertain'
+        ? undefined
+        : {
+            payload: structuredClone(prepare()),
+            draftKeys: Object.fromEntries(
+              Object.values(this.deps.drafts.getState().draftRecords).map((d) => [
+                d.blockId,
+                d.key,
+              ]),
+            ),
+          };
+    const payload =
+      captured?.payload ??
+      (submission.state.status === 'uncertain' ? submission.state.request.payload : undefined)!;
+    // Capture values before yielding and reserve their lanes now. Later typing
+    // joins behind this snapshot; unrelated blocks have independent lanes.
+    return this.textSaves.serialize(
+      payload.edits.map((edit) => edit.blockId),
+      async () => {
+        if (!this.valid(epoch)) throw new Error('Workspace is closed');
+        const accepted = await submission.send(
+          async () => ({
+            ...captured!,
+            payload: {
+              ...captured!.payload,
+              edits: captured!.payload.edits.map((edit) => this.textSaves.afterOwnWrites(edit)),
+            },
+          }),
+          async (request) => {
+            const receipt = await transport(request.payload);
+            if (
+              receipt.edits.length !== request.payload.edits.length ||
+              receipt.edits.some((saved, index) => {
+                const edit = request.payload.edits[index];
+                return (
+                  saved.blockId !== edit.blockId ||
+                  saved.content.text !== edit.text ||
+                  (saved.version !== edit.version && saved.version !== edit.version + 1)
+                );
+              })
+            )
+              throw new Error('Invalid submission acknowledgement; retry the original request.');
+            return receipt;
+          },
+        );
+        if (this.valid(epoch))
+          for (const receipt of accepted.receipt.edits)
+            this.acknowledge(
+              receipt,
+              accepted.request.draftKeys[receipt.blockId],
+              accepted.request.payload.edits.find((edit) => edit.blockId === receipt.blockId)
+                ?.version,
+            );
+        return accepted;
+      },
+    );
   }
   run = async () => {
     this.requireActive();
