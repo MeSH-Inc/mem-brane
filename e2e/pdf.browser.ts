@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pdfFixture } from '../tests/fixtures/pdf';
@@ -55,12 +55,12 @@ test('PDF originals, page text, frozen context and unavailable representations i
       .setInputFiles({ name: 'Research.pdf', mimeType: 'application/pdf', buffer: original });
     const download = page.getByRole('link', { name: 'Download original PDF' });
     await expect(download).toBeVisible();
-    const bytes = await page.request.get(
-      (await download.getAttribute('href'))!.replace('/api/', `${origin}/api/`),
-    );
-    expect(bytes.headers()['content-type']).toContain('application/pdf');
-    expect(bytes.headers()['content-disposition']).toContain('attachment');
-    expect(await bytes.body()).toEqual(original);
+    await expect(download).toHaveAttribute('href', /^blob:/);
+    const downloading = page.waitForEvent('download');
+    await download.click();
+    const downloaded = await downloading;
+    expect(downloaded.suggestedFilename()).toBe('Research.pdf');
+    expect(readFileSync((await downloaded.path())!)).toEqual(original);
     await expect(
       page.getByText('Model context uses extracted text by page.', { exact: false }),
     ).toBeVisible();

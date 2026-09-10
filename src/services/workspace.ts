@@ -211,6 +211,7 @@ export class WorkspaceController {
     };
     for (const [name, handler] of [
       ['brane:reconcile', reconcile],
+      ['brane:local-change', reconcile],
       ['brane:run', onRun],
       ['beforeunload', before],
     ] as const) {
@@ -526,7 +527,7 @@ export class WorkspaceController {
       await this.refresh();
       if (!this.valid(epoch)) return;
       if (this.draft.title === title) this.updateDraft({ title: undefined });
-      this.notice = 'Brane saved';
+      this.notice = 'Brane saved on this device';
       this.emit();
     } catch (e) {
       if (this.valid(epoch)) this.report(e);

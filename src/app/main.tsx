@@ -126,7 +126,8 @@ function Shell() {
     void client
       .session()
       .then(async (value) => {
-        if (value?.user) await useInteraction.getState().initialize(value.user.id);
+        if (value?.user && useInteraction.getState().actor !== value.user.id)
+          await useInteraction.getState().initialize(value.user.id);
         await imports.activate(value?.user?.id);
         setSession(value);
         setError('');
@@ -157,10 +158,12 @@ function Shell() {
       }
     });
     window.addEventListener('brane:reconcile', refreshBranes);
+    window.addEventListener('brane:local-change', refreshBranes);
     const timer = setInterval(refreshBranes, 10000);
     return () => {
       events.close();
       window.removeEventListener('brane:reconcile', refreshBranes);
+      window.removeEventListener('brane:local-change', refreshBranes);
       clearInterval(timer);
     };
   }, [session]);
@@ -238,9 +241,13 @@ function Shell() {
             className="icon-button"
             title="Sign out"
             onClick={async () => {
-              await client.signOut();
-              await imports.activate(undefined);
-              setSession(null);
+              try {
+                await client.signOut();
+                await imports.activate(undefined);
+                setSession(null);
+              } catch (e) {
+                setError((e as Error).message);
+              }
             }}
           >
             ↪

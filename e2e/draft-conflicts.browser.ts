@@ -53,13 +53,29 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
     const text = (p: typeof page) => p.getByRole('textbox', { name: 'Block text', exact: true });
     const other = await page.context().newPage();
     await other.goto(`${origin}/b/${brane.id}?view=focus`);
-    // Both edits are interrupted before reaching the server.
-    for (const p of [page, other])
-      await p.route('**/api/blocks/live', (route) => route.abort('internetdisconnected'));
+    // Interrupt the local commit, not just the network: normal network outages
+    // now preserve edits in the durable replica and are tested by pwa.browser.ts.
+    const interruptLocalWrites = () => {
+      (window as any).__blockReplicaWrites = true;
+      const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (value, key) {
+        if (
+          this.name === 'replicas' &&
+          value.pending?.length &&
+          (window as any).__blockReplicaWrites
+        )
+          throw new DOMException('Local storage unavailable', 'QuotaExceededError');
+        return key === undefined ? put.call(this, value) : put.call(this, value, key);
+      };
+    };
+    for (const p of [page, other]) {
+      await p.addInitScript(interruptLocalWrites);
+      await p.evaluate(interruptLocalWrites);
+    }
     await text(page).fill('Tab A: take the north route');
     await text(other).fill('Tab B: take the south route');
     for (const p of [page, other])
-      await expect(p.getByRole('alert')).toContainText('Failed to fetch');
+      await expect(p.getByRole('alert')).toContainText('Local storage unavailable');
     for (const p of [page, other]) {
       await p.reload();
       await p.getByText(/^Other saved drafts \(/).click();
@@ -74,7 +90,9 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
       .getByRole('button', { name: 'Recover a copy' })
       .click();
     await text(page).fill('Tab A: take the north route (revised)');
-    await page.unroute('**/api/blocks/live');
+    await page.evaluate(() => {
+      (window as any).__blockReplicaWrites = false;
+    });
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect
       .poll(
@@ -104,7 +122,9 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
           (await (await page.request.get(`${origin}/api/branes/${brane.id}`)).json()).runs.length,
       )
       .toBe(0);
-    await other.unroute('**/api/blocks/live');
+    await other.evaluate(() => {
+      (window as any).__blockReplicaWrites = false;
+    });
     await other.getByRole('button', { name: 'Overwrite with my draft', exact: true }).click();
     await expect(text(other)).toHaveValue('Tab B: take the south route');
     await expect(other.getByText('This block changed elsewhere', { exact: true })).toHaveCount(0);
@@ -132,9 +152,11 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
     ).toBe('Tab B: take the south route');
 
     // Keep a stale recovery view open while its owner edits the same persisted record.
-    await other.route('**/api/blocks/live', (route) => route.abort('internetdisconnected'));
+    await other.evaluate(() => {
+      (window as any).__blockReplicaWrites = true;
+    });
     await text(other).fill('Live retained copy');
-    await expect(other.getByRole('alert')).toContainText('Failed to fetch');
+    await expect(other.getByRole('alert')).toContainText('Local storage unavailable');
     await page.getByRole('button', { name: 'Refresh saved drafts' }).click();
     await expect(saved(page, 'Live retained copy')).toHaveCount(1);
     await text(other).fill('Newer live copy must survive removal');

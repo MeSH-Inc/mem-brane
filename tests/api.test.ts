@@ -442,3 +442,21 @@ it('reports invalid persisted run data as a server failure, not a bad request', 
     log.mockRestore();
   }
 });
+
+it('binds offline writes to the expected account and commits duplicate deliveries once', async () => {
+  const operation = {
+    key: uid(),
+    command: { type: 'brane.create', id: uid(), title: 'Offline created' },
+  };
+  const send = (expectedActor: string) =>
+    app.request('/api/sync/commands', {
+      method: 'POST',
+      headers: { ...headers(), 'X-Mem-Brane-Actor': expectedActor },
+      body: JSON.stringify(operation),
+    });
+  expect((await send(uid())).status).toBe(401);
+  expect(db.prepare('SELECT count(*) n FROM branes').get()).toEqual({ n: 0 });
+  expect((await send(actor)).status).toBe(200);
+  expect((await send(actor)).status).toBe(200);
+  expect(db.prepare('SELECT count(*) n FROM branes').get()).toEqual({ n: 1 });
+});

@@ -1,3 +1,4 @@
+import { LocalImage } from './LocalAsset';
 import { PdfContent } from './PdfContent';
 import { MAX_BLOCK_TEXT_CHARACTERS } from '../../shared/limits';
 import { useEffect, useRef } from 'react';
@@ -36,7 +37,7 @@ export function BlockContent({
   if (block.kind === 'image')
     return (
       <figure className="image-content">
-        <img src={`/api/assets/${block.content.assetId}`} alt={block.content.text} />
+        <LocalImage assetId={block.content.assetId!} alt={block.content.text} />
         <figcaption>{block.content.text}</figcaption>
       </figure>
     );

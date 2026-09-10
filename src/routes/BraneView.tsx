@@ -1,3 +1,6 @@
+import { localAsset } from '../services/local-assets';
+import { client } from '../services/client';
+import { LocalImage } from '../components/LocalAsset';
 import { SavedDrafts } from '../components/SavedDrafts';
 import { WorkspaceController } from '../services/workspace';
 import { PdfContent } from '../components/PdfContent';
@@ -17,7 +20,7 @@ import {
 } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import type { Geometry } from '../../shared/types/domain';
-import { api } from '../services/api';
+import { api, replica } from '../services/api';
 import { useInteraction } from '../stores/interaction';
 import { BlockContent } from '../components/BlockContent';
 import { SpawnButton } from '../components/SpawnButton';
@@ -33,7 +36,13 @@ type BraneViewProps = { braneId: string; focus?: string; view?: 'canvas' | 'focu
 
 export function BraneView(props: BraneViewProps) {
   const actor = useInteraction((s) => s.actor);
-  return <BraneWorkspace key={JSON.stringify([actor, props.braneId])} {...props} />;
+  const [reset, setReset] = useState(0);
+  useEffect(() => {
+    const changed = () => setReset((n) => n + 1);
+    window.addEventListener('brane:replica-reset', changed);
+    return () => window.removeEventListener('brane:replica-reset', changed);
+  }, []);
+  return <BraneWorkspace key={JSON.stringify([actor, props.braneId, reset])} {...props} />;
 }
 
 function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
@@ -86,6 +95,16 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     run,
     setError,
   } = controller;
+  const sync = useSyncExternalStore(replica.subscribe, replica.getSnapshot);
+  const mediaKey = state?.blocks.map((block) => block.content.assetId ?? '').join(',');
+  useEffect(() => {
+    if (!replica.actor || !state) return;
+    for (const block of state.blocks) {
+      if (block.content.assetId) void localAsset(block.content.assetId).catch(() => {});
+      if (block.content.format === 'pdf' && 'representationId' in block.content)
+        void client.pdfPages(block.content.representationId).catch(() => {});
+    }
+  }, [mediaKey, sync.connected]);
   const placementFailures = placementSaves.failures();
   const {
     prompt = '',
@@ -611,7 +630,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               <span className="save-notice" role="status">
                 {Object.keys(ui.drafts).length || placementSaves.hasPending()
                   ? 'Unsaved edits'
-                  : notice || 'All thoughts have room here'}
+                  : sync.pending
+                    ? 'Saved on this device · synchronization pending'
+                    : notice || 'All thoughts have room here'}
               </span>
             </div>
           </div>
@@ -778,9 +799,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     )}
                     {input.content.format === 'image' && (
                       <>
-                        <img
+                        <LocalImage
                           className="context-image"
-                          src={`/api/assets/${input.content.assetId}`}
+                          assetId={input.content.assetId!}
                           alt="Submitted image"
                         />
                         <small>Frozen image · low detail · SHA-256 {input.content.assetHash}</small>

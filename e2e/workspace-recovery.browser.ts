@@ -94,8 +94,8 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
       release = resolve;
     });
     let saving = false;
-    await page.route(`**/api/branes/${brane.id}`, async (route) => {
-      if (route.request().method() !== 'PATCH') return route.continue();
+    await page.context().route('**/api/sync/commands', async (route) => {
+      if (route.request().postDataJSON().command.type !== 'brane.title') return route.continue();
       saving = true;
       await gate;
       await route.continue();

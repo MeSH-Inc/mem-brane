@@ -1,3 +1,5 @@
+import { applyWorkspaceOperation } from '../services/workspace-operations.js';
+import { workspaceOperation } from '../../shared/workspace-commands.js';
 import { OcrService, ocrCredits, defaultOcrLimits } from '../services/ocr.js';
 import { cancelRun } from '../services/run-lifecycle.js';
 import { readConfiguration } from '../services/configuration.js';
@@ -82,6 +84,8 @@ export function createApi(
   app.use('*', async (c, next) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) return c.json({ error: 'Sign in required' }, 401);
+    if (c.req.header('X-Mem-Brane-Actor') && c.req.header('X-Mem-Brane-Actor') !== session.user.id)
+      return c.json({ error: 'Account changed. Sign in again before synchronizing.' }, 401);
     c.set('actor', session.user.id);
     if (!allowRequest(session.user.id))
       return c.json({ error: 'Too many requests; try again shortly' }, 429);
@@ -119,6 +123,11 @@ export function createApi(
     ocr.cancel(c.get('actor'), id.parse(c.req.param('id')));
     return c.json({ ok: true });
   });
+  app.post('/sync/commands', async (c) =>
+    c.json(
+      applyWorkspaceOperation(db, c.get('actor'), workspaceOperation.parse(await c.req.json())),
+    ),
+  );
   app.get('/config', (c) => c.json(readConfiguration(db, c.get('actor'))));
   app.get('/branes', (c) =>
     c.json(

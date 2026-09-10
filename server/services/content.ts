@@ -25,14 +25,13 @@ import type { RevisionPage, RevisionSummary } from '../../shared/types/history.j
 import { canEditBrane, canReadBrane, DomainError, requireOwned } from '../domain/access.js';
 export const uid = () => randomUUID();
 export const now = () => Date.now();
-export function createBrane(db: DB, actor: string, title = 'Untitled brane') {
+export function createBrane(db: DB, actor: string, title = 'Untitled brane', id: string = uid()) {
   if (
     (db.prepare('SELECT count(*) n FROM branes WHERE owner_id=?').get(actor) as { n: number }).n >=
     100
   )
     throw new DomainError(429, 'Workspace capacity reached');
-  const id = uid(),
-    time = now();
+  const time = now();
   db.prepare('INSERT INTO branes VALUES (?,?,?,?,?)').run(id, actor, title, time, time);
   return { id, title, created_at: time, updated_at: time };
 }
@@ -42,6 +41,7 @@ export function createPlacement(
   braneId: string,
   blockId: string,
   g = { x: 100, y: 100, width: 320, height: 220 },
+  id: string = uid(),
 ) {
   canEditBrane(db, actor, braneId);
   requireOwned(db, 'blocks', actor, blockId);
@@ -50,7 +50,6 @@ export function createPlacement(
       .n >= MAX_BRANE_PLACEMENTS
   )
     throw new DomainError(429, 'Brane placement capacity reached');
-  const id = uid();
   db.prepare(
     'INSERT INTO placements (id,brane_id,block_id,x,y,width,height,z_index,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
   ).run(id, braneId, blockId, g.x, g.y, g.width, g.height, 0, now());
@@ -72,6 +71,7 @@ export function createBlock(
   braneId: string,
   geometry?: Geometry,
   origin?: 'authored' | 'generated',
+  identities?: { blockId: string; placementId: string },
 ): CreatedBlock & { placement: Placement };
 export function createBlock(
   db: DB,
@@ -81,6 +81,7 @@ export function createBlock(
   braneId?: string,
   geometry?: Geometry,
   origin?: 'authored' | 'generated',
+  identities?: { blockId: string; placementId: string },
 ): CreatedBlock;
 export function createBlock(
   db: DB,
@@ -90,13 +91,14 @@ export function createBlock(
   braneId?: string,
   geometry?: { x: number; y: number; width: number; height: number },
   origin: 'authored' | 'generated' = 'authored',
+  identities?: { blockId: string; placementId: string },
 ): CreatedBlock {
   if (!fitsArtifactContent(content))
     throw new DomainError(400, 'Artifact text exceeds the character limit');
   content = contentSchema.parse(content);
   if (kind !== content.format) throw new DomainError(400, 'Block kind must match content format');
   return db.transaction(() => {
-    const id = uid();
+    const id = identities?.blockId ?? uid();
     db.prepare('INSERT INTO blocks (id,owner_id,kind,created_at,origin) VALUES (?,?,?,?,?)').run(
       id,
       actor,
@@ -110,7 +112,9 @@ export function createBlock(
         encodeContent(db, actor, content),
         now(),
       );
-    const placement = braneId ? createPlacement(db, actor, braneId, id, geometry) : undefined;
+    const placement = braneId
+      ? createPlacement(db, actor, braneId, id, geometry, identities?.placementId)
+      : undefined;
     return { id, kind, origin, content, version: 0, placement };
   })();
 }

@@ -1,3 +1,4 @@
+import { useAssetUrl } from './LocalAsset';
 import { useEffect, useState } from 'react';
 import { client } from '../services/client';
 import type { PdfContent as Pdf, PdfSummary, PdfRepresentation } from '../../shared/types/domain';
@@ -8,6 +9,7 @@ export function PdfContent({
   content: Pdf | PdfSummary;
   showProvenance?: boolean;
 }) {
+  const original = useAssetUrl(content.assetId);
   const identity = 'representationId' in content ? content.representationId : undefined;
   const [loaded, setLoaded] = useState<{ id: string; value: PdfRepresentation }>();
   const [error, setError] = useState('');
@@ -33,9 +35,10 @@ export function PdfContent({
     identity && loaded?.id === identity ? loaded.value : content.representation;
   return (
     <div className="pdf-content nodrag nowheel nopan">
-      <a href={`/api/assets/${content.assetId}`} download={content.filename}>
+      <a href={original.url} download={content.filename}>
         Download original PDF ↗
       </a>
+      {original.error && <p>{original.error}</p>}
       <strong>{content.filename}</strong>
       <small>
         {content.pageCount} {content.pageCount === 1 ? 'page' : 'pages'} · original retained

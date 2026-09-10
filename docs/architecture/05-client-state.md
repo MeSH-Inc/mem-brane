@@ -54,9 +54,9 @@ subscriptions and polling, loads authoritative state and model configuration, an
 starts import delivery. `dispose` removes subscriptions, cancels debounce/polling
 timers, and invalidates outstanding callbacks. Requests already sent may still
 commit: their old controller cannot clear another actor's draft or navigate the
-new workspace. Local drafts and request journals survive disposal. Geometry writes
-already enqueued drain in their existing queue; geometry remains an in-memory intent
-with the existing unload warning rather than a reload-durable document.
+new workspace. Local drafts and request journals survive disposal. Completed geometry writes join the account-scoped IndexedDB replica and durable
+outbox before transmission. In-progress gestures remain transient; a failed local
+transaction preserves the in-memory intent and unload warning.
 
 Refresh, lineage, estimate and inspection results are ordered independently. Older
 workspace reads cannot erase acknowledged edits or stream progress received while
@@ -96,3 +96,31 @@ refresh and stream ordering, stale lineage/estimate responses, import delivery,
 atomic submission payloads, no-op versions, and exact journal replay. Server tests
 verify durable receipts, immutable storage, ownership and transaction rollback;
 browser tests cover the integrated UI and reload recovery.
+
+## Offline workspace replica
+
+`WorkspaceReplica` is the foreground client's persistence boundary for ordinary
+workspace mutations. Its IndexedDB transaction commits a projected workspace and
+an ordered operation together. The controller's write acknowledgements mean local
+persistence; the application status separately reports pending synchronization.
+Text, placements, brane creation and title changes use this path both online and
+offline. Existing editor drafts protect changes before local commit; Run/Spawn
+journals continue to protect uncertain paid submissions.
+
+Server operation receipts are atomic with mutations and keyed by account plus
+operation UUID. The request hash prevents key reuse with different content.
+Creation uses client-generated UUIDs, removing temporary-ID remapping from dependent
+offline edits. Text and geometry carry expected versions; deletion is versioned
+and title updates compare their previous value. A blocked head pauses replay.
+Explicit conflict resolution rebases or drops the affected item's queued changes
+and rebuilds the projection from authoritative state, retaining unrelated intents.
+Controller acknowledgement caches reset after that deliberate version change.
+
+The replica caches opened workspaces, immutable page/revision reads and previously
+requested detail responses. Originals are stored as account-scoped blobs; UI object
+URLs are revoked on unmount. The service worker owns only versioned public shell
+assets. Web Locks serialize replay and resolution within the browser, IndexedDB
+serializes concurrent local transactions, and BroadcastChannel announces changes.
+Network snapshots cannot overwrite writes committed during their fetch. Expected
+actor headers bind requests to the session even if another tab switches accounts.
+See [offline behavior](../offline-pwa.md) for supported operations and limitations.

@@ -5,7 +5,10 @@ import { it, expect, vi } from 'vitest';
 import { PdfContent } from '../src/components/PdfContent';
 import { api } from '../src/services/api';
 import type { PdfSummary } from '../shared/types/domain';
-vi.mock('../src/services/api', () => ({ api: vi.fn() }));
+vi.mock('../src/services/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/services/api')>()),
+  api: vi.fn(),
+}));
 it('loads page text only on demand, retries failure and fences an obsolete identity', async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   const host = document.createElement('div'),

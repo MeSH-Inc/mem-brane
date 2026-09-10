@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 
 // Precache the complete UI, including the lazily loaded Canvas. Never cache API
@@ -10,6 +11,8 @@ export function pwa(): Plugin {
     generateBundle(_, bundle) {
       const files = ['/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'];
       const hash = createHash('sha256');
+      for (const file of files.filter((file) => file !== '/'))
+        hash.update(readFileSync(`public${file}`));
       for (const [name, item] of Object.entries(bundle)) {
         files.push(`/${name}`);
         hash.update(item.type === 'chunk' ? item.code : item.source);

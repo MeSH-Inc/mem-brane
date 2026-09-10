@@ -1,3 +1,4 @@
+import { LocalImage } from './LocalAsset';
 import { PdfContent } from './PdfContent';
 import { useEffect, useRef, useState } from 'react';
 import type { Block, Brane, Placement, Revision, Geometry } from '../../shared/types/domain';
@@ -194,9 +195,9 @@ export function ArtifactActions({
                       <PdfContent content={selected.content} showProvenance />
                     )}
                     {selected.content.format === 'image' && (
-                      <img
+                      <LocalImage
                         className="context-image"
-                        src={`/api/assets/${selected.content.assetId}`}
+                        assetId={selected.content.assetId!}
                         alt="Frozen image snapshot"
                       />
                     )}
