@@ -101,7 +101,7 @@ export const useInteraction = create<Interaction>((set, get) => ({
   },
   selectedPlacements: [],
   drafts: {},
-  tool: 'write',
+  tool: 'select',
   inspector: true,
   setSelectedPlacements: (ids) =>
     set((state) => {

@@ -116,7 +116,7 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
   await expect(duplicate).toHaveClass(/selected/);
   await page.getByRole('button', { name: 'Use 1 as context', exact: true }).click();
   await expect(page.locator('.context-chips .chip')).toHaveCount(1);
-  const handle = first.locator('.react-flow__resize-control.bottom.right.handle');
+  const handle = first.locator('[data-resize="se"]');
   const bounds = await handle.boundingBox();
   if (!bounds) throw new Error('Missing resize handle');
   const before = await first.boundingBox();

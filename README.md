@@ -30,7 +30,7 @@ Vite serves the browser on port 5173 and proxies `/api` to the Node server on po
 ## First exploration
 
 1. Open the seeded brane or choose **New brane**.
-2. In Canvas, choose **Write** and drag empty space to create a thought. Type into its editor. In Focus, use the add controls instead.
+2. In Canvas, choose **Write** and click or drag empty space to create a thought. Type into its editor. In Focus, use the add controls instead.
 3. Choose **Spawn** on a ready artifact to develop it into a generated child. Spawn captures the source's current text and creates a new artifact with provenance; it does not read the global composer or inherit a conversation automatically.
 4. For a composed exploration, choose **Use as context**, order your references, write a prompt and submit. **Continue from here** explicitly selects a conversation's ancestor chain.
 5. Use **Save brane** to flush pending text and placement edits and save the title. Background runs continue when you navigate away.
@@ -53,11 +53,11 @@ for limits, API contracts, and operator commands.
 
 | Tool   | Primary drag                                    | Other behavior                                                                      |
 | ------ | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Write  | Create a thought on empty canvas                | Drag headers to move cards; resize selected cards                                   |
+| Write  | Size a thought on empty canvas                  | Click empty canvas to create; drag headers to move cards; resize selected cards     |
 | Pan    | Move the viewport, including from a card header | Editors and block actions remain interactive; card movement and resize are disabled |
 | Select | Select cards intersecting a marquee             | Shift-click toggles individual placements; drag a selected header to move the group |
 
-Middle/right mouse panning remains available across tools. Use Fit View to find offscreen cards. Editor text gestures do not move cards. Escape, tool changes, blur and pointer cancellation abort unfinished creation or marquee gestures; a cancelled marquee restores the previous selection.
+Middle/right mouse panning remains available across tools. Use Fit View to find offscreen cards. Editor text gestures do not move cards. Select is the default tool. Escape, tool changes, blur and pointer cancellation abort creation, selection, movement and resizing without saving; cancellation restores the previous selection. Wheel gestures pan; Control/Command-wheel zooms around the pointer.
 
 Selection belongs to placements: two instances of the same block can be selected independently. **Use as context** resolves that selection to unique blocks. Selection, proximity, movement and resizing never invoke a model or implicitly change context.
 

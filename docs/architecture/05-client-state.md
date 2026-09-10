@@ -8,15 +8,32 @@ Viewport updates do not add browser history. TanStack Router handles /b/:braneId
 
 Text draft recovery uses IndexedDB, scoped by authenticated actor and Block ID. Each draft retains its original server version. Hydration never silently rebases onto newer text; conflicts require a visible choice. Writes/deletes are serialized so clearing a saved draft cannot be undone by an older pending write. Browser storage is optional to successful server saving and its failure is visible.
 
-Selection has one owner: Zustand. React Flow selection changes are explicit commands through `onNodesChange`; node selection is derived during render. Never mirror selection back from `onSelectionChange`, or copy projected nodes into state in an effect. Equivalent selection sets preserve the store snapshot. Removing placements prunes unavailable placements; switching views retains selection. Placements are selected independently, including duplicate placements of one block. The route derives unique Block IDs for context commands. Canvas and route subscribe to the fields they use.
+Selection belongs to the application, scoped to placement identities. Equivalent
+selection sets preserve the store snapshot; removing a placement prunes it. Context
+commands resolve selected placements to unique blocks. Editors, rendered content,
+links and command controls own their native browser gestures in every tool and do
+not change placement selection as a side effect.
 
-The canvas owns only in-progress gesture geometry. Content and streamed run updates continue rendering during drag/resize without replacing that geometry. Final position (including keyboard movement) and resize changes enqueue one geometry intent per placement. The controller projects pending intents over saved placements. Measurement notifications do not persist geometry. React Flow callbacks and projection inputs are stable between relevant changes.
+`CanvasGestures` owns recognition, preview, commit and cancellation. All canvas
+surfaces use an eight-screen-pixel click tolerance. Select is the default: a header
+click selects, Shift-click toggles, empty clicks clear, and empty drags marquee.
+Write clicks create a default-size thought; drags choose its rectangle. Pan and
+middle/right mouse drags move the viewport. Touch pans and pinches the overview.
+Wheel gestures pan, with Control/Command-wheel zooming around the pointer.
 
-Validation: `npm run test:browser` runs Chromium against real BraneView, routing and canvas components with fixture APIs, covering view switching, multi-selection, streaming during resize and keyboard persistence. Run `npx playwright install chromium` once when setting up a new machine. The jsdom canvas suite exercises external selection, remounts, duplicate placements, removal, idempotence and gesture completion under StrictMode.
+Drag/resize previews retain their starting geometry through incoming content
+updates. Completion commits each changed placement once. Escape, tool changes,
+blur, pointer cancellation, capture loss and unmount abort without persistence and
+restore the starting selection. Cancellation never remounts the canvas. Keyboard
+arrows move selected placements by 5 units, or 20 with Shift, outside native editors.
 
-Canvas tools are explicit: Write creates a thought from an empty-pane drag, Pan moves the viewport (including header drags), and Select draws an intersecting marquee. `tools.ts` defines the library-independent tool catalog and type. `toolPolicy.ts` maps those tools to React Flow gesture settings and help text. Shift-click toggles placements, while marquee selection replaces the set. Middle/right mouse panning remains available; touch retains viewport panning. Pan disables node movement, selection and resize handles; editors and actions retain their own pointer behavior. Mobile hides the canvas-tool group by class rather than toolbar position.
-
-`useCanvasGesture` owns the lifetime of empty-pane pointer gestures and Write's rectangle. React Flow owns marquee rendering and hit testing. Escape, tool changes, blur, pointer cancellation, lost capture and unmount abort unfinished gestures. An aborted marquee restores its initial placement selection; an aborted Write gesture never creates a block. A cancelled marquee remounts the React Flow gesture owner with the retained viewport to clear both its private gesture refs and rectangle, without using its internal store API. Completed gestures retain their normal controlled-state path. Browser tests cover partial overlap, zoom, duplicate placements/context resolution, reverse multi-card marquee, empty clicks, group movement, editor isolation, middle-button pan and cancellation/restart. Cancellation events that automation cannot generate through mouse input are explicitly injected after real pointer drags.
+React Flow is a rendering and viewport adapter. Its selection, drag, resize,
+keyboard, wheel and pointer zoom handlers are disabled. Card pointer targeting is
+explicit even in Pan. Application resize handles and `useCanvasGesture` translate
+browser input into the gesture owner. Node geometry, selection and provenance
+edges remain projections of domain records; library measurement cannot persist
+geometry. Pure state-machine and Chromium tests exercise this interaction contract,
+including jitter, native controls, cancellation and updates during resizing.
 
 Placement geometry uses optimistic concurrency. Each placement has a monotonically increasing `version`; PATCH requires that version and atomically returns the updated placement or HTTP 409. GET placement applies the same ownership checks. Migration 005 initializes existing placement versions to zero.
 

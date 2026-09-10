@@ -357,7 +357,8 @@ a {
 .canvas-hint span {
   padding: 0 8px;
 }
-.draft-rectangle {
+.draft-rectangle,
+.selection-rectangle {
   position: absolute;
   border: 1px dashed #70834f;
   background: #dce8a54d;
@@ -1480,4 +1481,58 @@ a {
 .sync-conflict button,
 .app-status > button {
   margin: 4px 6px 4px 0;
+}
+
+.canvas-host {
+  touch-action: none;
+}
+.canvas-resize {
+  position: absolute;
+  z-index: 4;
+  width: 10px;
+  height: 10px;
+  border: 1px solid #70834f;
+  background: var(--paper);
+  touch-action: none;
+}
+.canvas-resize.n,
+.canvas-resize.s {
+  left: calc(50% - 5px);
+  cursor: ns-resize;
+}
+.canvas-resize.e,
+.canvas-resize.w {
+  top: calc(50% - 5px);
+  cursor: ew-resize;
+}
+.canvas-resize.n,
+.canvas-resize.ne,
+.canvas-resize.nw {
+  top: 0;
+}
+.canvas-resize.s,
+.canvas-resize.se,
+.canvas-resize.sw {
+  bottom: 0;
+}
+.canvas-resize.e,
+.canvas-resize.ne,
+.canvas-resize.se {
+  right: 0;
+}
+.canvas-resize.w,
+.canvas-resize.nw,
+.canvas-resize.sw {
+  left: 0;
+}
+.canvas-resize.ne,
+.canvas-resize.sw {
+  cursor: nesw-resize;
+}
+.canvas-resize.nw,
+.canvas-resize.se {
+  cursor: nwse-resize;
+}
+.tool-pan .react-flow__pane {
+  cursor: grab;
 }

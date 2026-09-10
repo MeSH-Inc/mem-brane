@@ -1,20 +1,19 @@
 import { pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapters';
 import { toolPolicy } from './toolPolicy';
 import { useCanvasGesture } from './useCanvasGesture';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { defaultViewport, type ResizeEdge } from './gestures';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
   Background,
   BackgroundVariant,
   Controls,
-  NodeResizer,
   Handle,
   Position,
   useReactFlow,
   type NodeProps,
   type Node,
-  type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { Block, BraneState, Placement } from '../../shared/types/domain';
@@ -40,13 +39,21 @@ type CardData = {
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
 type CardNode = Node<CardData>;
-const defaultViewport = { x: 20, y: 20, zoom: 1 };
 function Card({ id, data, selected }: NodeProps<CardNode>) {
   return (
     <article className={`canvas-card ${data.block.origin} ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} id="input" isConnectable={false} />
       <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
-      <NodeResizer isVisible={selected && data.resizable} minWidth={180} minHeight={120} />
+      {selected &&
+        data.resizable &&
+        (['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as ResizeEdge[]).map((edge) => (
+          <span
+            key={edge}
+            className={`canvas-resize ${edge}`}
+            data-resize={edge}
+            aria-hidden="true"
+          />
+        ))}
       <header className="card-grip">
         <span className="kind-mark">{data.block.origin === 'generated' ? '✳' : '◇'}</span>
         <span>
@@ -112,30 +119,29 @@ interface Props {
   onManage: CardData['onManage'];
 }
 function Inner(props: Props) {
-  const { screenToFlowPosition, fitView, getViewport } = useReactFlow();
+  const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
   const selected = useInteraction((s) => s.selectedPlacements);
   const tool = useInteraction((s) => s.tool);
   const addContext = useCallback((id: string) => props.onContext([id]), [props.onContext]);
   const setContinue = props.onContinue;
-  // Only in-progress geometry is local. Completed gestures update the domain owner.
-  const [geometry, setGeometry] = useState<Record<string, Geometry>>({});
-  const geometryRef = useRef(geometry);
   const policy = toolPolicy(tool);
-  const [flowEpoch, setFlowEpoch] = useState(0);
-  const viewport = useRef(defaultViewport);
-  const resetMarquee = useCallback(() => {
-    viewport.current = getViewport();
-    // Remount the library gesture owner to clear its private pointer/selection
-    // refs as well as its rectangle. Domain state and viewport remain intact.
-    setFlowEpoch((epoch) => epoch + 1);
-  }, [getViewport]);
-  const { rect, bindings } = useCanvasGesture(
-    tool,
-    screenToFlowPosition,
-    props.onCreate,
-    resetMarquee,
-  );
   const host = useRef<HTMLDivElement>(null);
+  const placements = props.state.placements;
+  const {
+    geometry,
+    rectangle: rect,
+    bindings,
+  } = useCanvasGesture(tool, host, {
+    placements: () => placements,
+    selection: () => useInteraction.getState().selectedPlacements,
+    select: useInteraction.getState().setSelectedPlacements,
+    viewport: getViewport,
+    camera: (view) => {
+      void setViewport(view);
+    },
+    create: props.onCreate,
+    commit: props.onGeometry,
+  });
   const insertion = useCallback(() => {
     const bounds = host.current?.getBoundingClientRect();
     const point = screenToFlowPosition(
@@ -148,24 +154,12 @@ function Inner(props: Props) {
   useEffect(() => {
     props.onInsertionReady?.(insertion);
   }, [props.onInsertionReady, insertion]);
-  const placements = props.state.placements;
-  const placementsRef = useRef(placements);
-  placementsRef.current = placements;
   useEffect(() => {
-    // Removal is a domain event, not an echo from React Flow's rendered selection.
     const visible = new Set(placements.map((p) => p.id));
     const interaction = useInteraction.getState();
     interaction.setSelectedPlacements(
       interaction.selectedPlacements.filter((id) => visible.has(id)),
     );
-    const previous = geometryRef.current;
-    const remaining = Object.fromEntries(
-      Object.entries(previous).filter(([id]) => visible.has(id)),
-    );
-    if (Object.keys(remaining).length !== Object.keys(previous).length) {
-      geometryRef.current = remaining;
-      setGeometry(remaining);
-    }
   }, [placements]);
   const nodes = useMemo<CardNode[]>(() => {
     const blocks = new Map(props.state.blocks.map((b) => [b.id, b]));
@@ -184,7 +178,7 @@ function Inner(props: Props) {
           height: g.height,
           initialWidth: g.width,
           initialHeight: g.height,
-          style: { width: g.width, height: g.height },
+          style: { width: g.width, height: g.height, pointerEvents: 'all' },
           dragHandle: '.card-grip',
           selected: selected.includes(p.id),
           data: {
@@ -244,55 +238,6 @@ function Inner(props: Props) {
     () => derivationEdges(props.state),
     [props.state.placements, props.state.derivations],
   );
-  const changes = useCallback(
-    (updates: NodeChange<CardNode>[]) => {
-      const byId = new Map(placementsRef.current.map((p) => [p.id, p]));
-      const interaction = useInteraction.getState();
-      const selection = new Set(interaction.selectedPlacements);
-      let nextGeometry = geometryRef.current;
-      const completed = new Set<string>();
-      for (const change of updates) {
-        if (!('id' in change)) continue;
-        const placement = byId.get(change.id);
-        if (!placement) continue;
-        if (change.type === 'select') {
-          if (change.selected) selection.add(placement.id);
-          else selection.delete(placement.id);
-        } else if (
-          change.type === 'position' ||
-          (change.type === 'dimensions' && change.resizing !== undefined)
-        ) {
-          const previous = nextGeometry[change.id] ?? placement;
-          const next = {
-            x: previous.x,
-            y: previous.y,
-            width: previous.width,
-            height: previous.height,
-          };
-          if (change.type === 'position' && change.position) Object.assign(next, change.position);
-          if (change.type === 'dimensions' && change.dimensions)
-            Object.assign(next, change.dimensions);
-          nextGeometry = { ...nextGeometry, [change.id]: next };
-          if (
-            (change.type === 'position' && change.dragging === false) ||
-            (change.type === 'dimensions' && change.resizing === false)
-          )
-            completed.add(change.id);
-        }
-      }
-      interaction.setSelectedPlacements([...selection]);
-      for (const id of completed) {
-        props.onGeometry(id, nextGeometry[id]);
-        nextGeometry = { ...nextGeometry };
-        delete nextGeometry[id];
-      }
-      if (nextGeometry !== geometryRef.current) {
-        geometryRef.current = nextGeometry;
-        setGeometry(nextGeometry);
-      }
-    },
-    [props.onGeometry],
-  );
   return (
     <div
       ref={host}
@@ -320,32 +265,36 @@ function Inner(props: Props) {
       }
     >
       <ReactFlow
-        key={flowEpoch}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
-        onNodesChange={changes}
-        panOnDrag={policy.panOnDrag}
-        nodesDraggable={policy.nodesDraggable}
-        elementsSelectable={policy.elementsSelectable}
-        selectionOnDrag={policy.selectionOnDrag}
-        selectionMode={policy.selectionMode}
-        selectionKeyCode={policy.selectionKeyCode}
-        panActivationKeyCode={policy.panActivationKeyCode}
-        multiSelectionKeyCode={policy.multiSelectionKeyCode}
-        paneClickDistance={8}
+        nodesDraggable={false}
+        elementsSelectable={false}
+        selectionOnDrag={false}
+        panOnDrag={false}
+        zoomOnScroll={false}
+        zoomOnPinch={false}
+        zoomOnDoubleClick={false}
+        panOnScroll={false}
+        selectionKeyCode={null}
+        panActivationKeyCode={null}
+        multiSelectionKeyCode={null}
+        disableKeyboardA11y
+        autoPanOnNodeFocus={false}
+        edgesFocusable={false}
+        preventScrolling={false}
         deleteKeyCode={null}
         nodesConnectable={false}
         minZoom={0.2}
         maxZoom={2}
-        defaultViewport={viewport.current}
+        defaultViewport={defaultViewport}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#cfcec6" />
         <Controls showInteractive={false} />
       </ReactFlow>
       {rect && (
         <div
-          className="draft-rectangle"
+          className={rect.kind === 'write' ? 'draft-rectangle' : 'selection-rectangle'}
           style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
         />
       )}
