@@ -43,6 +43,12 @@ Paste a screenshot, drop files onto the canvas, or use **Image / PDF**. The **+*
 
 PNG, JPEG, GIF, WebP and PDF files are supported, up to 5 MiB by default. Original files are retained. PDFs expose extracted text by page and work as text context with every configured model. PDF images, diagrams and layout are not included; scanned PDFs need OCR, which is not yet supported. Documents beyond extraction limits remain downloadable without sending partial text. Animated images are stored but require a still image for model context.
 
+The enhanced-OCR admission layer is implemented but disabled: no paid OCR provider or
+checkout is connected. It provides a shared model/OCR spend ledger, one-time invited
+trial grants, operator-verified prepaid credits, and durable parsing jobs. Ordinary
+uploads still use local PDF.js. See [OCR admission and credits](docs/ocr-admission.md)
+for limits, API contracts, and operator commands.
+
 ## Canvas and Focus
 
 | Tool   | Primary drag                                    | Other behavior                                                                      |
@@ -113,7 +119,7 @@ Development currently favors direct architectural improvements over compatibilit
 | `CHECKPOINT_INTERVAL_MS`, `CHECKPOINT_CHARACTERS`, `LEASE_MS`          | Streaming persistence and worker recovery timing                                 |
 | `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Optional S3-compatible object storage; absent endpoint selects local files       |
 
-To enable real models, supply `OPENAI_API_KEY`, add the model ID to `MODEL_ALLOWLIST`, configure its operator-verified entry in `MODEL_PRICING_JSON`, and set positive `DAILY_USER_SPEND_LIMIT` and `GLOBAL_DAILY_SPEND_LIMIT` values. Optionally change `MODEL_DEFAULT`. A zero budget disables paid admission. Pricing entries include input/output token rates, vision capability, an image token bound, source URL and verification date; see [billing configuration](docs/deployment.md#billing-configuration-and-uncertain-requests).
+To enable real models, supply `OPENAI_API_KEY`, add the model ID to `MODEL_ALLOWLIST`, configure its operator-verified entry in `MODEL_PRICING_JSON`, and set positive `DAILY_USER_SPEND_LIMIT`, `GLOBAL_DAILY_SPEND_LIMIT` and `GLOBAL_MONTHLY_SPEND_LIMIT` values. Optionally change `MODEL_DEFAULT`. A zero budget disables paid admission. Pricing entries include input/output token rates, vision capability, an image token bound, source URL and verification date; see [billing configuration](docs/deployment.md#billing-configuration-and-uncertain-requests).
 
 Paid admission atomically reserves a conservative usage bound. Recorded costs use frozen configured rates, not provider invoices. Interrupted or unmetered requests retain their reservations until explicit, audited reconciliation. Retrying never assumes the previous request was free.
 

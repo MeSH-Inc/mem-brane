@@ -113,7 +113,7 @@ export function readRunDetail(db: DB, actor: string, id: string): RunDetail {
     cost:
       db
         .prepare<unknown[], NonNullable<RunDetail['cost']>>(
-          'SELECT status,reserved_microusd,confirmed_microusd FROM run_costs WHERE run_id=?',
+          'SELECT status,reserved_microusd,confirmed_microusd FROM spend_commitments WHERE run_id=?',
         )
         .get(run.id) ?? null,
     checkpoint:

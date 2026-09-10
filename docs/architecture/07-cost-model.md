@@ -2,7 +2,7 @@
 
 Initial recurring costs: one VPS for Node/SQLite/Caddy, object storage requests and bytes, model calls, off-host SQLite/asset backups and bandwidth. There is no Redis, vector database or paid sync service. Future collaboration infrastructure is optional and deferred.
 
-Environment configuration controls global worker concurrency, per-user concurrent runs, max output tokens, max imported webpage bytes, max upload bytes, daily per-user model-spend limit, checkpoint interval and character threshold, model allowlist and default. Values are validated at startup and documented in .env.example. No paid call occurs without explicit Run intent; local default is deterministic mock. Confirmed provider usage is stored separately from estimates. Paid runs fail closed without operator-verified pricing and a positive daily budget. A per-Run ledger reserves conservative UTF-8/message/image token bounds plus the output cap, then settles using confirmed usage and frozen pricing. Uncertain billing retains the reservation across UTC day boundaries; explicit retries need separate reservations. Zero daily budget disables paid runs. Usage-rated cost is not an invoice; caching discounts and pricing tiers can make it conservative.
+Environment configuration controls global worker concurrency, per-user concurrent runs, max output tokens, max imported webpage bytes, max upload bytes, daily per-user model-spend limit, checkpoint interval and character threshold, model allowlist and default. Values are validated at startup and documented in .env.example. Model calls require explicit Run intent; OCR requires separate accepted parsing intent; local default is deterministic mock. Confirmed provider usage is stored separately from estimates. Paid runs fail closed without operator-verified pricing and a positive daily budget. A shared model/OCR spend ledger reserves conservative UTF-8/message/image token bounds plus the output cap, then settles using confirmed usage and frozen pricing. Uncertain billing retains the reservation across UTC day boundaries; explicit retries need separate reservations. Zero global daily or monthly budget disables paid work. Usage-rated cost is not an invoice; caching discounts and pricing tiers can make it conservative.
 
 Keep backup retention and storage lifecycle bounded. Do not micro-optimize ordinary HTTP at the expense of context correctness or accidental paid calls.
 
@@ -28,3 +28,22 @@ Reconciliation accepts only safe nonnegative microdollars and provider evidence,
 and commits the confirmed amount and immutable audit entry together. Tests cover
 rounding, safe integer boundaries, malformed records, frozen pricing, aggregate
 overflow, and audit-write rollback.
+
+## Shared commitments and OCR admission
+
+`spend_commitments` is the source of truth for both model and OCR costs. Each entry
+has a category, owner, UTC budget day, frozen units and pricing, and separate
+reserved/confirmed amounts. Model entries retain their run foreign key. Migration
+022 replaces the old run-only tables and preserves reconciliation evidence.
+
+Admissions use IMMEDIATE transactions to check shared daily/monthly ceilings,
+category ceilings, and actor allowances before recording work. Reserved and
+uncertain entries count against every new period until settled or safely released.
+Confirmed entries count in their original UTC budget day/month. This bounds admitted
+liability at the configured rates; it does not control unrelated provider-key usage
+or an upstream service billing beyond the agreed bound.
+
+OCR additionally reserves page entitlements from immutable operator-issued grants.
+It has no public grant endpoint, automatic free-account allocation, or automatic
+refill. Detailed state transitions and integration requirements are in
+[OCR admission](../ocr-admission.md).

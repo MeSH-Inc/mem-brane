@@ -20,7 +20,7 @@ export function maintainHistory(db: DB, policy: RetentionPolicy, time = Date.now
         `DELETE FROM run_checkpoints WHERE run_id IN (
       SELECT c.run_id FROM run_checkpoints c JOIN runs r ON r.id=c.run_id
       JOIN run_outputs o ON o.run_id=r.id JOIN block_revisions v ON v.id=o.revision_id
-      JOIN run_costs cost ON cost.run_id=r.id
+      JOIN spend_commitments cost ON cost.run_id=r.id
       WHERE r.status='completed' AND r.finished_at<? AND c.updated_at<?
       AND cost.status IN ('confirmed','released') AND json_extract(v.content_json,'$.text')=c.text
       ORDER BY r.finished_at LIMIT ?)`,

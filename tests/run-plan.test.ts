@@ -24,6 +24,8 @@ const limits: RunLimits = {
   maxContextCharacters: 100000,
   costPolicy: {
     dailyLimitUsd: 10,
+    globalDailyLimitUsd: 10,
+    globalMonthlyLimitUsd: 100,
     prices: {
       paid: {
         inputUsdPerMillion: 0.07,
@@ -69,7 +71,7 @@ function state() {
     'context_entries',
     'conversations',
     'runs',
-    'run_costs',
+    'spend_commitments',
     'submission_receipts',
   ].map((table) => db.prepare(`SELECT * FROM ${table}`).all());
 }

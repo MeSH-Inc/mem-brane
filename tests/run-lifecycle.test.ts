@@ -44,7 +44,7 @@ function start() {
   return startAttempt(db, id, 'worker', 1)!;
 }
 function cost() {
-  return db.prepare('SELECT status FROM run_costs WHERE run_id=?').get(id);
+  return db.prepare('SELECT status FROM spend_commitments WHERE run_id=?').get(id);
 }
 function attempt() {
   return db.prepare('SELECT outcome,finished_at FROM run_attempts WHERE run_id=?').get(id);
@@ -145,7 +145,7 @@ it.each(['complete', 'stop', 'cancel', 'expire'])(
   (operation) => {
     const token = operation === 'cancel' ? null : start();
     db.exec(
-      "CREATE TRIGGER fail_cost BEFORE UPDATE ON run_costs BEGIN SELECT RAISE(ABORT,'accounting failure'); END",
+      "CREATE TRIGGER fail_cost BEFORE UPDATE ON spend_commitments BEGIN SELECT RAISE(ABORT,'accounting failure'); END",
     );
     const action = () =>
       operation === 'complete'

@@ -125,7 +125,7 @@ it('retains active/uncertain/mismatched history and removes only redundant settl
       )
       .toBe(4);
     await worker.stop();
-    db.prepare("UPDATE run_costs SET status='uncertain' WHERE run_id=?").run(runs[1].id);
+    db.prepare("UPDATE spend_commitments SET status='uncertain' WHERE run_id=?").run(runs[1].id);
     db.prepare("UPDATE run_checkpoints SET text='Different partial' WHERE run_id=?").run(
       runs[2].id,
     );

@@ -96,7 +96,7 @@ it('SIGKILL preserves checkpoints; restart interrupts instead of re-invoking; ex
     ).toBe(1);
     expect(db.prepare('SELECT * FROM run_outputs WHERE run_id=?').get(run.id)).toBeUndefined();
     expect(
-      (db.prepare('SELECT status FROM run_costs WHERE run_id=?').get(run.id) as any).status,
+      (db.prepare('SELECT status FROM spend_commitments WHERE run_id=?').get(run.id) as any).status,
     ).toBe('uncertain');
     const retry = retryRun(db, actor, run.id, uid(), limits);
     await expect

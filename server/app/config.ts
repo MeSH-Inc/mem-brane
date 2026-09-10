@@ -24,6 +24,11 @@ const env = z
     USER_IMPORT_LIMIT: positive(3),
     IMPORT_QUEUE_LIMIT: positive(6),
     RUN_QUEUE_LIMIT: positive(8),
+    GLOBAL_MONTHLY_SPEND_LIMIT: z.coerce.number().nonnegative().default(0),
+    MODEL_DAILY_SPEND_LIMIT: z.coerce.number().nonnegative().optional(),
+    MODEL_MONTHLY_SPEND_LIMIT: z.coerce.number().nonnegative().optional(),
+    OCR_DAILY_SPEND_LIMIT: z.coerce.number().nonnegative().default(10),
+    OCR_MONTHLY_SPEND_LIMIT: z.coerce.number().nonnegative().default(100),
     GLOBAL_DAILY_SPEND_LIMIT: z.coerce.number().nonnegative().default(0),
     CHECKPOINT_INTERVAL_MS: positive(1000),
     CHECKPOINT_CHARACTERS: positive(256),
@@ -45,6 +50,9 @@ if (!config.models.includes(config.defaultModel))
 export const costPolicy = {
   dailyLimitUsd: config.DAILY_USER_SPEND_LIMIT,
   globalDailyLimitUsd: config.GLOBAL_DAILY_SPEND_LIMIT,
+  globalMonthlyLimitUsd: config.GLOBAL_MONTHLY_SPEND_LIMIT,
+  categoryDailyLimitUsd: config.MODEL_DAILY_SPEND_LIMIT,
+  categoryMonthlyLimitUsd: config.MODEL_MONTHLY_SPEND_LIMIT,
   prices: z
     .record(z.string(), modelPrice)
     .parse(JSON.parse(process.env.MODEL_PRICING_JSON || '{}')),

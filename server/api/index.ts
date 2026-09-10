@@ -1,3 +1,4 @@
+import { OcrService, ocrCredits, defaultOcrLimits } from '../services/ocr.js';
 import { cancelRun } from '../services/run-lifecycle.js';
 import { readConfiguration } from '../services/configuration.js';
 import type { RunIdentity } from '../../shared/contracts.js';
@@ -50,6 +51,14 @@ export function createApi(
   auth: ReturnType<typeof createAuth>,
   hub: EventHub,
   store: AssetStore,
+  ocr = new OcrService(db, store, undefined, {
+    ...defaultOcrLimits,
+    maxUploadBytes: config.MAX_UPLOAD_BYTES,
+    globalDailyLimitUsd: config.GLOBAL_DAILY_SPEND_LIMIT,
+    globalMonthlyLimitUsd: config.GLOBAL_MONTHLY_SPEND_LIMIT,
+    categoryDailyLimitUsd: config.OCR_DAILY_SPEND_LIMIT,
+    categoryMonthlyLimitUsd: config.OCR_MONTHLY_SPEND_LIMIT,
+  }),
 ) {
   const app = new Hono<{ Variables: { actor: string } }>();
   const allowRequest = createRateLimit();
@@ -86,6 +95,30 @@ export function createApi(
     queueLimit: config.RUN_QUEUE_LIMIT,
     maxContextCharacters: config.MAX_CONTEXT_CHARACTERS,
   };
+  app.get('/ocr/credits', (c) =>
+    c.json({ enabled: ocr.enabled, ...ocrCredits(db, c.get('actor')) }),
+  );
+  app.post('/assets/:id/ocr/quote', async (c) =>
+    c.json(await ocr.quote(c.get('actor'), id.parse(c.req.param('id')))),
+  );
+  app.post('/assets/:id/ocr', async (c) => {
+    const body = z
+      .object({ key: z.string().min(1).max(200), policyId: z.string().regex(/^[a-f0-9]{64}$/) })
+      .strict()
+      .parse(await c.req.json());
+    return c.json(
+      await ocr.submit(c.get('actor'), id.parse(c.req.param('id')), body.key, body.policyId),
+      202,
+    );
+  });
+  app.get('/ocr/jobs/:id', (c) => c.json(ocr.read(c.get('actor'), id.parse(c.req.param('id')))));
+  app.get('/ocr/jobs/:id/result', (c) =>
+    c.json(ocr.result(c.get('actor'), id.parse(c.req.param('id')))),
+  );
+  app.post('/ocr/jobs/:id/cancel', (c) => {
+    ocr.cancel(c.get('actor'), id.parse(c.req.param('id')));
+    return c.json({ ok: true });
+  });
   app.get('/config', (c) => c.json(readConfiguration(db, c.get('actor'))));
   app.get('/branes', (c) =>
     c.json(
@@ -137,7 +170,7 @@ export function createApi(
     c.json(
       db
         .prepare(
-          'SELECT r.id,r.status,r.model,r.created_at,r.started_at,r.finished_at,r.lease_until,(SELECT count(*) FROM run_attempts a WHERE a.run_id=r.id) attempts,c.status cost_status,c.reserved_microusd,c.confirmed_microusd FROM runs r LEFT JOIN run_costs c ON c.run_id=r.id WHERE r.owner_id=? ORDER BY r.created_at DESC LIMIT 100',
+          'SELECT r.id,r.status,r.model,r.created_at,r.started_at,r.finished_at,r.lease_until,(SELECT count(*) FROM run_attempts a WHERE a.run_id=r.id) attempts,c.status cost_status,c.reserved_microusd,c.confirmed_microusd FROM runs r LEFT JOIN spend_commitments c ON c.run_id=r.id WHERE r.owner_id=? ORDER BY r.created_at DESC LIMIT 100',
         )
         .all(c.get('actor')),
     ),

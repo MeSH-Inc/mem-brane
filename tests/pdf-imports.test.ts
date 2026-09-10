@@ -98,7 +98,12 @@ it('retains original PDF bytes and freezes page-aware text with an explicit extr
       maxTokens: 100,
       userConcurrency: 3,
       maxContextCharacters: 100000,
-      costPolicy: { dailyLimitUsd: 1, prices: { 'text-only': freePrice } },
+      costPolicy: {
+        dailyLimitUsd: 1,
+        globalDailyLimitUsd: 1,
+        globalMonthlyLimitUsd: 10,
+        prices: { 'text-only': freePrice },
+      },
     },
   );
   // A later representation change cannot alter the submitted pages.

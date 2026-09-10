@@ -392,7 +392,7 @@ it.each(['idle', 'total'])(
       (db.prepare('SELECT text FROM run_checkpoints WHERE run_id=?').get(run.id) as any).text,
     ).toBe('Partial');
     expect(
-      (db.prepare('SELECT status FROM run_costs WHERE run_id=?').get(run.id) as any).status,
+      (db.prepare('SELECT status FROM spend_commitments WHERE run_id=?').get(run.id) as any).status,
     ).toBe('uncertain');
   },
 );

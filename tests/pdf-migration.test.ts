@@ -66,8 +66,62 @@ it('rebuilds block formats with existing placements, revisions and runs intact',
         content: revision.content,
       },
     ];
+    const price = JSON.stringify({
+      inputUsdPerMillion: 1,
+      outputUsdPerMillion: 2,
+      vision: false,
+      imageTokenBound: 0,
+      source: 'https://example.com/prices',
+      verifiedAt: '2026-09-10',
+    });
+    db.prepare('INSERT INTO run_costs VALUES (?,?,?,?,?,?,?,?,?,?)').run(
+      runId,
+      actor,
+      '2026-09-10',
+      'confirmed',
+      100,
+      20,
+      40,
+      price,
+      1,
+      2,
+    );
+    db.prepare('INSERT INTO run_cost_reconciliations VALUES (?,?,?,?)').run(
+      runId,
+      40,
+      'Preserved provider invoice',
+      2,
+    );
     db.close();
     db = openDatabase(path);
+    expect(
+      db
+        .prepare(
+          'SELECT id,category,run_id,reserved_microusd,confirmed_microusd,estimated_units,pricing_json FROM spend_commitments WHERE id=?',
+        )
+        .get(runId),
+    ).toEqual({
+      id: runId,
+      category: 'model',
+      run_id: runId,
+      reserved_microusd: 100,
+      confirmed_microusd: 40,
+      estimated_units: 20,
+      pricing_json: price,
+    });
+    expect(
+      db.prepare('SELECT evidence FROM spend_reconciliations WHERE commitment_id=?').get(runId),
+    ).toEqual({ evidence: 'Preserved provider invoice' });
+    expect(
+      db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE name IN ('run_costs','run_cost_reconciliations')",
+        )
+        .all(),
+    ).toEqual([]);
+    expect(() =>
+      db.prepare('UPDATE spend_commitments SET reserved_microusd=0 WHERE id=?').run(runId),
+    ).toThrow('immutable');
     expect(readInputs(db, runId)).toEqual(inputs);
     expect(
       db.prepare('SELECT block_id FROM placements WHERE id=?').get(block.placement.id),

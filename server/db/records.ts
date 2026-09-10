@@ -96,7 +96,11 @@ export const runCostRecord = z
     'Confirmed cost must match billing status',
   );
 export function readRunCost(db: DB, runId: string) {
-  const raw = db.prepare('SELECT * FROM run_costs WHERE run_id=?').get(runId);
+  const raw = db
+    .prepare(
+      'SELECT run_id,owner_id,budget_day,status,reserved_microusd,estimated_units AS estimated_input_tokens,confirmed_microusd,pricing_json,created_at,updated_at FROM spend_commitments WHERE run_id=?',
+    )
+    .get(runId);
   if (!raw) throw new Error('Missing run cost record');
   const row = decodeRecord(runCostRecord, raw);
   return { ...row, price: decodeJson(modelPrice, row.pricing_json) };

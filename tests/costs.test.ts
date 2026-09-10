@@ -12,6 +12,8 @@ import {
 let db: DB, actor: string, braneId: string;
 const policy: CostPolicy = {
   dailyLimitUsd: 0.02,
+  globalDailyLimitUsd: 1,
+  globalMonthlyLimitUsd: 10,
   prices: {
     'test-model': {
       inputUsdPerMillion: 1,
@@ -56,7 +58,7 @@ it('reserves atomically, deduplicates without charging twice, and enforces daily
   const request = input(),
     first = submitRun(db, revisions(db), actor, request, limits);
   submitRun(db, revisions(db), actor, request, limits);
-  expect((db.prepare('SELECT count(*) n FROM run_costs').get() as any).n).toBe(1);
+  expect((db.prepare('SELECT count(*) n FROM spend_commitments').get() as any).n).toBe(1);
   let count = 1;
   expect(() => {
     while (count++ < 30) submitRun(db, revisions(db), actor, input(), limits);
@@ -64,14 +66,14 @@ it('reserves atomically, deduplicates without charging twice, and enforces daily
   expect(budgetState(db, actor, policy).committedMicrousd).toBeLessThanOrEqual(20000);
   cancelRun(db, actor, first.id);
   expect(
-    (db.prepare('SELECT status FROM run_costs WHERE run_id=?').get(first.id) as any).status,
+    (db.prepare('SELECT status FROM spend_commitments WHERE run_id=?').get(first.id) as any).status,
   ).toBe('released');
 });
 it('settles confirmed usage separately from estimates and retains uncertain liabilities across UTC days', () => {
   const a = submitRun(db, revisions(db), actor, input(), limits);
   settleCost(db, a.id, { inputTokens: 20, outputTokens: 10 });
   expect(
-    (db.prepare('SELECT confirmed_microusd FROM run_costs WHERE run_id=?').get(a.id) as any)
+    (db.prepare('SELECT confirmed_microusd FROM spend_commitments WHERE run_id=?').get(a.id) as any)
       .confirmed_microusd,
   ).toBe(40);
   const b = submitRun(db, revisions(db), actor, input(), limits);
@@ -104,7 +106,7 @@ it('uncertain liability can only be released using an auditable explicit reconci
     'Only uncertain',
   );
   expect(() =>
-    db.prepare('DELETE FROM run_cost_reconciliations WHERE run_id=?').run(run.id),
+    db.prepare('DELETE FROM spend_reconciliations WHERE commitment_id=?').run(run.id),
   ).toThrow('immutable');
 });
 
@@ -117,7 +119,7 @@ it('preview does not materialize history and immutable estimates cannot be rewri
   expect((db.prepare('SELECT count(*) n FROM runs').get() as any).n).toBe(0);
   const run = submitRun(db, revisions(db), actor, input(), limits);
   expect(() =>
-    db.prepare('UPDATE run_costs SET reserved_microusd=0 WHERE run_id=?').run(run.id),
+    db.prepare('UPDATE spend_commitments SET reserved_microusd=0 WHERE run_id=?').run(run.id),
   ).toThrow('immutable');
 });
 it('vision capability is enforced before queueing any paid work', async () => {
@@ -172,7 +174,7 @@ it('known preflight failure releases the reservation while provider failures ret
     .toBe('failed');
   await worker.stop();
   expect(
-    (db.prepare('SELECT status FROM run_costs WHERE run_id=?').get(run.id) as any).status,
+    (db.prepare('SELECT status FROM spend_commitments WHERE run_id=?').get(run.id) as any).status,
   ).toBe('released');
   expect(budgetState(db, actor, policy).committedMicrousd).toBe(0);
 });
@@ -219,7 +221,9 @@ it.each([
   const run = submitRun(db, revisions(db), actor, input(), limits);
   settleCost(db, run.id, usage);
   expect(
-    db.prepare('SELECT status,confirmed_microusd FROM run_costs WHERE run_id=?').get(run.id),
+    db
+      .prepare('SELECT status,confirmed_microusd FROM spend_commitments WHERE run_id=?')
+      .get(run.id),
   ).toEqual({ status: 'uncertain', confirmed_microusd: null });
   expect(budgetState(db, actor, policy).committedMicrousd).toBeGreaterThan(0);
 });
@@ -230,7 +234,7 @@ it('settles using its frozen price despite subsequent policy changes', () => {
   try {
     settleCost(db, run.id, { inputTokens: 20, outputTokens: 10 });
     expect(
-      db.prepare('SELECT confirmed_microusd FROM run_costs WHERE run_id=?').get(run.id),
+      db.prepare('SELECT confirmed_microusd FROM spend_commitments WHERE run_id=?').get(run.id),
     ).toEqual({ confirmed_microusd: 40 });
   } finally {
     policy.prices['test-model'] = original;
@@ -241,9 +245,9 @@ it.each(['{"inputUsdPerMillion":-1}', 'not json'])(
   (pricing) => {
     const run = submitRun(db, revisions(db), actor, input(), limits);
     db.exec('DROP TRIGGER immutable_cost_estimate');
-    db.prepare('UPDATE run_costs SET pricing_json=? WHERE run_id=?').run(pricing, run.id);
+    db.prepare('UPDATE spend_commitments SET pricing_json=? WHERE run_id=?').run(pricing, run.id);
     expect(() => settleCost(db, run.id, { inputTokens: 1, outputTokens: 1 })).toThrow();
-    expect(db.prepare('SELECT status FROM run_costs WHERE run_id=?').get(run.id)).toEqual({
+    expect(db.prepare('SELECT status FROM spend_commitments WHERE run_id=?').get(run.id)).toEqual({
       status: 'reserved',
     });
   },
@@ -255,7 +259,7 @@ it.each([-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
     const run = submitRun(db, revisions(db), actor, input(), limits);
     holdUncertainCost(db, run.id);
     expect(() => reconcileUncertainCost(db, run.id, amount, 'Provider invoice')).toThrow();
-    expect(db.prepare('SELECT * FROM run_cost_reconciliations').all()).toEqual([]);
+    expect(db.prepare('SELECT * FROM spend_reconciliations').all()).toEqual([]);
   },
 );
 it('rolls reconciliation back if audit persistence fails', async () => {
@@ -263,11 +267,13 @@ it('rolls reconciliation back if audit persistence fails', async () => {
   const run = submitRun(db, revisions(db), actor, input(), limits);
   holdUncertainCost(db, run.id);
   db.exec(
-    "CREATE TRIGGER fail_audit BEFORE INSERT ON run_cost_reconciliations BEGIN SELECT RAISE(ABORT,'audit failure'); END",
+    "CREATE TRIGGER fail_audit BEFORE INSERT ON spend_reconciliations BEGIN SELECT RAISE(ABORT,'audit failure'); END",
   );
   expect(() => reconcileUncertainCost(db, run.id, 10, 'Provider invoice')).toThrow('audit failure');
   expect(
-    db.prepare('SELECT status,confirmed_microusd FROM run_costs WHERE run_id=?').get(run.id),
+    db
+      .prepare('SELECT status,confirmed_microusd FROM spend_commitments WHERE run_id=?')
+      .get(run.id),
   ).toEqual({ status: 'uncertain', confirmed_microusd: null });
 });
 it('rejects aggregate liability beyond the JavaScript integer range without rounding', async () => {
@@ -288,7 +294,7 @@ it.each([
 ])('rejects malformed accounting records %j', async (value) => {
   const { readRunCost } = await import('../server/db/records');
   const run = submitRun(db, revisions(db), actor, input(), limits);
-  db.prepare('UPDATE run_costs SET status=?,confirmed_microusd=? WHERE run_id=?').run(
+  db.prepare('UPDATE spend_commitments SET status=?,confirmed_microusd=? WHERE run_id=?').run(
     value.status,
     value.confirmed_microusd,
     run.id,
@@ -310,6 +316,21 @@ it.each([
   expect(() =>
     submitRun(db, revisions(db), actor, input(), { ...limits, costPolicy: badPolicy }),
   ).toThrow();
-  expect(db.prepare('SELECT * FROM run_costs').all()).toEqual([]);
+  expect(db.prepare('SELECT * FROM spend_commitments').all()).toEqual([]);
   expect(db.prepare('SELECT * FROM runs').all()).toEqual([]);
+});
+
+it.each([
+  { globalDailyLimitUsd: undefined },
+  { globalMonthlyLimitUsd: undefined },
+  { globalDailyLimitUsd: 0 },
+  { globalMonthlyLimitUsd: 0 },
+])('fails closed when a global paid budget is absent or zero: %j', (change) => {
+  expect(() =>
+    submitRun(db, revisions(db), actor, input(), {
+      ...limits,
+      costPolicy: { ...policy, ...change },
+    }),
+  ).toThrow('budget');
+  expect(db.prepare('SELECT * FROM spend_commitments').all()).toEqual([]);
 });

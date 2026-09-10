@@ -80,9 +80,12 @@ One USD equals 1,000,000 micro-USD. Use zero only when provider evidence confirm
 
 ## Admission and restoration controls
 
-Paid admission now requires a positive `GLOBAL_DAILY_SPEND_LIMIT` as well as the
-per-user limit. Outstanding and uncertain liabilities across all actors count toward
-this operator budget. Defaults keep paid execution disabled.
+Paid admission requires positive `GLOBAL_DAILY_SPEND_LIMIT` and
+`GLOBAL_MONTHLY_SPEND_LIMIT` values as well as the per-user model limit. Outstanding and uncertain liabilities across all actors count toward
+these shared model/OCR operator budgets. Defaults keep paid execution disabled.
+Optional `MODEL_DAILY_SPEND_LIMIT` and `MODEL_MONTHLY_SPEND_LIMIT` add model-category
+ceilings. OCR category ceilings default to $10/day and $100/month; paid OCR remains
+disabled until a provider is connected. See [OCR controls](ocr-admission.md).
 
 `RUN_QUEUE_LIMIT` caps active/queued generations (default 8). Imports have global
 and actor limits (`IMPORT_QUEUE_LIMIT=6`, `USER_IMPORT_LIMIT=3`). Image bytes,
