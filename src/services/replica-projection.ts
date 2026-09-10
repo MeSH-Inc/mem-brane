@@ -1,11 +1,13 @@
-import type { BraneState } from '../../shared/types/domain';
+import type { BraneState, Block } from '../../shared/types/domain';
 import type { WorkspaceCommand } from '../../shared/workspace-commands';
 import type { ReplicaState } from './replica-storage';
 
 export function findBlock(state: ReplicaState, id: string) {
-  return Object.values(state.workspaces)
-    .flatMap((w) => w.blocks)
-    .find((b) => b.id === id);
+  let found: Block | undefined;
+  for (const workspace of Object.values(state.workspaces))
+    for (const block of workspace.blocks)
+      if (block.id === id && (!found || block.version > found.version)) found = block;
+  return found;
 }
 export function findPlacement(state: ReplicaState, id: string) {
   return Object.values(state.workspaces)
@@ -52,26 +54,24 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
       return { id: command.blockId };
     }
     case 'text.edit': {
-      let result;
-      for (const workspace of Object.values(state.workspaces)) {
-        const block = workspace.blocks.find((b) => b.id === command.blockId);
-        if (!block) continue;
-        if (
-          block.origin !== 'authored' ||
-          (block.content.format !== 'text' && block.content.format !== 'webpage')
-        )
-          throw new Error('This artifact cannot be edited.');
-        const next =
-          block.content.format === 'webpage'
-            ? { ...block.content, text: command.text, status: 'ready' as const, error: undefined }
-            : { ...block.content, text: command.text };
-        block.version =
-          command.version + (JSON.stringify(next) === JSON.stringify(block.content) ? 0 : 1);
-        block.content = next;
-        result = { version: block.version, content: block.content };
-      }
-      if (!result) throw new Error('Open this block online before editing it offline.');
-      return result;
+      const block = findBlock(state, command.blockId);
+      if (!block) throw new Error('Open this block online before editing it offline.');
+      if (
+        block.origin !== 'authored' ||
+        (block.content.format !== 'text' && block.content.format !== 'webpage')
+      )
+        throw new Error('This artifact cannot be edited.');
+      const next =
+        block.content.format === 'webpage'
+          ? { ...block.content, text: command.text, status: 'ready' as const, error: undefined }
+          : { ...block.content, text: command.text };
+      const version =
+        command.version + (JSON.stringify(next) === JSON.stringify(block.content) ? 0 : 1);
+      for (const workspace of Object.values(state.workspaces))
+        workspace.blocks = workspace.blocks.map((b) =>
+          b.id === block.id ? { ...b, version, content: structuredClone(next) } : b,
+        );
+      return { version, content: next };
     }
     case 'placement.create': {
       const workspace = requireWorkspace(state, command.braneId);
@@ -120,4 +120,27 @@ export function visibleWorkspace(workspace: BraneState): BraneState {
     ...workspace,
     blocks: workspace.blocks.filter((b) => workspace.placements.some((p) => p.block_id === b.id)),
   };
+}
+
+// A block has one identity even when several cached branes place it. Installing
+// one brane must propagate newer block versions without reverting another view.
+export function installWorkspace(state: ReplicaState, workspace: BraneState) {
+  const known = new Map<string, Block>();
+  for (const cached of Object.values(state.workspaces))
+    for (const block of cached.blocks) {
+      const previous = known.get(block.id);
+      if (!previous || block.version > previous.version) known.set(block.id, block);
+    }
+  workspace.blocks = workspace.blocks.map((block) => {
+    const previous = known.get(block.id);
+    return previous && previous.version > block.version ? structuredClone(previous) : block;
+  });
+  const incoming = new Map(workspace.blocks.map((block) => [block.id, block]));
+  for (const cached of Object.values(state.workspaces)) {
+    cached.blocks = cached.blocks.map((block) => {
+      const next = incoming.get(block.id);
+      return next && next.version >= block.version ? structuredClone(next) : block;
+    });
+  }
+  state.workspaces[workspace.brane.id] = workspace;
 }

@@ -4,6 +4,7 @@ import { openDatabase, type DB } from '../server/db';
 import {
   createBrane,
   createTextBlock,
+  createPlacement,
   readBrane,
   uid,
   updateBlockLiveState,
@@ -332,4 +333,30 @@ it('upgrades local read metadata without losing an older outbox or cached accoun
   expect((await storage.read(actor)).pending).toEqual([operation]);
   expect((await storage.read(actor)).fetches).toEqual({});
   expect((await storage.session())?.user.id).toBe(actor);
+});
+
+it('keeps one text version across branes that place the same artifact', async () => {
+  const f = await fixture();
+  const second = createBrane(db, f.actor, 'Second view');
+  createPlacement(db, f.actor, second.id, f.block.id);
+  await f.client.workspace(second.id);
+  updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'Changed elsewhere', version: 0 });
+  await f.client.workspace(second.id);
+  f.offline();
+  expect((await f.client.workspace(f.brane.id)).blocks[0]).toMatchObject({
+    version: 1,
+    content: { text: 'Changed elsewhere' },
+  });
+  await f.client.saveText({ blockId: f.block.id, version: 1, text: 'Shared offline change' });
+  expect((await f.client.workspace(second.id)).blocks[0]).toMatchObject({
+    version: 2,
+    content: { text: 'Shared offline change' },
+  });
+  await f.replica.synchronize();
+  f.online();
+  await f.replica.synchronize();
+  expect(readBrane(db, f.actor, f.brane.id).blocks[0]).toMatchObject({
+    version: 2,
+    content: { text: 'Shared offline change' },
+  });
 });

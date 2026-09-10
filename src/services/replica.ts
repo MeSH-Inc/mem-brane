@@ -6,7 +6,13 @@ import {
   commandEntity,
   type WorkspaceCommand,
 } from '../../shared/workspace-commands';
-import { findBlock, findPlacement, projectCommand, visibleWorkspace } from './replica-projection';
+import {
+  findBlock,
+  findPlacement,
+  projectCommand,
+  visibleWorkspace,
+  installWorkspace,
+} from './replica-projection';
 import type { ReplicaStorage, ReplicaState, PendingOperation } from './replica-storage';
 import { networkApi, ApiError } from './transport';
 
@@ -167,7 +173,7 @@ export class WorkspaceReplica {
         if (path === '/branes') current.branes = z.array(braneResponse).parse(value);
         else if (/^\/branes\/[^/]+$/.test(path)) {
           const workspace = workspaceResponse.parse(value);
-          current.workspaces[workspace.brane.id] = workspace;
+          installWorkspace(current, workspace);
         } else current.reads[path] = value;
         return readLocal(current, path) ?? value;
       });
