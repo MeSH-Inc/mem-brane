@@ -7,18 +7,22 @@ import { useInteraction } from '../stores/interaction';
 export function BlockContent({
   block,
   partial,
-  autoFocus,
+  focusRequest,
+  onFocused,
   onEdit,
 }: {
   block: Block;
   partial?: string;
-  autoFocus?: boolean;
+  focusRequest?: string;
+  onFocused?: (id: string) => void;
   onEdit: (id: string, text: string) => void;
 }) {
   const draft = useInteraction((s) => s.drafts[block.id]);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const focused = useRef(onFocused);
+  focused.current = onFocused;
   useEffect(() => {
-    if (!autoFocus) return;
+    if (!focusRequest) return;
     let frame = 0,
       attempts = 0;
     const focus = () => {
@@ -26,13 +30,14 @@ export function BlockContent({
       if (!editor) return;
       if (getComputedStyle(editor).visibility !== 'hidden') {
         editor.focus({ preventScroll: true });
+        focused.current?.(focusRequest);
       } else if (attempts++ < 30) {
         frame = requestAnimationFrame(focus);
       }
     };
     frame = requestAnimationFrame(focus);
     return () => cancelAnimationFrame(frame);
-  }, [autoFocus]);
+  }, [focusRequest]);
   if (block.content.format === 'pdf') return <PdfContent content={block.content} />;
   if (block.kind === 'image')
     return (

@@ -81,8 +81,6 @@ export class WorkspaceController {
   estimate?: Estimate;
   lineage: ConversationMessage[] = [];
   inspected?: Inspection;
-  newBlock?: string;
-  revealedBlock?: string;
   busy = false;
   spawning: string[] = [];
   constructor(
@@ -673,8 +671,7 @@ export class WorkspaceController {
       this.notice = 'Artifact spawned · source context frozen';
       await this.refresh();
       if (!this.valid(epoch)) return;
-      this.revealedBlock = accepted.receipt.outputBlockId;
-      return this.revealedBlock;
+      return accepted.receipt.outputBlockId;
     } catch (e) {
       if (this.valid(epoch)) {
         this.report(e);
@@ -693,7 +690,6 @@ export class WorkspaceController {
     try {
       const block = await this.client.createText(this.braneId, geometry);
       if (!this.valid(epoch)) return;
-      this.newBlock = block.id;
       await this.refresh();
       if (this.valid(epoch)) return block.id;
     } catch (e) {

@@ -1536,3 +1536,7 @@ a {
 .tool-pan .react-flow__pane {
   cursor: grab;
 }
+
+.brane-workspace {
+  display: contents;
+}

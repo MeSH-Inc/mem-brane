@@ -2,7 +2,7 @@ import { pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapter
 import { toolPolicy } from './toolPolicy';
 import { useCanvasGesture } from './useCanvasGesture';
 import { defaultViewport, type ResizeEdge } from './gestures';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -21,11 +21,14 @@ import { derivationEdges } from './derivations';
 import { SpawnButton } from '../components/SpawnButton';
 import { BlockContent } from '../components/BlockContent';
 import { useInteraction } from '../stores/interaction';
+import { presentationFor } from '../stores/presentation';
+import { useStore } from 'zustand';
 type CardData = {
   block: Block;
   partial?: string;
   status?: string;
-  newBlock?: string;
+  focusRequest?: string;
+  onFocused: (id: string) => void;
   spawning?: boolean;
   retrySpawn?: boolean;
   resizable: boolean;
@@ -79,7 +82,8 @@ function Card({ id, data, selected }: NodeProps<CardNode>) {
       <BlockContent
         block={data.block}
         partial={data.partial}
-        autoFocus={data.newBlock === data.block.id}
+        focusRequest={data.focusRequest}
+        onFocused={data.onFocused}
         onEdit={data.onEdit}
       />
       <footer className="nodrag nopan">
@@ -107,8 +111,6 @@ interface Props {
   onImport?: (files: File[], point?: { x: number; y: number }) => void;
   onInsertionReady?: (getPoint: () => { x: number; y: number }) => void;
   state: BraneState;
-  newBlock?: string;
-  revealedBlock?: string;
   spawning: string[];
   retrySpawns: string[];
   onSpawn: CardData['onSpawn'];
@@ -120,6 +122,15 @@ interface Props {
 }
 function Inner(props: Props) {
   const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
+  const actor = useInteraction((s) => s.actor);
+  const presentation = presentationFor(actor, props.state.brane.id);
+  const request = useStore(presentation, (s) => s.request);
+  const [initialViewport] = useState(() => presentation.getState().viewport);
+  const rememberViewport = useCallback(
+    (_: unknown, viewport: typeof defaultViewport) =>
+      presentation.getState().remember({ viewport }),
+    [presentation],
+  );
   const selected = useInteraction((s) => s.selectedPlacements);
   const tool = useInteraction((s) => s.tool);
   const addContext = useCallback((id: string) => props.onContext([id]), [props.onContext]);
@@ -186,7 +197,13 @@ function Inner(props: Props) {
             resizable: tool !== 'pan',
             partial: run?.partial,
             status: run?.status,
-            newBlock: props.newBlock,
+            focusRequest:
+              request?.kind === 'edit' &&
+              request.blockId === block.id &&
+              (!request.placementId || request.placementId === p.id)
+                ? request.id
+                : undefined,
+            onFocused: presentation.getState().consume,
             onEdit: props.onEdit,
             onSpawn: props.onSpawn,
             spawning: props.spawning.includes(block.id),
@@ -207,7 +224,8 @@ function Inner(props: Props) {
     props.state.runs,
     geometry,
     selected,
-    props.newBlock,
+    request,
+    presentation,
     props.onEdit,
     props.onSpawn,
     props.spawning,
@@ -218,22 +236,25 @@ function Inner(props: Props) {
     props.onFocus,
     props.onManage,
   ]);
-  const framed = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!props.revealedBlock || framed.current === props.revealedBlock) return;
-    const related = props.state.derivations.filter((d) => d.outputBlockId === props.revealedBlock);
-    const connections = derivationEdges(props.state).filter((e) =>
-      related.some((d) => e.id === `${d.runId}:${d.position}`),
-    );
-    const ids = new Set(connections.flatMap((e) => [e.source, e.target]));
+    if (!request || request.kind !== 'reveal') return;
+    const connections = derivationEdges(props.state);
+    const output = props.state.placements
+      .filter((p) => p.block_id === request.blockId)
+      .map((p) => p.id);
+    const ids = new Set([
+      ...output,
+      ...connections.filter((e) => output.includes(e.target)).map((e) => e.source),
+    ]);
     const visible = nodes.filter((n) => ids.has(n.id));
     if (!visible.length) return;
     const frame = requestAnimationFrame(() => {
-      void fitView({ nodes: visible, padding: 0.25, maxZoom: 1, duration: 250 });
-      framed.current = props.revealedBlock;
+      if (presentation.getState().request?.id !== request.id) return;
+      void fitView({ nodes: visible, padding: 0.25, maxZoom: 1, duration: 0 });
+      presentation.getState().consume(request.id);
     });
     return () => cancelAnimationFrame(frame);
-  }, [props.revealedBlock, props.state, nodes, fitView]);
+  }, [request, props.state.placements, props.state.derivations, nodes, fitView, presentation]);
   const edges = useMemo(
     () => derivationEdges(props.state),
     [props.state.placements, props.state.derivations],
@@ -287,7 +308,8 @@ function Inner(props: Props) {
         nodesConnectable={false}
         minZoom={0.2}
         maxZoom={2}
-        defaultViewport={defaultViewport}
+        defaultViewport={initialViewport}
+        onMove={rememberViewport}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#cfcec6" />
         <Controls showInteractive={false} />

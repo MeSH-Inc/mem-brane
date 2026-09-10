@@ -141,3 +141,15 @@ serializes concurrent local transactions, and BroadcastChannel announces changes
 Network snapshots cannot overwrite writes committed during their fetch. Expected
 actor headers bind requests to the session even if another tab switches accounts.
 See [offline behavior](../offline-pwa.md) for supported operations and limitations.
+
+## Presentation and attention
+
+An actor/brane-scoped presentation store retains viewport, focused block and
+placement selection across view changes and navigation. Camera/focus recovery uses
+session storage independently of document durability. Pointer, keyboard and wheel
+input advances an attention epoch. Create and Spawn capture that epoch; a delayed
+completion may request focus or framing only while it still matches. Editor focus
+and canvas reveal requests are consumed once, so remounting cannot replay them.
+Desktop Focus opens newly created thoughts just as mobile Focus does. React Flow
+reports viewport changes into this presentation store; its initial viewport comes
+from that store on remount.

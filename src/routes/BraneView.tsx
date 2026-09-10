@@ -22,6 +22,8 @@ import { useNavigate } from '@tanstack/react-router';
 import type { Geometry } from '../../shared/types/domain';
 import { api, replica } from '../services/api';
 import { useInteraction } from '../stores/interaction';
+import { presentationFor } from '../stores/presentation';
+import { useStore } from 'zustand';
 import { BlockContent } from '../components/BlockContent';
 import { SpawnButton } from '../components/SpawnButton';
 import { ArtifactActions } from '../components/ArtifactActions';
@@ -47,6 +49,10 @@ export function BraneView(props: BraneViewProps) {
 
 function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   const actor = useInteraction((s) => s.actor);
+  const presentation = presentationFor(actor, braneId);
+  const retainedFocus = useStore(presentation, (s) => s.focus);
+  const focusRequest = useStore(presentation, (s) => s.request);
+
   const [controller] = useState(
     () =>
       new WorkspaceController(actor, braneId, {
@@ -59,17 +65,22 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   );
   useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => {
-    useInteraction.setState({ selectedPlacements: [] });
+    useInteraction.getState().setSelectedPlacements(presentation.getState().selection);
+    const unsubscribe = useInteraction.subscribe((next, previous) => {
+      if (next.selectedPlacements !== previous.selectedPlacements)
+        presentation.getState().remember({ selection: next.selectedPlacements });
+    });
     controller.start();
-    return () => controller.dispose();
+    return () => {
+      unsubscribe();
+      controller.dispose();
+    };
   }, [controller]);
   const {
     state,
     workspace,
     error,
     notice,
-    newBlock,
-    revealedBlock,
     models,
     busy,
     inspected,
@@ -120,6 +131,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     [url, setUrl] = useState(''),
     [managed, setManaged] = useState<string>();
   const mobile = useMobile();
+  const focusMode = view === 'focus' || (!view && mobile);
   const ui = {
     addReferences: controller.addReferences,
     references,
@@ -143,28 +155,44 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   const navigate = useNavigate();
   const focusBlock = useCallback(
     (id: string) => {
+      presentation.getState().remember({ focus: id });
       void navigate({
         to: '/b/$braneId',
         params: { braneId },
         search: { focus: id, view: 'focus' },
       });
     },
-    [braneId, navigate],
+    [braneId, navigate, presentation],
   );
   const create = useCallback(
     async (geometry?: Geometry) => {
+      const attention = presentation.getState().attention;
       const id = await controller.create(geometry);
-      if (id && mobile) focusBlock(id);
+      if (!id) return;
+      const placementId = controller.state?.placements.find((p) => p.block_id === id)?.id;
+      if (presentation.getState().reveal(attention, { blockId: id, placementId, kind: 'edit' })) {
+        if (placementId) useInteraction.getState().setSelectedPlacements([placementId]);
+        if (focusMode || mobile) focusBlock(id);
+      }
     },
-    [controller, mobile, focusBlock],
+    [controller, mobile, focusMode, focusBlock, presentation],
   );
   const spawn = useCallback(
     (blockId: string, placementId: string) => {
+      const attention = presentation.getState().attention;
       void controller.spawn(blockId, placementId).then((id) => {
-        if (id && mobile) focusBlock(id);
+        if (
+          id &&
+          presentation.getState().reveal(attention, { blockId: id, kind: 'reveal' }) &&
+          (focusMode || mobile)
+        ) {
+          focusBlock(id);
+          const request = presentation.getState().request;
+          if (request) presentation.getState().consume(request.id);
+        }
       });
     },
-    [controller, mobile, focusBlock],
+    [controller, mobile, focusMode, focusBlock, presentation],
   );
   const fileInput = useRef<HTMLInputElement>(null);
   const pickerTarget = useRef<'canvas' | 'composer'>('canvas');
@@ -179,14 +207,18 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     (files: File[], point?: { x: number; y: number }) => acceptFiles(files, 'canvas', point),
     [acceptFiles],
   );
-  const focusMode = view === 'focus' || (!view && mobile);
-  const focused = state?.blocks.find((b) => b.id === focus) ?? state?.blocks[0];
+  const focused = state?.blocks.find((b) => b.id === (focus ?? retainedFocus)) ?? state?.blocks[0];
   if (!state) return <div className="loading">{error || 'Opening brane…'}</div>;
   const availableDrafts = ui.availableDrafts.filter((d) =>
     state.blocks.some((b) => b.id === d.blockId),
   );
   return (
-    <>
+    <div
+      className="brane-workspace"
+      onPointerDownCapture={presentation.getState().interact}
+      onKeyDownCapture={presentation.getState().interact}
+      onWheelCapture={presentation.getState().interact}
+    >
       <div className="brane-toolbar">
         <div>
           <span className="eyebrow">YOUR THINKING SPACE</span>
@@ -208,7 +240,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 void navigate({
                   to: '/b/$braneId',
                   params: { braneId },
-                  search: { view: 'canvas' },
+                  search: { view: 'canvas', focus: focused?.id },
                 })
               }
             >
@@ -456,7 +488,12 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     key={focused.id}
                     block={focused}
                     partial={state.runs.find((r) => r.output_block_id === focused.id)?.partial}
-                    autoFocus={focused.id === newBlock}
+                    focusRequest={
+                      focusRequest?.kind === 'edit' && focused.id === focusRequest.blockId
+                        ? focusRequest.id
+                        : undefined
+                    }
+                    onFocused={presentation.getState().consume}
                     onEdit={edit}
                   />
                   <footer>
@@ -515,11 +552,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   canvasInsertion.current = getPoint;
                 }}
                 state={state}
-                revealedBlock={revealedBlock}
                 onSpawn={spawn}
                 spawning={spawning}
                 retrySpawns={retrySpawns}
-                newBlock={newBlock}
                 onCreate={(g) => void create(g)}
                 onEdit={edit}
                 onGeometry={geometry}
@@ -815,6 +850,6 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           </aside>
         )}
       </div>
-    </>
+    </div>
   );
 }
