@@ -1,3 +1,4 @@
+import { CommandTasks } from '../src/services/command-tasks';
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -36,6 +37,7 @@ it('appends older history and ignores an old page after switching blocks', async
   const render = (id: string) =>
     root!.render(
       <ArtifactActions
+        commands={new CommandTasks()}
         block={{
           id,
           kind: 'text',
@@ -94,6 +96,7 @@ it('fetches only the selected snapshot and fences a slower previous selection', 
   await act(async () =>
     root!.render(
       <ArtifactActions
+        commands={new CommandTasks()}
         block={{
           id: 'a',
           kind: 'text',

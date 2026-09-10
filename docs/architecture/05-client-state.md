@@ -185,3 +185,21 @@ activity; `LiveBlockContent` subscribes to one block and its partial output. Str
 chunks update the document without notifying the entire workspace controller.
 The same content component serves Focus. A React Profiler regression verifies that
 streaming one block causes no render commit in an unrelated editor.
+
+## Command feedback
+
+`CommandTasks` registers each activation synchronously under an operation/entity
+key, assigns an identity and exposes waiting, working, refreshing, accepted and
+failed states. A second activation of a pending command returns the same promise;
+independent keys proceed. Controls subscribe to their own task and immediately
+show progress and disable duplicate activation. Toolbar creation shares a key,
+while distinct canvas rectangles remain independent creation intents.
+
+Run and Spawn derive activity from these tasks. Waiting source lanes have explicit
+labels; uncertainty and immutable delivery retry remain owned by `Submission` and
+its journal. Create, Save brane, explicit draft saves, import, Cancel, frozen-context
+retry, snapshots, placement creation/removal and numeric geometry apply the same
+feedback model. Cancellation errors are caught and visible. A run whose cancellation
+has been accepted shows “Cancellation requested” instead of offering another cancel.
+Pending commands participate in unload protection; successful local persistence
+and outstanding server synchronization remain separately visible.

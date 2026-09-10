@@ -1,3 +1,5 @@
+import { CommandButton } from './CommandButton';
+import type { CommandTasks } from '../services/command-tasks';
 import { LocalImage } from './LocalAsset';
 import { PdfContent } from './PdfContent';
 import { useEffect, useRef, useState } from 'react';
@@ -5,6 +7,7 @@ import type { Block, Brane, Placement, Revision, Geometry } from '../../shared/t
 import type { RevisionSummary } from '../../shared/types/history';
 import { client } from '../services/client';
 export function ArtifactActions({
+  commands,
   block,
   placements,
   onChange,
@@ -12,6 +15,7 @@ export function ArtifactActions({
   onGeometry,
   onClose,
 }: {
+  commands: CommandTasks;
   block: Block;
   placements: Placement[];
   onChange: () => Promise<void>;
@@ -65,6 +69,7 @@ export function ArtifactActions({
     }
   };
   useEffect(() => {
+    activeBlock.current = block.id;
     setHistory([]);
     setSelectedId(undefined);
     setSelected(undefined);
@@ -76,18 +81,22 @@ export function ArtifactActions({
       .catch((e) => setError(e.message));
     void load().catch((e) => setError(e.message));
     return () => {
+      activeBlock.current = '';
       historyRequest.current++;
       revisionRequest.current++;
     };
   }, [block.id]);
-  async function action(work: () => Promise<unknown>, message: string) {
+  async function action(key: string, work: () => Promise<unknown>, message: string) {
     try {
-      setError('');
-      await work();
-      await onChange();
-      setNotice(message);
+      await commands.run(key, async (progress) => {
+        setError('');
+        await work();
+        progress('refreshing');
+        await onChange();
+        if (activeBlock.current === block.id) setNotice(message);
+      });
     } catch (e) {
-      setError((e as Error).message);
+      if (activeBlock.current === block.id) setError((e as Error).message);
     }
   }
   return (
@@ -101,17 +110,24 @@ export function ArtifactActions({
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
       <div className="artifact-row">
-        <button
+        <CommandButton
+          tasks={commands}
+          taskKey={`snapshot:${block.id}`}
+          pendingLabel="Saving snapshot…"
           onClick={() =>
-            void action(async () => {
-              await onSave();
-              await client.snapshot(block.id);
-              await load();
-            }, 'Snapshot saved')
+            void action(
+              `snapshot:${block.id}`,
+              async () => {
+                await onSave();
+                await client.snapshot(block.id);
+                await load();
+              },
+              'Snapshot saved',
+            )
           }
         >
           Save snapshot
-        </button>
+        </CommandButton>
         <select
           aria-label="Destination brane"
           value={target}
@@ -124,10 +140,14 @@ export function ArtifactActions({
             </option>
           ))}
         </select>
-        <button
+        <CommandButton
+          tasks={commands}
+          taskKey={`place:${block.id}:${target}`}
+          pendingLabel="Placing…"
           disabled={!target}
           onClick={() =>
             void action(
+              `place:${block.id}:${target}`,
               () =>
                 client.createPlacement(target, block.id, {
                   x: 140,
@@ -140,7 +160,7 @@ export function ArtifactActions({
           }
         >
           Place in brane
-        </button>
+        </CommandButton>
       </div>
       <details>
         <summary>Placements in this brane ({placements.length})</summary>
@@ -149,18 +169,29 @@ export function ArtifactActions({
             <span>Placement {i + 1}</span>
             <GeometryForm
               placement={p}
-              onApply={(g) => void action(() => onGeometry(p.id, g), 'Placement geometry saved')}
+              commands={commands}
+              onApply={(g) =>
+                void action(
+                  `geometry:${p.id}`,
+                  () => onGeometry(p.id, g),
+                  'Placement geometry saved',
+                )
+              }
             />
-            <button
+            <CommandButton
+              tasks={commands}
+              taskKey={`remove:${p.id}`}
+              pendingLabel="Removing…"
               onClick={() =>
-                void action(async () => {
-                  await onSave();
-                  await client.removePlacement(p.id);
-                }, 'Placement removed; the block and its history are retained')
+                void action(
+                  `remove:${p.id}`,
+                  () => client.removePlacement(p.id),
+                  'Placement removed; the block and its history are retained',
+                )
               }
             >
               Remove placement {i + 1}
-            </button>
+            </CommandButton>
           </div>
         ))}
       </details>
@@ -222,9 +253,11 @@ export function ArtifactActions({
 }
 
 function GeometryForm({
+  commands,
   placement,
   onApply,
 }: {
+  commands: CommandTasks;
   placement: Placement;
   onApply: (geometry: { x: number; y: number; width: number; height: number }) => void;
 }) {
@@ -256,7 +289,9 @@ function GeometryForm({
           />
         </label>
       ))}
-      <button>Apply geometry</button>
+      <CommandButton tasks={commands} taskKey={`geometry:${placement.id}`} pendingLabel="Applying…">
+        Apply geometry
+      </CommandButton>
     </form>
   );
 }

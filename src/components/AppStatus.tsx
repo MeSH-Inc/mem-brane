@@ -64,8 +64,9 @@ export function AppStatus() {
       {sync.conflict && (
         <div className="sync-conflict">
           <p>
-            <strong>Synchronization paused:</strong> {sync.conflict.failure?.message}
+            <strong>Synchronization paused for this item:</strong> {sync.conflict.failure?.message}
           </p>
+          <p>Other items continue synchronizing.</p>
           <button
             disabled={busy}
             onClick={() => void act(async () => setReview(await replica.inspectConflict()))}

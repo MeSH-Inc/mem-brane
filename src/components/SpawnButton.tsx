@@ -1,13 +1,16 @@
+import type { CommandPhase } from '../services/command-tasks';
 import { modelCompatibility } from '../../shared/representations';
 import type { Block } from '../../shared/types/domain';
 export function SpawnButton({
   block,
   busy,
+  phase,
   retry,
   onSpawn,
 }: {
   block: Block;
   busy?: boolean;
+  phase?: CommandPhase;
   retry?: boolean;
   onSpawn: () => void;
 }) {
@@ -28,7 +31,13 @@ export function SpawnButton({
       }
       onClick={onSpawn}
     >
-      {busy ? 'Spawning…' : retry ? 'Retry Spawn' : 'Spawn'}
+      {busy
+        ? phase === 'waiting'
+          ? 'Waiting for source…'
+          : 'Spawning…'
+        : retry
+          ? 'Retry Spawn'
+          : 'Spawn'}
     </button>
   );
 }

@@ -113,9 +113,20 @@ test('a delayed creation does not steal an editor chosen after the click', async
     await route.fulfill({ json: { id: 'new' } });
   });
   await page.getByRole('button', { name: '＋ Text', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Creating…', exact: true })).toBeDisabled();
   const editor = page.locator('[data-id="pa"] textarea');
   await editor.click();
   release();
   await expect(page.locator('[data-id="pnew"]')).toBeVisible();
   await expect(editor).toBeFocused();
+});
+
+test('creation errors restore the control and preserve the current editor', async ({ page }) => {
+  await page.route('**/api/blocks/text', (route) =>
+    route.fulfill({ status: 503, json: { error: 'Creation unavailable' } }),
+  );
+  await page.getByRole('button', { name: '＋ Text', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Creation unavailable');
+  await expect(page.getByRole('button', { name: '＋ Text', exact: true })).toBeEnabled();
+  await expect(page.locator('[data-id="pa"] textarea')).toHaveValue('a');
 });

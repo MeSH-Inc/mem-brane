@@ -550,3 +550,59 @@ it('does not resurrect a discarded draft from a queued save', async () => {
   expect(f.sent.filter((r) => r.path === '/blocks/live')).toHaveLength(1);
   expect(useInteraction.getState().draftRecords[f.block]).toBeUndefined();
 });
+
+it('acknowledges creation immediately, ignores duplicate activation and allows cancellation alongside it', async () => {
+  const f = await fixture();
+  const created = deferred<{ id: string }>();
+  f.intercept((path) =>
+    path === '/blocks/text'
+      ? created.promise
+      : path.endsWith('/cancel')
+        ? Promise.resolve({ ok: true })
+        : undefined,
+  );
+  const first = f.c.create(),
+    second = f.c.create();
+  expect(f.c.commands.pending('create')).toBe(true);
+  expect(f.sent.filter((r) => r.path === '/blocks/text')).toHaveLength(1);
+  await f.c.cancelRun('active');
+  expect(f.c.commands.pending('create')).toBe(true);
+  expect(f.c.commands.store.getState()['cancel:active'].phase).toBe('accepted');
+  created.resolve({ id: 'created' });
+  expect(await first).toBe('created');
+  expect(await second).toBe('created');
+  expect(f.c.commands.pending('create')).toBe(false);
+});
+it('freezes creation geometry and keeps distinct canvas creations independent', async () => {
+  const f = await fixture();
+  const pending = deferred<{ id: string }>();
+  f.intercept((path) => (path === '/blocks/text' ? pending.promise : undefined));
+  const geometry = { x: 10, y: 20, width: 300, height: 200 };
+  const first = f.c.create(geometry);
+  geometry.x = 900;
+  const second = f.c.create(geometry);
+  const sent = f.sent.filter((r) => r.path === '/blocks/text');
+  expect(sent.map((r) => r.body.geometry.x)).toEqual([10, 900]);
+  pending.resolve({ id: 'created' });
+  await Promise.all([first, second]);
+});
+it('reports a failed cancellation and permits an explicit retry without duplicate pending requests', async () => {
+  const f = await fixture();
+  const gate = deferred<unknown>();
+  f.intercept((path) => (path.endsWith('/cancel') ? gate.promise : undefined));
+  const first = f.c.cancelRun('active'),
+    second = f.c.cancelRun('active');
+  expect(f.sent.filter((r) => r.path.endsWith('/cancel'))).toHaveLength(1);
+  gate.reject(new ApiError(503, 'Cancel unavailable'));
+  await expect(first).rejects.toThrow('Cancel unavailable');
+  await expect(second).rejects.toThrow('Cancel unavailable');
+  expect(f.c.error).toBe('Cancel unavailable');
+  expect(f.c.commands.store.getState()['cancel:active']).toMatchObject({
+    phase: 'failed',
+    error: 'Cancel unavailable',
+  });
+  f.intercept((path) => (path.endsWith('/cancel') ? Promise.resolve({ ok: true }) : undefined));
+  await f.c.cancelRun('active');
+  expect(f.sent.filter((r) => r.path.endsWith('/cancel'))).toHaveLength(2);
+  expect(f.c.error).toBe('');
+});

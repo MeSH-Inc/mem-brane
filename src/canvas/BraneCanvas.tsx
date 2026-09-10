@@ -95,6 +95,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         <SpawnButton
           block={block}
           busy={activity.busy}
+          phase={activity.phase}
           retry={activity.retry}
           onSpawn={() => data.onSpawn(block.id, id)}
         />

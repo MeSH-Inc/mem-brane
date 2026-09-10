@@ -1,7 +1,8 @@
 import { createStore } from 'zustand/vanilla';
+import type { CommandTask, CommandPhase } from './command-tasks';
 import type { Block, BraneState, Placement } from '../../shared/types/domain';
 type Run = BraneState['runs'][number];
-type Activity = { busy: boolean; retry: boolean };
+type Activity = { busy: boolean; retry: boolean; phase?: CommandPhase };
 export const idleActivity: Activity = { busy: false, retry: false };
 export type Scene = Pick<BraneState, 'placements' | 'derivations'> & { braneId: string };
 interface DocumentSnapshot {
@@ -78,11 +79,15 @@ export class WorkspaceDocument {
       return;
     this.store.setState({ state, scene, blocks, runs });
   }
-  activity(spawning: string[], retrying: string[]) {
+  activity(spawning: string[], retrying: string[], commands: Record<string, CommandTask> = {}) {
     const previous = this.store.getState().activity;
     const activity = Object.fromEntries(
       [...new Set([...spawning, ...retrying])].map((id) => {
-        const next = { busy: spawning.includes(id), retry: retrying.includes(id) };
+        const next = {
+          busy: spawning.includes(id),
+          retry: retrying.includes(id),
+          phase: commands[`spawn:${id}`]?.phase,
+        };
         return [id, previous[id] && same(previous[id], next) ? previous[id] : next];
       }),
     );

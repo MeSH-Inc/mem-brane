@@ -1,3 +1,4 @@
+import { CommandButton } from '../components/CommandButton';
 import { localAsset } from '../services/local-assets';
 import { client } from '../services/client';
 import { LocalImage } from '../components/LocalAsset';
@@ -99,6 +100,8 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     compatibilityError,
     refresh,
     saveBlock,
+    commands,
+    saveDraft,
     edit,
     saveGeometry,
     geometry,
@@ -265,7 +268,14 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               Focus
             </button>
           </div>
-          <button onClick={() => void save()}>Save brane</button>
+          <CommandButton
+            tasks={commands}
+            taskKey="save"
+            pendingLabel="Saving…"
+            onClick={() => void save()}
+          >
+            Save brane
+          </CommandButton>
           <button
             className="icon-button"
             title="Context inspector"
@@ -322,11 +332,14 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               >
                 Use server text
               </button>
-              <button
+              <CommandButton
+                tasks={commands}
+                taskKey={`saveDraft:${b.id}`}
+                pendingLabel="Saving…"
                 onClick={async () => {
                   try {
                     if (conflict) await controller.overwriteDraft(b.id);
-                    else await saveBlock(b.id);
+                    else await saveDraft(b.id);
                     setError('');
                   } catch (e) {
                     setError((e as Error).message);
@@ -335,7 +348,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 }}
               >
                 {conflict ? 'Overwrite with my draft' : 'Save draft'}
-              </button>
+              </CommandButton>
             </div>
           );
         })}
@@ -355,6 +368,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
       {managed && state.blocks.find((b) => b.id === managed) && (
         <ArtifactActions
           key={managed}
+          commands={commands}
           block={state.blocks.find((b) => b.id === managed)!}
           placements={state.placements.filter((p) => p.block_id === managed)}
           onSave={() => saveBlock(managed)}
@@ -384,7 +398,14 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               ))}
             </div>
             <span className="divider" />
-            <button onClick={() => void create()}>＋ Text</button>
+            <CommandButton
+              tasks={commands}
+              taskKey="create"
+              pendingLabel="Creating…"
+              onClick={() => void create()}
+            >
+              ＋ Text
+            </CommandButton>
             <button
               onClick={() => {
                 pickerTarget.current = 'canvas';
@@ -434,7 +455,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
-              <button>Import webpage</button>
+              <CommandButton tasks={commands} taskKey="webpage" pendingLabel="Importing…">
+                Import webpage
+              </CommandButton>
             </form>
           )}
           {(error ||
@@ -507,6 +530,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     <SpawnButton
                       block={focused}
                       busy={spawning.includes(focused.id)}
+                      phase={commands.store.getState()[`spawn:${focused.id}`]?.phase}
                       retry={retrySpawns.includes(focused.id)}
                       onSpawn={() => {
                         const placement = state.placements.find((p) => p.block_id === focused.id);
@@ -538,7 +562,14 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               ) : (
                 <div className="empty-focus">
                   <h2>Every idea starts somewhere.</h2>
-                  <button onClick={() => void create()}>Add your first thought</button>
+                  <CommandButton
+                    tasks={commands}
+                    taskKey="create"
+                    pendingLabel="Creating…"
+                    onClick={() => void create()}
+                  >
+                    Add your first thought
+                  </CommandButton>
                 </div>
               )}
             </div>
@@ -625,7 +656,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 onClick={() => void run()}
               >
                 {busy
-                  ? 'Submitting…'
+                  ? commands.store.getState().run?.phase === 'waiting'
+                    ? 'Waiting for sources…'
+                    : 'Submitting…'
                   : submission.state.status === 'uncertain'
                     ? 'Retry submission ↗'
                     : 'Run ↗'}
@@ -665,11 +698,13 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   : 'Text-only model · PDF text supported'}
               </span>
               <span className="save-notice" role="status">
-                {Object.keys(ui.drafts).length || placementSaves.hasPending()
-                  ? 'Unsaved edits'
-                  : sync.pending
-                    ? 'Saved on this device · synchronization pending'
-                    : notice || 'All thoughts have room here'}
+                {commands.activeKeys().some((key) => key.startsWith('create:'))
+                  ? 'Creating thought…'
+                  : Object.keys(ui.drafts).length || placementSaves.hasPending()
+                    ? 'Unsaved edits'
+                    : sync.pending
+                      ? 'Saved on this device · synchronization pending'
+                      : notice || 'All thoughts have room here'}
               </span>
             </div>
           </div>
@@ -777,16 +812,21 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     <span>↗</span>
                   </button>
                   {['queued', 'claimed', 'running', 'cancel_requested'].includes(r.status) && (
-                    <button
-                      onClick={async () => {
-                        await controller.cancelRun(r.id);
-                      }}
+                    <CommandButton
+                      tasks={commands}
+                      taskKey={`cancel:${r.id}`}
+                      pendingLabel="Cancelling…"
+                      disabled={r.status === 'cancel_requested'}
+                      onClick={() => void controller.cancelRun(r.id).catch(() => {})}
                     >
-                      Cancel run
-                    </button>
+                      {r.status === 'cancel_requested' ? 'Cancellation requested' : 'Cancel run'}
+                    </CommandButton>
                   )}
                   {['failed', 'interrupted', 'cancelled'].includes(r.status) && (
-                    <button
+                    <CommandButton
+                      tasks={commands}
+                      taskKey={`retry:${r.id}`}
+                      pendingLabel="Retrying…"
                       onClick={async () => {
                         try {
                           await controller.retryRun(r.id);
@@ -796,7 +836,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                       }}
                     >
                       Retry frozen context
-                    </button>
+                    </CommandButton>
                   )}
                   {r.error && <small className="error">{r.error}</small>}
                   {r.usage_json && <small>Confirmed usage: {r.usage_json}</small>}

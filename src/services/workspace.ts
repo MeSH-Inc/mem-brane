@@ -17,6 +17,7 @@ import { PlacementSaves } from './placement-saves';
 import { TextSaves } from './text-saves';
 import { WorkspaceDocument } from './workspace-document';
 import { Submission } from './submission';
+import { CommandTasks, type CommandProgress } from './command-tasks';
 import { RequestJournal } from './request-journal';
 import { WorkspaceDrafts, type WorkspaceDraft, type WorkspaceStorage } from './workspace-drafts';
 import { draftDisposition, type Draft } from './drafts';
@@ -50,6 +51,7 @@ export type Inspection = RunDetail;
 // Owns the lifetime of one mounted workspace. React only subscribes and dispatches commands.
 // Already-sent requests may commit after disposal; their journals/drafts remain recoverable.
 export class WorkspaceController {
+  readonly commands = new CommandTasks();
   readonly workspace: WorkspaceDrafts;
   readonly placementSaves: PlacementSaves;
   readonly submission: Submission<Prepared<SubmitRun>>;
@@ -85,8 +87,16 @@ export class WorkspaceController {
   estimate?: Estimate;
   lineage: ConversationMessage[] = [];
   inspected?: Inspection;
-  busy = false;
-  spawning: string[] = [];
+  get busy() {
+    return this.commands.pending('run');
+  }
+  get spawning() {
+    return this.commands
+      .activeKeys()
+      .filter((key) => key.startsWith('spawn:'))
+      .map((key) => key.slice(6));
+  }
+
   constructor(
     readonly actor: string | undefined,
     readonly braneId: string,
@@ -121,7 +131,7 @@ export class WorkspaceController {
   getSnapshot = () => this.revision;
   private emit = () => {
     if (!this.active) return;
-    this.document.activity(this.spawning, this.retrySpawns);
+    this.document.activity(this.spawning, this.retrySpawns, this.commands.store.getState());
     this.revision++;
     for (const listener of this.listeners) listener();
   };
@@ -168,7 +178,9 @@ export class WorkspaceController {
   }
   get hasPending() {
     return (
-      Object.keys(this.deps.drafts.getState().drafts).length > 0 || this.placementSaves.hasPending()
+      this.commands.activeKeys().length > 0 ||
+      Object.keys(this.deps.drafts.getState().drafts).length > 0 ||
+      this.placementSaves.hasPending()
     );
   }
   setError = (error: string) => {
@@ -190,6 +202,7 @@ export class WorkspaceController {
     const epoch = ++this.epoch;
     let previousDrafts = this.deps.drafts.getState().draftRecords;
     this.cleanups.push(
+      this.commands.store.subscribe(this.emit),
       this.placementSaves.subscribe(() => {
         this.document.reproject();
         this.emit();
@@ -448,14 +461,14 @@ export class WorkspaceController {
     if (draft) d.clearDraft(id, draft.text);
     this.setError('');
   };
-  overwriteDraft = async (id: string) => {
-    this.requireActive();
-    const block = this.serverState?.blocks.find((b) => b.id === id);
-    if (!block) return;
-    this.deps.drafts.getState().rebase(id, block.version, block.content.text);
-    await this.saveBlock(id);
-    this.setError('');
-  };
+  overwriteDraft = (id: string) =>
+    this.command(`saveDraft:${id}`, async () => {
+      const block = this.serverState?.blocks.find((b) => b.id === id);
+      if (!block) return;
+      this.deps.drafts.getState().rebase(id, block.version, block.content.text);
+      await this.saveBlock(id);
+    });
+  saveDraft = (id: string) => this.command(`saveDraft:${id}`, () => this.saveBlock(id));
   private acknowledge(receipt: EditReceipt, key?: string, expectedVersion?: number) {
     this.textSaves.acknowledge(receipt.blockId, receipt, expectedVersion);
     if (this.serverState) this.document.install(this.textSaves.reconcile(this.serverState));
@@ -517,26 +530,23 @@ export class WorkspaceController {
   geometry = (id: string, geometry: Geometry) => {
     void this.saveGeometry(id, geometry).catch(() => {});
   };
-  save = async () => {
-    this.requireActive();
-    const epoch = this.epoch,
-      title = this.draft.title ?? this.serverState!.brane.title;
-    try {
-      await this.placementSaves.flush();
+  save = () =>
+    this.command('save', async (progress) => {
+      const epoch = this.epoch,
+        title = this.draft.title ?? this.serverState!.brane.title;
+      // Capture every text save before waiting for geometry or another entity.
+      progress('waiting');
+      await Promise.all([this.placementSaves.flush(), this.flush()]);
       if (!this.valid(epoch)) return;
-      await this.flush();
-      if (!this.valid(epoch)) return;
+      progress('working');
       await this.client.saveTitle(this.braneId, title);
       if (!this.valid(epoch)) return;
+      progress('refreshing');
       await this.refresh();
       if (!this.valid(epoch)) return;
       if (this.draft.title === title) this.updateDraft({ title: undefined });
       this.notice = 'Brane saved on this device';
-      this.emit();
-    } catch (e) {
-      if (this.valid(epoch)) this.report(e);
-    }
-  };
+    }).catch(() => {});
   private edits(ids: string[], validate = true): Edit[] {
     const drafts = this.deps.drafts.getState().draftRecords;
     return [...new Set(ids)].flatMap((id) => {
@@ -577,6 +587,7 @@ export class WorkspaceController {
     submission: Submission<Prepared<T>>,
     prepare: () => T,
     transport: (request: T) => Promise<SubmissionReceipt>,
+    progress: CommandProgress,
   ) {
     const epoch = this.epoch;
     const captured: Prepared<T> | undefined =
@@ -596,10 +607,12 @@ export class WorkspaceController {
       (submission.state.status === 'uncertain' ? submission.state.request.payload : undefined)!;
     // Capture values before yielding and reserve their lanes now. Later typing
     // joins behind this snapshot; unrelated blocks have independent lanes.
+    progress('waiting');
     return this.textSaves.serialize(
       payload.edits.map((edit) => edit.blockId),
       async () => {
         if (!this.valid(epoch)) throw new Error('Workspace is closed');
+        progress('working');
         const accepted = await submission.send(
           async () => ({
             ...captured!,
@@ -645,46 +658,34 @@ export class WorkspaceController {
         (this.pendingAttachments || this.compatibilityError))
     )
       return;
-    const epoch = this.epoch;
-    const composer = structuredClone(this.draft);
-    this.busy = true;
-    this.setError('');
-    try {
+    return this.command('run', async (progress) => {
+      const epoch = this.epoch,
+        composer = structuredClone(this.draft);
       const accepted = await this.send(
         this.submission,
         () => this.runRequest(true, composer),
         this.client.submit,
+        progress,
       );
       if (!this.valid(epoch)) return;
       if (this.draft.prompt === accepted.request.payload.prompt) this.updateDraft({ prompt: '' });
       this.notice = 'Run submitted · context frozen';
+      progress('refreshing');
       await this.refresh();
-    } catch (e) {
-      if (this.valid(epoch)) {
-        this.report(e);
-        if (e instanceof ApiError && e.status === 409) this.background(this.refresh());
-      }
-    } finally {
-      if (this.valid(epoch)) {
-        this.busy = false;
-        this.emit();
-      }
-    }
+    }).catch(() => {});
   };
   spawn = async (blockId: string, placementId: string) => {
     this.requireActive();
     if (this.spawning.includes(blockId)) return;
-    const epoch = this.epoch;
-    const model = this.draft.model ?? 'mock';
-    this.spawning = [...this.spawning, blockId];
-    this.clearTimer(blockId);
-    this.setError('');
-    let submission = this.spawns.get(blockId);
-    if (!submission) {
-      submission = new Submission(this.spawnRequests, blockId);
-      this.spawns.set(blockId, submission);
-    }
-    try {
+    return this.command(`spawn:${blockId}`, async (progress) => {
+      const epoch = this.epoch,
+        model = this.draft.model ?? 'mock';
+      this.clearTimer(blockId);
+      let submission = this.spawns.get(blockId);
+      if (!submission) {
+        submission = new Submission(this.spawnRequests, blockId);
+        this.spawns.set(blockId, submission);
+      }
       const accepted = await this.send(
         submission,
         () => ({
@@ -697,35 +698,27 @@ export class WorkspaceController {
           edits: this.edits([blockId]),
         }),
         this.client.spawn,
+        progress,
       );
       if (!this.valid(epoch)) return;
       this.notice = 'Artifact spawned · source context frozen';
+      progress('refreshing');
       await this.refresh();
-      if (!this.valid(epoch)) return;
-      return accepted.receipt.outputBlockId;
-    } catch (e) {
-      if (this.valid(epoch)) {
-        this.report(e);
-        if (e instanceof ApiError && e.status === 409) this.background(this.refresh());
-      }
-    } finally {
-      if (this.valid(epoch)) {
-        this.spawning = this.spawning.filter((id) => id !== blockId);
-        this.emit();
-      }
-    }
+      if (this.valid(epoch)) return accepted.receipt.outputBlockId;
+    }).catch(() => undefined);
   };
-  create = async (geometry = { x: 100, y: 100, width: 320, height: 220 }) => {
-    this.requireActive();
-    const epoch = this.epoch;
-    try {
-      const block = await this.client.createText(this.braneId, geometry);
+  create = (geometry?: Geometry) => {
+    const captured = structuredClone(geometry ?? { x: 100, y: 100, width: 320, height: 220 });
+    // Toolbar creation shares a key; separate canvas rectangles are separate intents.
+    const key = geometry ? `create:${JSON.stringify(captured)}` : 'create';
+    return this.command(key, async (progress) => {
+      const epoch = this.epoch;
+      const block = await this.client.createText(this.braneId, captured);
       if (!this.valid(epoch)) return;
+      progress('refreshing');
       await this.refresh();
       if (this.valid(epoch)) return block.id;
-    } catch (e) {
-      if (this.valid(epoch)) this.report(e);
-    }
+    }).catch(() => undefined);
   };
   previewRevision = async (id: string) => {
     this.requireActive();
@@ -749,15 +742,35 @@ export class WorkspaceController {
       this.emit();
     }
   };
-  importWebpage = (url: string) => this.mutate(() => this.client.importWebpage(this.braneId, url));
-  cancelRun = (id: string) => this.mutate(() => this.client.cancelRun(id));
-  retryRun = (id: string) => this.mutate(() => this.client.retryRun(id, crypto.randomUUID()));
-  private mutate = async (work: () => Promise<unknown>) => {
+  importWebpage = (url: string) =>
+    this.mutate('webpage', () => this.client.importWebpage(this.braneId, url));
+  cancelRun = (id: string) => this.mutate(`cancel:${id}`, () => this.client.cancelRun(id));
+  retryRun = (id: string) =>
+    this.mutate(`retry:${id}`, () => this.client.retryRun(id, crypto.randomUUID()));
+  private mutate = (key: string, work: () => Promise<unknown>) =>
+    this.command(key, async (progress) => {
+      const epoch = this.epoch;
+      await work();
+      if (!this.valid(epoch)) return;
+      progress('refreshing');
+      await this.refresh();
+    });
+  private command<T>(key: string, work: (progress: CommandProgress) => Promise<T>): Promise<T> {
     this.requireActive();
     const epoch = this.epoch;
-    await work();
-    if (this.valid(epoch)) await this.refresh();
-  };
+    return this.commands.run(key, async (progress) => {
+      this.setError('');
+      try {
+        return await work(progress);
+      } catch (error) {
+        if (this.valid(epoch)) {
+          this.report(error);
+          if (error instanceof ApiError && error.status === 409) this.background(this.refresh());
+        }
+        throw error;
+      }
+    });
+  }
 }
 
 function validPrepared(
