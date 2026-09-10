@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { BraneState } from '../shared/types/domain';
 import { BraneCanvas } from '../src/canvas/BraneCanvas';
 import { useInteraction } from '../src/stores/interaction';
+import { WorkspaceDocument } from '../src/services/workspace-document';
 let root: Root;
 beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -52,16 +53,16 @@ const state: BraneState = {
   runs: [],
   derivations: [],
 };
+const workspace = new WorkspaceDocument();
 function render(s = state) {
+  act(() => workspace.install(s));
   act(() =>
     root.render(
       <StrictMode>
         <BraneCanvas
           onContext={noop}
           onContinue={noop}
-          state={s}
-          spawning={[]}
-          retrySpawns={[]}
+          document={workspace}
           onSpawn={noop}
           onCreate={noop}
           onEdit={noop}

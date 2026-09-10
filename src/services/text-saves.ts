@@ -34,6 +34,7 @@ export class TextSaves {
     )
       return block;
     this.acknowledge(block.id, { version: block.version, content: block.content });
-    return { ...block, ...this.accepted.get(block.id)! };
+    const saved = this.accepted.get(block.id)!;
+    return saved.version > block.version ? { ...block, ...saved } : block;
   }
 }

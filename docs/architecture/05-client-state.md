@@ -153,3 +153,19 @@ and canvas reveal requests are consumed once, so remounting cannot replay them.
 Desktop Focus opens newly created thoughts just as mobile Focus does. React Flow
 reports viewport changes into this presentation store; its initial viewport comes
 from that store on remount.
+
+## Reactive document projection
+
+`WorkspaceDocument` owns the observable workspace projection and normalized block,
+run and command-activity indexes. Equivalent server refreshes preserve entity
+identity. Scene geometry and provenance have their own stable snapshot, independent
+of content, streams, composer changes and command activity. Placement-save intents
+project through this same store. The controller reads this projection directly;
+it no longer reconstructs placements each time React reads its state.
+
+Canvas is memoized and subscribes to the scene. Its cached node projections retain
+unchanged node identities. Cards subscribe to their block, run status and command
+activity; `LiveBlockContent` subscribes to one block and its partial output. Stream
+chunks update the document without notifying the entire workspace controller.
+The same content component serves Focus. A React Profiler regression verifies that
+streaming one block causes no render commit in an unrelated editor.

@@ -24,7 +24,7 @@ import { api, replica } from '../services/api';
 import { useInteraction } from '../stores/interaction';
 import { presentationFor } from '../stores/presentation';
 import { useStore } from 'zustand';
-import { BlockContent } from '../components/BlockContent';
+import { LiveBlockContent } from '../components/LiveBlockContent';
 import { SpawnButton } from '../components/SpawnButton';
 import { ArtifactActions } from '../components/ArtifactActions';
 import { RunHistory } from '../components/RunHistory';
@@ -195,6 +195,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     [controller, mobile, focusMode, focusBlock, presentation],
   );
   const fileInput = useRef<HTMLInputElement>(null);
+  const insertionReady = useCallback((getPoint: () => { x: number; y: number }) => {
+    canvasInsertion.current = getPoint;
+  }, []);
   const pickerTarget = useRef<'canvas' | 'composer'>('canvas');
   const canvasInsertion = useRef<() => { x: number; y: number }>(() => ({ x: 100, y: 100 }));
   const acceptFiles = useCallback(
@@ -484,10 +487,10 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               {focused ? (
                 <article className="focus-card">
                   <span className="eyebrow">{focused.kind}</span>
-                  <BlockContent
+                  <LiveBlockContent
                     key={focused.id}
-                    block={focused}
-                    partial={state.runs.find((r) => r.output_block_id === focused.id)?.partial}
+                    document={controller.document}
+                    blockId={focused.id}
                     focusRequest={
                       focusRequest?.kind === 'edit' && focused.id === focusRequest.blockId
                         ? focusRequest.id
@@ -548,14 +551,10 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 onContext={controller.addReferences}
                 onContinue={controller.setContinue}
                 onImport={attachFiles}
-                onInsertionReady={(getPoint) => {
-                  canvasInsertion.current = getPoint;
-                }}
-                state={state}
+                onInsertionReady={insertionReady}
+                document={controller.document}
                 onSpawn={spawn}
-                spawning={spawning}
-                retrySpawns={retrySpawns}
-                onCreate={(g) => void create(g)}
+                onCreate={create}
                 onEdit={edit}
                 onGeometry={geometry}
                 onFocus={focusBlock}

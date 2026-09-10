@@ -1,6 +1,6 @@
 import type { BraneState } from '../../shared/types/domain';
 // Resolve presentation instances without turning placement IDs into provenance.
-export function derivationEdges(state: BraneState) {
+export function derivationEdges(state: Pick<BraneState, 'placements' | 'derivations'>) {
   return state.derivations.flatMap((d) => {
     const sources = state.placements.filter((p) => p.block_id === d.sourceBlockId);
     const outputs = state.placements.filter((p) => p.block_id === d.outputBlockId);

@@ -15,6 +15,7 @@ import { modelCompatibility } from '../../shared/representations';
 import { api, ApiError } from './api';
 import { PlacementSaves } from './placement-saves';
 import { TextSaves } from './text-saves';
+import { WorkspaceDocument } from './workspace-document';
 import { Submission } from './submission';
 import { RequestJournal } from './request-journal';
 import { WorkspaceDrafts, type WorkspaceDraft, type WorkspaceStorage } from './workspace-drafts';
@@ -57,7 +58,10 @@ export class WorkspaceController {
   private spawns = new Map<string, Submission<Prepared<SpawnArtifact>>>();
   private client: Client;
   private textSaves: TextSaves;
-  private serverState?: BraneState;
+  readonly document: WorkspaceDocument;
+  private get serverState() {
+    return this.document.base;
+  }
   private listeners = new Set<() => void>();
   private revision = 0;
   private epoch = 0;
@@ -95,6 +99,7 @@ export class WorkspaceController {
       read: (id) => this.client.placement(id),
     });
     this.textSaves = new TextSaves(this.client.saveText);
+    this.document = new WorkspaceDocument((p) => this.placementSaves.project(p));
     this.pendingRuns = new RequestJournal(
       JSON.stringify(['mem-brane-pending-runs', actor, braneId]),
       (v) => validPrepared(v, submitRun),
@@ -116,6 +121,7 @@ export class WorkspaceController {
   getSnapshot = () => this.revision;
   private emit = () => {
     if (!this.active) return;
+    this.document.activity(this.spawning, this.retrySpawns);
     this.revision++;
     for (const listener of this.listeners) listener();
   };
@@ -126,12 +132,7 @@ export class WorkspaceController {
     if (!this.valid(this.epoch)) throw new Error('Workspace is closed');
   }
   get state() {
-    return this.serverState
-      ? {
-          ...this.serverState,
-          placements: this.placementSaves.project(this.serverState.placements),
-        }
-      : undefined;
+    return this.document.store.getState().state;
   }
   get draft() {
     return this.workspace.draft;
@@ -189,7 +190,10 @@ export class WorkspaceController {
     const epoch = ++this.epoch;
     let previousDrafts = this.deps.drafts.getState().draftRecords;
     this.cleanups.push(
-      this.placementSaves.subscribe(this.emit),
+      this.placementSaves.subscribe(() => {
+        this.document.reproject();
+        this.emit();
+      }),
       this.deps.drafts.subscribe(() => {
         const next = this.deps.drafts.getState().draftRecords;
         if (next === previousDrafts) return;
@@ -259,8 +263,8 @@ export class WorkspaceController {
   setReferences = (references: string[]) => this.updateDraft({ references });
   setContinue = (continueFrom?: string) => this.updateDraft({ continueFrom });
   private applyState(state: BraneState) {
-    this.serverState = this.textSaves.reconcile(state);
     this.placementSaves.observe(state.placements);
+    this.document.install(this.textSaves.reconcile(state));
     this.emit();
   }
   refresh = async () => {
@@ -340,13 +344,12 @@ export class WorkspaceController {
     if (data.status) this.background(this.refresh());
     else if (data.text !== undefined && this.serverState) {
       this.streamed.set(data.runId, { revision: ++this.streamRevision, text: data.text });
-      this.serverState = {
+      this.document.install({
         ...this.serverState,
         runs: this.serverState.runs.map((r) =>
           r.id === data.runId ? { ...r, partial: data.text! } : r,
         ),
-      };
-      this.emit();
+      });
     }
   };
   private deliverImports() {
@@ -455,7 +458,7 @@ export class WorkspaceController {
   };
   private acknowledge(receipt: EditReceipt, key?: string) {
     this.textSaves.acknowledge(receipt.blockId, receipt);
-    if (this.serverState) this.serverState = this.textSaves.reconcile(this.serverState);
+    if (this.serverState) this.document.install(this.textSaves.reconcile(this.serverState));
     const d = this.deps.drafts.getState(),
       current = d.draftRecords[receipt.blockId];
     if (current && current.key === key && current.baseVersion <= receipt.version) {

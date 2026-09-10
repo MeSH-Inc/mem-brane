@@ -2,7 +2,7 @@ import { pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapter
 import { toolPolicy } from './toolPolicy';
 import { useCanvasGesture } from './useCanvasGesture';
 import { defaultViewport, type ResizeEdge } from './gestures';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -16,21 +16,19 @@ import {
   type Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { Block, BraneState, Placement } from '../../shared/types/domain';
+import type { Placement } from '../../shared/types/domain';
 import { derivationEdges } from './derivations';
 import { SpawnButton } from '../components/SpawnButton';
-import { BlockContent } from '../components/BlockContent';
+import { LiveBlockContent } from '../components/LiveBlockContent';
+import { idleActivity, type WorkspaceDocument } from '../services/workspace-document';
 import { useInteraction } from '../stores/interaction';
 import { presentationFor } from '../stores/presentation';
 import { useStore } from 'zustand';
 type CardData = {
-  block: Block;
-  partial?: string;
-  status?: string;
+  blockId: string;
+  document: WorkspaceDocument;
   focusRequest?: string;
   onFocused: (id: string) => void;
-  spawning?: boolean;
-  retrySpawn?: boolean;
   resizable: boolean;
   onSpawn: (blockId: string, placementId: string) => void;
   onEdit: (id: string, text: string) => void;
@@ -42,9 +40,13 @@ type CardData = {
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
 type CardNode = Node<CardData>;
-function Card({ id, data, selected }: NodeProps<CardNode>) {
+const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
+  const block = useStore(data.document.store, (s) => s.blocks[data.blockId]);
+  const status = useStore(data.document.store, (s) => s.runs[data.blockId]?.status);
+  const activity = useStore(data.document.store, (s) => s.activity[data.blockId] ?? idleActivity);
+  if (!block) return null;
   return (
-    <article className={`canvas-card ${data.block.origin} ${selected ? 'selected' : ''}`}>
+    <article className={`canvas-card ${block.origin} ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} id="input" isConnectable={false} />
       <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
       {selected &&
@@ -58,61 +60,59 @@ function Card({ id, data, selected }: NodeProps<CardNode>) {
           />
         ))}
       <header className="card-grip">
-        <span className="kind-mark">{data.block.origin === 'generated' ? '✳' : '◇'}</span>
+        <span className="kind-mark">{block.origin === 'generated' ? '✳' : '◇'}</span>
         <span>
-          {data.block.origin === 'generated'
+          {block.origin === 'generated'
             ? 'Response'
-            : data.block.kind === 'webpage'
+            : block.kind === 'webpage'
               ? 'Web clipping'
-              : data.block.kind === 'pdf'
+              : block.kind === 'pdf'
                 ? 'PDF'
-                : data.block.kind === 'image'
+                : block.kind === 'image'
                   ? 'Image'
                   : 'Thought'}
         </span>
-        <span className="card-status">{data.status}</span>
+        <span className="card-status">{status}</span>
         <button
           className="nodrag nopan icon-button"
           title="Focus block"
-          onClick={() => data.onFocus(data.block.id)}
+          onClick={() => data.onFocus(block.id)}
         >
           ↗
         </button>
       </header>
-      <BlockContent
-        block={data.block}
-        partial={data.partial}
+      <LiveBlockContent
+        document={data.document}
+        blockId={block.id}
         focusRequest={data.focusRequest}
         onFocused={data.onFocused}
         onEdit={data.onEdit}
       />
       <footer className="nodrag nopan">
-        <button aria-label="Block actions" onClick={() => data.onManage(data.block.id)}>
+        <button aria-label="Block actions" onClick={() => data.onManage(block.id)}>
           ⋯
         </button>
         <SpawnButton
-          block={data.block}
-          busy={data.spawning}
-          retry={data.retrySpawn}
-          onSpawn={() => data.onSpawn(data.block.id, id)}
+          block={block}
+          busy={activity.busy}
+          retry={activity.retry}
+          onSpawn={() => data.onSpawn(block.id, id)}
         />
-        <button onClick={() => data.onContext(data.block.id)}>+ Use as context</button>
-        {data.block.messageId && (
-          <button onClick={() => data.onContinue(data.block.messageId!)}>⑂ Continue</button>
+        <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
+        {block.messageId && (
+          <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
         )}
       </footer>
     </article>
   );
-}
+});
 const nodeTypes = { card: Card };
 interface Props {
   onContext: (ids: string[]) => void;
   onContinue: (id: string) => void;
   onImport?: (files: File[], point?: { x: number; y: number }) => void;
   onInsertionReady?: (getPoint: () => { x: number; y: number }) => void;
-  state: BraneState;
-  spawning: string[];
-  retrySpawns: string[];
+  document: WorkspaceDocument;
   onSpawn: CardData['onSpawn'];
   onCreate: (g: { x: number; y: number; width: number; height: number }) => void;
   onEdit: CardData['onEdit'];
@@ -122,8 +122,9 @@ interface Props {
 }
 function Inner(props: Props) {
   const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
+  const scene = useStore(props.document.store, (s) => s.scene);
   const actor = useInteraction((s) => s.actor);
-  const presentation = presentationFor(actor, props.state.brane.id);
+  const presentation = presentationFor(actor, scene.braneId);
   const request = useStore(presentation, (s) => s.request);
   const [initialViewport] = useState(() => presentation.getState().viewport);
   const rememberViewport = useCallback(
@@ -137,7 +138,7 @@ function Inner(props: Props) {
   const setContinue = props.onContinue;
   const policy = toolPolicy(tool);
   const host = useRef<HTMLDivElement>(null);
-  const placements = props.state.placements;
+  const placements = scene.placements;
   const {
     geometry,
     rectangle: rect,
@@ -172,64 +173,69 @@ function Inner(props: Props) {
       interaction.selectedPlacements.filter((id) => visible.has(id)),
     );
   }, [placements]);
+  const nodeCache = useRef(new Map<string, CardNode>());
   const nodes = useMemo<CardNode[]>(() => {
-    const blocks = new Map(props.state.blocks.map((b) => [b.id, b]));
-    const runs = new Map(props.state.runs.map((r) => [r.output_block_id, r]));
-    return placements.flatMap((p) => {
-      const block = blocks.get(p.block_id);
-      if (!block) return [];
-      const run = runs.get(block.id);
+    const visible = new Set(placements.map((p) => p.id));
+    for (const id of nodeCache.current.keys()) if (!visible.has(id)) nodeCache.current.delete(id);
+    return placements.map((p) => {
       const g = geometry[p.id] ?? p;
-      return [
-        {
-          id: p.id,
-          type: 'card',
-          position: { x: g.x, y: g.y },
-          width: g.width,
-          height: g.height,
-          initialWidth: g.width,
-          initialHeight: g.height,
-          style: { width: g.width, height: g.height, pointerEvents: 'all' },
-          dragHandle: '.card-grip',
-          selected: selected.includes(p.id),
-          data: {
-            block,
-            resizable: tool !== 'pan',
-            partial: run?.partial,
-            status: run?.status,
-            focusRequest:
-              request?.kind === 'edit' &&
-              request.blockId === block.id &&
-              (!request.placementId || request.placementId === p.id)
-                ? request.id
-                : undefined,
-            onFocused: presentation.getState().consume,
-            onEdit: props.onEdit,
-            onSpawn: props.onSpawn,
-            spawning: props.spawning.includes(block.id),
-            retrySpawn: props.retrySpawns.includes(block.id),
-            onContext: addContext,
-            onContinue: setContinue,
-            onGeometry: props.onGeometry,
-            onFocus: props.onFocus,
-            onManage: props.onManage,
-          },
+      const next: CardNode = {
+        id: p.id,
+        type: 'card',
+        position: { x: g.x, y: g.y },
+        width: g.width,
+        height: g.height,
+        initialWidth: g.width,
+        initialHeight: g.height,
+        style: { width: g.width, height: g.height, pointerEvents: 'all' },
+        dragHandle: '.card-grip',
+        selected: selected.includes(p.id),
+        data: {
+          blockId: p.block_id,
+          document: props.document,
+          resizable: tool !== 'pan',
+          focusRequest:
+            request?.kind === 'edit' &&
+            request.blockId === p.block_id &&
+            (!request.placementId || request.placementId === p.id)
+              ? request.id
+              : undefined,
+          onFocused: presentation.getState().consume,
+          onEdit: props.onEdit,
+          onSpawn: props.onSpawn,
+          onContext: addContext,
+          onContinue: setContinue,
+          onGeometry: props.onGeometry,
+          onFocus: props.onFocus,
+          onManage: props.onManage,
         },
-      ];
+      };
+      const previous = nodeCache.current.get(p.id);
+      if (
+        previous &&
+        previous.position.x === next.position.x &&
+        previous.position.y === next.position.y &&
+        previous.width === next.width &&
+        previous.height === next.height &&
+        previous.selected === next.selected &&
+        (Object.keys(next.data) as (keyof CardData)[]).every(
+          (key) => previous.data[key] === next.data[key],
+        )
+      )
+        return previous;
+      nodeCache.current.set(p.id, next);
+      return next;
     });
   }, [
     placements,
     tool,
-    props.state.blocks,
-    props.state.runs,
+    props.document,
     geometry,
     selected,
     request,
     presentation,
     props.onEdit,
     props.onSpawn,
-    props.spawning,
-    props.retrySpawns,
     addContext,
     setContinue,
     props.onGeometry,
@@ -238,10 +244,8 @@ function Inner(props: Props) {
   ]);
   useEffect(() => {
     if (!request || request.kind !== 'reveal') return;
-    const connections = derivationEdges(props.state);
-    const output = props.state.placements
-      .filter((p) => p.block_id === request.blockId)
-      .map((p) => p.id);
+    const connections = derivationEdges(scene);
+    const output = scene.placements.filter((p) => p.block_id === request.blockId).map((p) => p.id);
     const ids = new Set([
       ...output,
       ...connections.filter((e) => output.includes(e.target)).map((e) => e.source),
@@ -254,11 +258,8 @@ function Inner(props: Props) {
       presentation.getState().consume(request.id);
     });
     return () => cancelAnimationFrame(frame);
-  }, [request, props.state.placements, props.state.derivations, nodes, fitView, presentation]);
-  const edges = useMemo(
-    () => derivationEdges(props.state),
-    [props.state.placements, props.state.derivations],
-  );
+  }, [request, scene.placements, scene.derivations, nodes, fitView, presentation]);
+  const edges = useMemo(() => derivationEdges(scene), [scene.placements, scene.derivations]);
   return (
     <div
       ref={host}
@@ -269,9 +270,7 @@ function Inner(props: Props) {
       onPaste={(event) =>
         pasteFiles(event, (files) => {
           const node = (event.target as HTMLElement).closest('[data-id]');
-          const placement = props.state.placements.find(
-            (p) => p.id === node?.getAttribute('data-id'),
-          );
+          const placement = scene.placements.find((p) => p.id === node?.getAttribute('data-id'));
           props.onImport?.(
             files,
             placement ? { x: placement.x + placement.width + 30, y: placement.y } : insertion(),
@@ -324,10 +323,10 @@ function Inner(props: Props) {
     </div>
   );
 }
-export function BraneCanvas(props: Props) {
+export const BraneCanvas = memo(function BraneCanvas(props: Props) {
   return (
     <ReactFlowProvider>
       <Inner {...props} />
     </ReactFlowProvider>
   );
-}
+});
