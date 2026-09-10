@@ -4,7 +4,9 @@ import { config } from '../app/config.js';
 export function createAuth(db: DB) {
   if (
     process.env.NODE_ENV === 'production' &&
-    (!process.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET.startsWith('replace-'))
+    (!process.env.BETTER_AUTH_SECRET ||
+      process.env.BETTER_AUTH_SECRET.length < 32 ||
+      process.env.BETTER_AUTH_SECRET.startsWith('replace-'))
   )
     throw new Error('Set a secure BETTER_AUTH_SECRET');
   return betterAuth({

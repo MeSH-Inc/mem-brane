@@ -66,7 +66,7 @@ Backups, object bytes/requests, bandwidth, VPS and model calls are the initial c
 
 ## Billing configuration and uncertain requests
 
-`MODEL_PRICING_JSON` maps each allowed paid model to `inputUsdPerMillion`, `outputUsdPerMillion`, `vision`, `imageTokenBound`, `source` (a pricing URL) and `verifiedAt` (YYYY-MM-DD). Configure the actual model's rates from an authoritative source. The image bound must conservatively cover low-detail image input for that model. No paid model is admitted without both pricing and a positive `DAILY_USER_SPEND_LIMIT`. This deployment has been verified only against local fixtures; no paid calls or live R2 writes were authorized.
+`MODEL_PRICING_JSON` maps each allowed paid model to `inputUsdPerMillion`, `outputUsdPerMillion`, `vision`, `imageTokenBound`, `source` (a pricing URL) and `verifiedAt` (YYYY-MM-DD). Configure the actual model's rates from an authoritative source. The image bound must conservatively cover low-detail image input for that model. No paid model is admitted without both pricing and a positive `DAILY_USER_SPEND_LIMIT`. Live provider accounts remain unverified; use the bounded integration smoke test below with configured credentials.
 
 The Run transaction reserves funds before queueing. Completion with valid usage settles the reservation at frozen rates. Missing usage, interruption and uncertain provider failures retain the full reservation, even on later days. Cancellation before invocation releases it. Retrying explicitly reserves again; it never assumes the earlier request was free.
 
@@ -185,3 +185,41 @@ Use `scripts/fixture-bundle.ts /new/fixture-directory` for synthetic drills.
 The September 8 rehearsal completed remote verification, retrieval and four HTTP
 checks using synthetic image/provenance data; see
 [the transfer receipt](operations/offhost-receipt.json).
+
+## Production configuration and live integration smoke test
+
+Use `.env.production.example` as the deployment environment template. Generate a
+random authentication secret and set the actual HTTPS origin and persistent paths.
+Run `npm run check:production` with those environment values loaded. This checks
+configuration structure without printing secrets or making provider requests.
+`npm run build` itself does not require provider keys.
+
+Live generation requires `OPENAI_API_KEY`, allowed model IDs, operator-verified
+pricing/capabilities and positive user/global daily/global monthly budgets. Local
+file storage needs no additional key. R2 requires all four R2 settings. Enhanced
+OCR, checkout and email recovery still have no enabled provider configuration.
+
+`npm run smoke:live` exercises the deployed API under a test account. Supply
+`SMOKE_ORIGIN`, `SMOKE_EMAIL`, `SMOKE_PASSWORD`, and optionally `SMOKE_MODEL` through
+your shell or secret manager. It signs in, creates a visibly named smoke brane,
+uploads/downloads a tiny red PNG, verifies identical bytes, estimates a text plus
+image request, submits it, and checks completion and accounting. The selected
+model must support vision. The script retains the brane and run for inspection and
+signs out its own session when finished.
+
+The default maximum reservation is $0.05; `SMOKE_MAX_USD` can lower it or raise it
+up to $1. `maxReservedMicrousd` is also submitted to the server, which rejects a
+changed quote above that ceiling before edits, snapshots or spend reservations
+commit. A reservation ceiling is based on configured conservative pricing; it is
+not a substitute for correct provider rates. The script does not automatically
+retry a model request or assume that a timed-out provider request was free.
+
+For a local rehearsal only, use the seeded account with
+`SMOKE_ORIGIN=http://localhost:5173` and run `npm run smoke:live -- --allow-mock`.
+This proves the API/storage flow with a deterministic provider; it does not verify
+OpenAI or R2. Live provider credentials were absent during the PWA implementation,
+so live-account behavior remains unverified until the real smoke command passes.
+
+Keep secrets on the Node server. The browser uses same-origin session cookies and
+never receives an operator provider key. Do not put provider credentials in
+`VITE_*` variables or the PWA manifest.

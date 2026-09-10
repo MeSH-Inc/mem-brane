@@ -265,3 +265,39 @@ it('reports an exhausted operator budget even for zero-priced paid models', () =
   expect(estimateRun(db, actor, input, options).canAfford).toBe(false);
   expect(() => submitRun(db, revisions(db), actor, input, options)).toThrow('budget');
 });
+
+it('rejects a changed quote above the caller cost cap before any edits or reservations commit', () => {
+  const block = createTextBlock(db, actor, braneId);
+  const input = request({
+    references: [block.id],
+    edits: [{ blockId: block.id, text: 'Unsaved source', version: 0 }],
+  });
+  const quote = estimateRun(db, actor, input, limits);
+  const before = state();
+  const expensive = {
+    ...limits,
+    costPolicy: {
+      ...limits.costPolicy!,
+      prices: { paid: { ...limits.costPolicy!.prices.paid, outputUsdPerMillion: 100 } },
+    },
+  };
+  expect(() =>
+    submitRun(
+      db,
+      revisions(db),
+      actor,
+      { ...input, maxReservedMicrousd: quote.reservedMicrousd },
+      expensive,
+    ),
+  ).toThrow('accepted cost cap');
+  expect(state()).toEqual(before);
+  expect(() =>
+    submitRun(
+      db,
+      revisions(db),
+      actor,
+      { ...input, maxReservedMicrousd: quote.reservedMicrousd },
+      limits,
+    ),
+  ).not.toThrow();
+});

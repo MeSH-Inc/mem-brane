@@ -58,6 +58,11 @@ export function submitRun(
     }
     checkLimits(db, actor, input.model, limits);
     const plan = planRun(db, actor, input, limits, derivation?.sources);
+    if (input.maxReservedMicrousd !== undefined && plan.quote.amount > input.maxReservedMicrousd)
+      throw new DomainError(
+        409,
+        'Run reservation exceeds the accepted cost cap. Request a new estimate.',
+      );
     const edits = input.edits.map((edit) => ({
       blockId: edit.blockId,
       ...updateBlockLiveState(db, actor, edit),

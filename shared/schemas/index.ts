@@ -32,6 +32,7 @@ export const submitRun = z.object({
   continueFrom: id.optional(),
   edits: z.array(edit).max(64).default([]),
   maxOutputTokens: z.number().int().positive().optional(),
+  maxReservedMicrousd: z.number().int().nonnegative().safe().optional(),
 });
 
 export const spawnArtifact = z

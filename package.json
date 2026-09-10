@@ -16,7 +16,9 @@
     "format": "prettier --write src server shared scripts tests docs *.md *.json *.ts *.html",
     "format:check": "prettier --check src server shared scripts tests docs *.md *.json *.ts *.html",
     "test:browser": "npm run build && playwright test",
-    "verify": "npm run format:check && npm run build && npm test && playwright test"
+    "verify": "npm run format:check && npm run build && npm test && playwright test",
+    "check:production": "node --import tsx --env-file-if-exists=.env scripts/check-production.ts",
+    "smoke:live": "node --import tsx --env-file-if-exists=.env scripts/live-smoke.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",

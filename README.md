@@ -61,7 +61,7 @@ Middle/right mouse panning remains available across tools. Use Fit View to find 
 
 Selection belongs to placements: two instances of the same block can be selected independently. **Use as context** resolves that selection to unique blocks. Selection, proximity, movement and resizing never invoke a model or implicitly change context.
 
-Mobile defaults to **Focus**, with a full-width editor, horizontal block outline, tap-to-add, image picker and brane navigation. Canvas is an optional overview, with touch viewport panning. The canvas code and React Flow stylesheet load only when Canvas is opened, so Focus does not download them at startup. A focused link has the form `/b/:braneId?focus=:blockId&view=focus`.
+Mobile defaults to **Focus**, with a full-width editor, horizontal block outline, tap-to-add, image picker and brane navigation. Canvas is an optional overview, with touch viewport panning. Canvas rendering is lazy. In production, PWA installation also precaches Canvas code and styles in the background so it can open offline. A focused link has the form `/b/:braneId?focus=:blockId&view=focus`.
 
 ## Local verification and development
 
@@ -81,7 +81,7 @@ On Linux, if browser system libraries are missing, use `npx playwright install -
 3. Vitest unit and integration tests.
 4. Playwright browser tests in Chromium.
 
-The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests include intercepted canvas APIs and an isolated built-server flow through authentication, text saving, generation, SSE reconciliation and session expiration. They do not exercise live provider accounts. The mixed-media workspace rehearsal also covers composer/title recovery, independent tabs, branching and historical provenance. Additional drills cover interrupted two-tab edits and uncertain Run/Spawn delivery across reload. Ports 4179, 4181, 4183, 4185, 4187, 4189 and 4191 must be available.
+The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests include intercepted canvas APIs and an isolated built-server flow through authentication, text saving, generation, SSE reconciliation and session expiration. They do not exercise live provider accounts. The mixed-media workspace rehearsal also covers composer/title recovery, independent tabs, branching and historical provenance. Additional drills cover interrupted two-tab edits and uncertain Run/Spawn delivery across reload. Ports 4179, 4181, 4183, 4185, 4187, 4189, 4191 and 4193 must be available.
 
 Development currently favors direct architectural improvements over compatibility scaffolding. Make focused, atomic commits directly to `main`, verify changes locally before committing, and run `npm run verify` before pushing. GitHub Actions is deferred until it provides a concrete benefit such as catching platform differences, shared verification across independent contributors, or repeatable release artifacts.
 
@@ -102,6 +102,8 @@ Development currently favors direct architectural improvements over compatibilit
 | `npm start`            | Serve the built browser, API and workers on loopback |
 
 ## Configuration
+
+For production, start with [.env.production.example](.env.production.example), run `npm run check:production`, and follow the [bounded integration smoke test](docs/deployment.md#production-configuration-and-live-integration-smoke-test). For installation and offline behavior, see [the PWA guide](docs/offline-pwa.md).
 
 [.env.example](.env.example) lists defaults. Local data lives under ignored `data/`; dependencies, build outputs, browser test output and `.env` are also ignored.
 
@@ -141,7 +143,7 @@ Spawn's **Develop** action answers explicit requests or expands an idea into a s
 
 React Flow nodes project domain records. Zustand owns transient selection, tools and text drafts. An actor/brane-scoped workspace controller owns saving, recovery, imports, streamed updates and the authoritative composer context. The canvas owns in-progress gesture geometry; a per-placement save queue serializes completed moves and coalesces waiting updates. Version conflicts preserve the newest local geometry and offer explicit retry or use-saved-placement actions. Delayed responses and older refreshes cannot overwrite newer acknowledged geometry.
 
-Text autosave uses version checks. IndexedDB retains recoverable drafts with their original server version, scoped by actor and block. Text conflict recovery offers server text or explicit overwrite. Placement intents are held in memory, with an unsaved-change warning; they are not durable across reloads. This is local recovery, not automatic merging or multiplayer collaboration.
+Text autosave uses version checks. IndexedDB retains recoverable drafts with their original server version, scoped by actor and block. Text conflict recovery offers server text or explicit overwrite. Completed placement intents and ordinary workspace mutations commit to an account-scoped IndexedDB replica and outbox before synchronization. Opened workspaces support offline reload and editing; reconnect conflicts require an explicit choice. This is not automatic merging or multiplayer collaboration. See [offline PWA behavior](docs/offline-pwa.md).
 
 ## Background work
 
