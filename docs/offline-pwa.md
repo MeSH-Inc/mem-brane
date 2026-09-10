@@ -39,10 +39,11 @@ Receipts store hashes, not copies of artifact text, and remain indefinitely so l
 offline clients cannot accidentally redeliver an old operation as a new write.
 
 Text and geometry writes carry expected versions; title writes carry the previous
-title; removal carries the placement version. A conflicting operation stops the
-account's queue. Review its local change and current server state, then explicitly
+title; removal carries the placement version. A conflicting operation pauses only
+its dependent changes; unrelated entities continue synchronizing. Review its local
+change and current server state, then explicitly
 keep local changes or use server changes for that item. Later changes to the same
-item are rebased or discarded together; unrelated local changes remain queued.
+item are rebased or discarded together; unrelated local changes are retained.
 Capacity, validation and permission failures retain the operation for retry and
 recovery export. Removed sources cannot be silently recreated by an overwrite.
 
@@ -53,8 +54,11 @@ succeeded. A network outage can reopen the last signed-in account's local replic
 Signing out requires synchronization and clears the offline-entry identity; saved
 replicas remain partitioned by account for later sign-in.
 
-Generation and other online operations must wait for the outbox to drain. No
-service worker initiates paid work or retries generation in the background. The
+Generation and snapshot actions wait only for changes to their explicit sources
+and required destinations. Cancel dispatches immediately, independently of local
+writes, storage failures or conflicts. Open workspaces refresh new outputs while
+retaining pending local edits. No service worker initiates paid work or retries
+generation in the background. The
 foreground app attempts synchronization on reconnect and periodically while open.
 This is explicit conflict resolution, not automatic collaborative text merging.
 

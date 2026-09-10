@@ -12,9 +12,13 @@ import {
   projectCommand,
   visibleWorkspace,
   installWorkspace,
+  overlayPending,
 } from './replica-projection';
 import type { ReplicaStorage, ReplicaState, PendingOperation } from './replica-storage';
 import { networkApi, ApiError } from './transport';
+import { requestResources, requiredOperations } from './command-dependencies';
+import { ReplicaScheduler } from './replica-scheduler';
+import { replicaGate, replicaLock } from './replica-locks';
 
 type Status = { connected: boolean; pending: number; error: string; conflict?: PendingOperation };
 const unavailable = (error: unknown) =>
@@ -26,14 +30,18 @@ const unavailable = (error: unknown) =>
 export class WorkspaceReplica {
   actor?: string;
   private listeners = new Set<() => void>();
-  private running?: Promise<void>;
+  private checking?: { actor: string; generation: number; result: Promise<boolean> };
+  private scheduler: ReplicaScheduler;
   private channel?: BroadcastChannel;
+  private reads = new Map<string, Promise<unknown>>();
   private status: Status = { connected: true, pending: 0, error: '' };
   private generation = 0;
   constructor(
     readonly storage: ReplicaStorage,
     private transport: typeof networkApi,
-  ) {}
+  ) {
+    this.scheduler = new ReplicaScheduler(storage, (actor, op) => this.dispatch(actor, op));
+  }
   private remote: typeof networkApi = (path, body, method, expectedActor = this.actor) =>
     this.transport(path, body, method, path.startsWith('/auth/') ? undefined : expectedActor);
   subscribe = (listener: () => void) => {
@@ -53,7 +61,7 @@ export class WorkspaceReplica {
     if (this.actor !== actor) return;
     this.setStatus({
       pending: state.pending.length,
-      conflict: state.pending[0]?.failure ? state.pending[0] : undefined,
+      conflict: state.pending.find((op) => op.failure),
     });
     if (broadcast) this.channel?.postMessage({ actor });
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('brane:local-change'));
@@ -114,6 +122,22 @@ export class WorkspaceReplica {
     }
     if (!this.actor || path.startsWith('/auth/')) return this.remote(path, body, method);
     const actor = this.actor;
+    if (method !== 'GET' && !isLocalMutation(path, method)) {
+      const resources = requestResources(path, body);
+      if (resources.length) {
+        const pending = (await this.storage.read(actor)).pending;
+        const keys = requiredOperations(pending, resources);
+        // Capture only this action's prerequisites. Cancellation and retry of
+        // immutable context bypass both local storage and synchronization.
+        if (keys.length && !(await this.synchronizeOperations(actor, pending, keys)))
+          throw new ApiError(
+            409,
+            'Resolve or synchronize changes to this action’s sources before retrying.',
+          );
+      }
+      if (this.actor !== actor) throw new Error('Account changed. Reopen this workspace.');
+      return this.remote(path, body, method, actor);
+    }
     // Ensure destinations exist locally before entering the atomic mutation.
     if (
       (path === '/blocks/text' || path === '/placements') &&
@@ -140,23 +164,26 @@ export class WorkspaceReplica {
         void this.synchronize();
         return local.result;
       }
-      // A paid or online-only action can never overtake unsynchronized edits.
-      await this.synchronize();
-      if (this.actor !== actor) throw new Error('Account changed. Reopen this workspace.');
-      if (!this.status.connected || (await this.storage.read(actor)).pending.length)
-        throw new ApiError(
-          400,
-          'Reconnect and synchronize local changes before using this action.',
-        );
-      return this.remote(path, body, method);
+      throw new Error('Unsupported local mutation.');
     }
     const state = await this.storage.read(actor);
     const cached = readLocal(state, path);
-    if (
-      cached !== undefined &&
-      (state.pending.length || /^\/(representations\/[^/]+\/pages|revisions\/[^/]+)$/.test(path))
-    )
+    if (cached !== undefined && /^\/(representations\/[^/]+\/pages|revisions\/[^/]+)$/.test(path))
       return cached;
+    if (cached !== undefined && state.pending.length) {
+      const key = JSON.stringify([actor, path]);
+      if (!this.reads.has(key)) {
+        const reading = this.refreshRead(actor, path, state, true).catch(() => {});
+        this.reads.set(key, reading);
+        void reading.finally(() => {
+          if (this.reads.get(key) === reading) this.reads.delete(key);
+        });
+      }
+      return cached;
+    }
+    return this.refreshRead(actor, path, state);
+  };
+  private async refreshRead(actor: string, path: string, state: ReplicaState, notify = false) {
     const sequence = state.sequence;
     const requestGeneration = await this.storage.change(actor, (current) => {
       const fetch = (current.fetches[path] ??= { issued: 0, received: 0 });
@@ -166,17 +193,21 @@ export class WorkspaceReplica {
       const value = await this.remote(path, undefined, 'GET', actor);
       if (this.actor !== actor) throw new Error('Account changed.');
       this.setStatus({ connected: true, error: '' });
-      return await this.storage.change(actor, (current) => {
+      const result = await this.storage.change(actor, (current) => {
         if (current.sequence !== sequence || current.fetches[path].received > requestGeneration)
-          return readLocal(current, path) ?? value;
+          return { value: readLocal(current, path) ?? value, changed: false };
+        const previous = JSON.stringify(readLocal(current, path));
         current.fetches[path].received = requestGeneration;
         if (path === '/branes') current.branes = z.array(braneResponse).parse(value);
         else if (/^\/branes\/[^/]+$/.test(path)) {
           const workspace = workspaceResponse.parse(value);
-          installWorkspace(current, workspace);
+          installWorkspace(current, overlayPending(current, workspace));
         } else current.reads[path] = value;
-        return readLocal(current, path) ?? value;
+        const next = readLocal(current, path) ?? value;
+        return { value: next, changed: previous !== JSON.stringify(next) };
       });
+      if (notify && result.changed) await this.changed(actor);
+      return result.value;
     } catch (error) {
       if (!unavailable(error) || this.actor !== actor) throw error;
       this.setStatus({ connected: false });
@@ -186,7 +217,7 @@ export class WorkspaceReplica {
         'This content is not available on this device. Open it while connected first.',
       );
     }
-  };
+  }
   private toCommand(
     state: ReplicaState,
     path: string,
@@ -230,42 +261,52 @@ export class WorkspaceReplica {
     }
     return command ? workspaceCommand.parse(command) : undefined;
   }
-  synchronize = (): Promise<void> => {
-    if (this.running) return this.running;
+  synchronize = async (): Promise<void> => {
     const actor = this.actor;
-    if (!actor) return Promise.resolve();
-    const work = () => this.drain(actor, this.generation);
-    const locked = (async () => {
-      if (typeof navigator !== 'undefined' && navigator.locks)
-        await navigator.locks.request(`mem-brane-sync:${actor}`, work);
-      else await work();
-    })();
-    this.running = locked
-      .catch((error) =>
+    if (!actor) return;
+    try {
+      await this.synchronizeOperations(actor, (await this.storage.read(actor)).pending);
+    } catch (error) {
+      if (this.actor === actor)
         this.setStatus({
           error: error instanceof Error ? error.message : 'Local synchronization failed.',
-        }),
-      )
-      .finally(() => {
-        this.running = undefined;
-      });
-    return this.running!;
+        });
+    }
   };
-  private async drain(actor: string, generation: number) {
+  private async synchronizeOperations(actor: string, pending: PendingOperation[], keys?: string[]) {
+    const generation = this.generation;
+    if (!(await this.checkSession(actor, generation))) return false;
+    return this.scheduler.synchronize(
+      actor,
+      pending,
+      () => this.actor === actor && this.generation === generation,
+      keys,
+    );
+  }
+  private checkSession(actor: string, generation: number) {
+    if (this.checking?.actor === actor && this.checking.generation === generation)
+      return this.checking.result;
+    const result = this.validateSession(actor, generation);
+    this.checking = { actor, generation, result };
+    const cleanup = () => {
+      if (this.checking?.result === result) this.checking = undefined;
+    };
+    void result.then(cleanup, cleanup);
+    return result;
+  }
+  private async validateSession(actor: string, generation: number) {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       this.setStatus({ connected: false });
-      return;
+      return false;
     }
-    // Revalidate the account before sending cached work. Never replay one actor's
-    // outbox under another actor's cookies after an offline account switch.
     let session;
     try {
       session = sessionResponse.parse(await this.remote('/auth/get-session'));
     } catch {
-      this.setStatus({ connected: false });
-      return;
+      if (this.actor === actor) this.setStatus({ connected: false });
+      return false;
     }
-    if (this.actor !== actor || this.generation !== generation) return;
+    if (this.actor !== actor || this.generation !== generation) return false;
     if (session?.user.id !== actor) {
       await this.storage.session(null);
       this.actor = undefined;
@@ -277,59 +318,54 @@ export class WorkspaceReplica {
         conflict: undefined,
       });
       if (typeof window !== 'undefined') window.dispatchEvent(new Event('brane:session-expired'));
-      return;
+      return false;
     }
     const reconnected = !this.status.connected;
     this.setStatus({ connected: true });
     if (reconnected && typeof window !== 'undefined')
       window.dispatchEvent(new Event('brane:reconcile'));
-    let wrote = false;
-    let paused = false;
-    while (this.actor === actor && this.generation === generation) {
-      const head = (await this.storage.read(actor)).pending[0];
-      if (!head || head.failure) break;
-      try {
-        const acknowledgement = workspaceAcknowledgement.parse(
-          await this.remote(
-            '/sync/commands',
-            { key: head.key, command: head.command },
-            'POST',
-            actor,
-          ),
-        );
-        if (acknowledgement.key !== head.key)
-          throw new Error('Invalid synchronization acknowledgement.');
+    return true;
+  }
+  private async dispatch(actor: string, operation: PendingOperation): Promise<boolean> {
+    try {
+      const acknowledgement = workspaceAcknowledgement.parse(
+        await this.remote(
+          '/sync/commands',
+          { key: operation.key, command: operation.command },
+          'POST',
+          actor,
+        ),
+      );
+      if (acknowledgement.key !== operation.key)
+        throw new Error('Invalid synchronization acknowledgement.');
+      await this.storage.change(actor, (state) => {
+        state.pending = state.pending.filter((op) => op.key !== operation.key);
+        state.sequence++;
+      });
+      if (this.actor === actor) this.setStatus({ error: '' });
+      await this.changed(actor);
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError && [400, 403, 404, 409, 413, 422].includes(error.status)) {
         await this.storage.change(actor, (state) => {
-          if (state.pending[0]?.key === head.key) {
-            state.pending.shift();
-            state.sequence++;
-          }
+          const current = state.pending.find((op) => op.key === operation.key);
+          if (current) current.failure = { status: error.status, message: error.message };
         });
-        wrote = true;
-      } catch (error) {
-        if (error instanceof ApiError && [400, 403, 404, 409, 413, 422].includes(error.status)) {
-          await this.storage.change(actor, (state) => {
-            if (state.pending[0]?.key === head.key)
-              state.pending[0].failure = { status: error.status, message: error.message };
-          });
-          paused = true;
-          this.setStatus({ error: '' });
-        } else
-          this.setStatus({
-            connected: error instanceof ApiError,
-            error: error instanceof ApiError ? error.message : '',
-          });
-        break;
-      }
+        if (this.actor === actor) this.setStatus({ error: '' });
+        await this.changed(actor);
+      } else if (this.actor === actor)
+        this.setStatus({
+          connected: error instanceof ApiError,
+          error: error instanceof ApiError ? error.message : '',
+        });
+      return false;
     }
-    if (wrote) this.setStatus({ error: '' });
-    if (wrote || paused) await this.changed(actor, wrote);
   }
   async inspectConflict() {
     const actor = this.actor;
     if (!actor) throw new Error('Sign in to review this conflict.');
     const state = await this.storage.read(actor);
-    const head = state.pending[0];
+    const head = state.pending.find((op) => op.failure);
     if (!head?.failure) return undefined;
     const command = head.command;
     const workspace = Object.values(state.workspaces).find((w) =>
@@ -360,7 +396,7 @@ export class WorkspaceReplica {
     if (!actor) return;
     const work = async () => {
       const initial = await this.storage.read(actor);
-      const head = initial.pending[0];
+      const head = initial.pending.find((op) => op.failure);
       if (
         !head?.failure ||
         !['text.edit', 'placement.edit', 'placement.remove', 'brane.title'].includes(
@@ -383,7 +419,7 @@ export class WorkspaceReplica {
       }
       if (this.actor !== actor) throw new Error('Account changed.');
       await this.storage.change(actor, (state) => {
-        if (state.pending[0]?.key !== head.key)
+        if (!state.pending.some((op) => op.key === head.key && op.failure))
           throw new Error('Another window resolved this conflict.');
         state.workspaces = remote;
         state.branes = state.branes.map((b) => remote[b.id]?.brane ?? b);
@@ -423,16 +459,15 @@ export class WorkspaceReplica {
       // Reset controller acknowledgement caches after explicit version rebasing.
       if (typeof window !== 'undefined') window.dispatchEvent(new Event('brane:replica-reset'));
     };
-    if (typeof navigator !== 'undefined' && navigator.locks)
-      await navigator.locks.request(`mem-brane-sync:${actor}`, work);
-    else await work();
+    await replicaLock(replicaGate(actor), 'exclusive', work);
     await this.synchronize();
   }
   async retry() {
     const actor = this.actor;
     if (!actor) return;
     await this.storage.change(actor, (state) => {
-      if (state.pending[0]) delete state.pending[0].failure;
+      const conflict = state.pending.find((op) => op.failure);
+      if (conflict) delete conflict.failure;
     });
     await this.synchronize();
   }
@@ -469,4 +504,12 @@ function readLocal(state: ReplicaState, path: string): unknown {
   }
   if (/^\/placements\/[^/]+$/.test(path)) return findPlacement(state, path.split('/')[2]);
   return state.reads[path];
+}
+
+function isLocalMutation(path: string, method: string): boolean {
+  if (path === '/branes') return method === 'POST';
+  if (/^\/branes\/[^/]+$/.test(path)) return method === 'PATCH';
+  if (path === '/blocks/text' || path === '/placements') return method === 'POST';
+  if (path === '/blocks/live') return method === 'PATCH';
+  return /^\/placements\/[^/]+$/.test(path) && ['PATCH', 'DELETE'].includes(method);
 }

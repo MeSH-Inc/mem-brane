@@ -144,3 +144,37 @@ export function installWorkspace(state: ReplicaState, workspace: BraneState) {
   }
   state.workspaces[workspace.brane.id] = workspace;
 }
+
+// Refresh server-owned runs and unrelated entities while preserving the exact
+// local projection of pending writes, including placement tombstones.
+export function overlayPending(state: ReplicaState, incoming: BraneState): BraneState {
+  const local = state.workspaces[incoming.brane.id];
+  if (!local || !state.pending.length) return incoming;
+  const blocks = new Set<string>(),
+    placements = new Set<string>();
+  let title = false;
+  for (const { command: c } of state.pending) {
+    if (c.type === 'text.create' || c.type === 'text.edit') blocks.add(c.blockId);
+    if (c.type === 'text.create') placements.add(c.placementId);
+    if (c.type.startsWith('placement.') && 'id' in c) placements.add(c.id);
+    if ((c.type === 'brane.create' || c.type === 'brane.title') && c.id === incoming.brane.id)
+      title = true;
+  }
+  const next = {
+    ...incoming,
+    brane: title ? { ...incoming.brane, title: local.brane.title } : incoming.brane,
+    placements: [
+      ...incoming.placements.filter((p) => !placements.has(p.id)),
+      ...local.placements.filter((p) => placements.has(p.id)),
+    ],
+    blocks: incoming.blocks.map((block) =>
+      blocks.has(block.id) ? (findBlock(state, block.id) ?? block) : block,
+    ),
+  };
+  for (const placement of next.placements) {
+    if (next.blocks.some((block) => block.id === placement.block_id)) continue;
+    const block = findBlock(state, placement.block_id);
+    if (block) next.blocks.push(block);
+  }
+  return next;
+}

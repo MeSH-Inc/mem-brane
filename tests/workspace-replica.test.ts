@@ -360,3 +360,112 @@ it('keeps one text version across branes that place the same artifact', async ()
     content: { text: 'Shared offline change' },
   });
 });
+
+it('dispatches independent writes and Spawn while an unrelated write is still in flight', async () => {
+  const f = await fixture();
+  const b = createTextBlock(db, f.actor, f.brane.id);
+  await f.client.workspace(f.brane.id);
+  f.offline();
+  await f.client.saveText({ blockId: f.block.id, text: 'Slow A', version: 0 });
+  await f.client.saveText({ blockId: b.id, text: 'Required B', version: 0 });
+  await f.replica.synchronize();
+  let release!: () => void,
+    started = false;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const online: string[] = [];
+  f.online();
+  const replica = new WorkspaceReplica(f.storage, async (path, body, method, actor) => {
+    if (
+      path === '/sync/commands' &&
+      (body as WorkspaceOperation).command.type === 'text.edit' &&
+      (body as any).command.blockId === f.block.id
+    ) {
+      started = true;
+      await gate;
+    }
+    if (path === '/artifacts/spawn' || path.endsWith('/cancel')) online.push(path);
+    return f.transport(path, body, method, actor);
+  });
+  await replica.request('/auth/get-session');
+  await expect.poll(() => started).toBe(true);
+  try {
+    await replica.request('/artifacts/spawn', {
+      braneId: f.brane.id,
+      sourceBlockIds: [b.id],
+      anchorPlacementId: b.placement.id,
+    });
+    await replica.request('/runs/existing/cancel', {});
+    expect(online).toEqual(['/artifacts/spawn', '/runs/existing/cancel']);
+    expect(
+      readBrane(db, f.actor, f.brane.id).blocks.find((block) => block.id === b.id)?.content.text,
+    ).toBe('Required B');
+    expect((await f.storage.read(f.actor)).pending).toHaveLength(1);
+  } finally {
+    release();
+    await replica.synchronize();
+  }
+});
+
+it('blocks only conflicted dependencies and refreshes server content around pending local edits', async () => {
+  const f = await fixture();
+  const b = createTextBlock(db, f.actor, f.brane.id);
+  await f.client.workspace(f.brane.id);
+  f.offline();
+  await f.client.saveText({ blockId: f.block.id, text: 'Local A', version: 0 });
+  await f.client.saveText({ blockId: b.id, text: 'Independent B', version: 0 });
+  await f.replica.synchronize();
+  updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'Remote A', version: 0 });
+  f.online();
+  await f.replica.synchronize();
+  expect(f.replica.getSnapshot().conflict?.command).toMatchObject({ blockId: f.block.id });
+  expect((await f.storage.read(f.actor)).pending).toHaveLength(1);
+  expect(
+    readBrane(db, f.actor, f.brane.id).blocks.find((block) => block.id === b.id)?.content.text,
+  ).toBe('Independent B');
+  await f.replica.request('/artifacts/spawn', { braneId: f.brane.id, sourceBlockIds: [b.id] });
+  await expect(
+    f.replica.request('/artifacts/spawn', { braneId: f.brane.id, sourceBlockIds: [f.block.id] }),
+  ).rejects.toThrow('sources');
+  const output = createTextBlock(db, f.actor, f.brane.id);
+  await expect
+    .poll(async () =>
+      (await f.client.workspace(f.brane.id)).blocks.some((block) => block.id === output.id),
+    )
+    .toBe(true);
+  expect(
+    (await f.client.workspace(f.brane.id)).blocks.find((block) => block.id === f.block.id)?.content
+      .text,
+  ).toBe('Local A');
+  await f.replica.resolveConflict('server');
+  expect(
+    (await f.client.workspace(f.brane.id)).blocks.find((block) => block.id === f.block.id)?.content
+      .text,
+  ).toBe('Remote A');
+});
+
+it('cancellation bypasses local storage failures and synchronization', async () => {
+  const f = await fixture();
+  const fail = async (): Promise<never> => {
+    throw new Error('Local storage unavailable');
+  };
+  const replica = new WorkspaceReplica({ read: fail, change: fail, session: fail }, f.transport);
+  replica.actor = f.actor;
+  await expect(replica.request('/runs/existing/cancel', {})).resolves.toEqual({ ok: true });
+});
+
+it('coordinates concurrent replay across clients without duplicate transmissions', async () => {
+  const f = await fixture();
+  f.offline();
+  await f.client.saveText({ blockId: f.block.id, text: 'First', version: 0 });
+  await f.client.saveText({ blockId: f.block.id, text: 'Second', version: 1 });
+  await f.replica.synchronize();
+  const second = new WorkspaceReplica(new IndexedReplicaStorage(f.storeName), f.transport);
+  await second.request('/auth/get-session');
+  await second.synchronize();
+  f.online();
+  await Promise.all([f.replica.synchronize(), second.synchronize()]);
+  expect(f.sent).toHaveLength(2);
+  expect(readBrane(db, f.actor, f.brane.id).blocks[0].content.text).toBe('Second');
+});

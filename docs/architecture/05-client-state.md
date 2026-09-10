@@ -134,7 +134,12 @@ Server operation receipts are atomic with mutations and keyed by account plus
 operation UUID. The request hash prevents key reuse with different content.
 Creation uses client-generated UUIDs, removing temporary-ID remapping from dependent
 offline edits. Text and geometry carry expected versions; deletion is versioned
-and title updates compare their previous value. A blocked head pauses replay.
+and title updates compare their previous value. The ordered outbox defines resource
+dependencies: creation precedes use, and writes to the same value retain order.
+Independent branches dispatch concurrently; a failure blocks only its descendants.
+Existence and mutable values are distinct resources, so title edits cannot delay
+text or geometry. Run/Spawn wait only for the prerequisites of their explicit
+sources and anchor; cancellation and retry of frozen context bypass the outbox.
 Explicit conflict resolution rebases or drops the affected item's queued changes
 and rebuilds the projection from authoritative state, retaining unrelated intents.
 Controller acknowledgement caches reset after that deliberate version change.
@@ -142,9 +147,14 @@ Controller acknowledgement caches reset after that deliberate version change.
 The replica caches opened workspaces, immutable page/revision reads and previously
 requested detail responses. Originals are stored as account-scoped blobs; UI object
 URLs are revoked on unmount. The service worker owns only versioned public shell
-assets. Web Locks serialize replay and resolution within the browser, IndexedDB
+assets. Per-operation Web Locks prevent duplicate dispatch, shared account locks
+permit independent replay, and exclusive account locks protect conflict resolution.
+IndexedDB
 serializes concurrent local transactions, and BroadcastChannel announces changes.
-Network snapshots cannot overwrite writes committed during their fetch. Expected
+Cached workspaces with pending writes return immediately and revalidate in the
+background. Refreshes overlay pending entity values and placement tombstones while
+accepting unrelated server changes and new outputs. Network snapshots cannot
+overwrite writes committed during their fetch. Expected
 actor headers bind requests to the session even if another tab switches accounts.
 See [offline behavior](../offline-pwa.md) for supported operations and limitations.
 
