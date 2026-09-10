@@ -1453,3 +1453,14 @@ a {
   overflow-wrap: anywhere;
   font: inherit;
 }
+
+.app-status {
+  padding: 10px 20px;
+  background: #fff1d6;
+  color: #47381b;
+  border-bottom: 1px solid #d8c8a4;
+  font-size: 13px;
+}
+.app-status p {
+  margin: 4px 0;
+}

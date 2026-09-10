@@ -18,6 +18,7 @@ import { useInteraction } from '../stores/interaction';
 import { BraneView } from '../routes/BraneView';
 import type { Brane } from '../../shared/types/domain';
 import './styles.css';
+import { AppStatus } from '../components/AppStatus';
 function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
   const [signup, setSignup] = useState(false),
     [error, setError] = useState(''),
@@ -247,6 +248,7 @@ function Shell() {
         </div>
       </aside>
       <main className="main-content">
+        <AppStatus />
         <Outlet />
       </main>
     </div>

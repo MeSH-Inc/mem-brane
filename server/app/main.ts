@@ -50,6 +50,13 @@ app.get('/health', (c) => {
 });
 app.route('/api', createApi(db, auth, hub, storage));
 app.get('/api/*', (c) => c.json({ error: 'Not found' }, 404));
+app.use('/*', async (c, next) => {
+  c.header(
+    'Cache-Control',
+    c.req.path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
+  );
+  await next();
+});
 app.use('/*', serveStatic({ root: './dist' }));
 app.get('*', serveStatic({ path: './dist/index.html' }));
 const worker = new RunWorker(
