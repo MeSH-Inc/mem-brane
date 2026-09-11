@@ -2,7 +2,17 @@ import { pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapter
 import { toolPolicy } from './toolPolicy';
 import { useCanvasGesture } from './useCanvasGesture';
 import { defaultViewport, type ResizeEdge } from './gestures';
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useContext,
+  memo,
+  Profiler,
+} from 'react';
+import { RenderObserver } from '../lib/render-observer';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -44,8 +54,9 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
   const block = useStore(data.document.store, (s) => s.blocks[data.blockId]);
   const status = useStore(data.document.store, (s) => s.runs[data.blockId]?.status);
   const activity = useStore(data.document.store, (s) => s.activity[data.blockId] ?? idleActivity);
+  const observer = useContext(RenderObserver);
   if (!block) return null;
-  return (
+  const content = (
     <article className={`canvas-card ${block.origin} ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} id="input" isConnectable={false} />
       <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
@@ -105,6 +116,13 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         )}
       </footer>
     </article>
+  );
+  return observer ? (
+    <Profiler id={`card:${id}`} onRender={observer}>
+      {content}
+    </Profiler>
+  ) : (
+    content
   );
 });
 const nodeTypes = { card: Card };
@@ -194,7 +212,7 @@ function Inner(props: Props) {
         data: {
           blockId: p.block_id,
           document: props.document,
-          resizable: tool !== 'pan',
+          resizable: selected.includes(p.id) && tool !== 'pan',
           focusRequest:
             request?.kind === 'edit' &&
             request.blockId === p.block_id &&

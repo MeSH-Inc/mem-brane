@@ -83,23 +83,27 @@ On Linux, if browser system libraries are missing, use `npx playwright install -
 
 The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests include intercepted canvas APIs and an isolated built-server flow through authentication, text saving, generation, SSE reconciliation and session expiration. They do not exercise live provider accounts. The mixed-media workspace rehearsal also covers composer/title recovery, independent tabs, branching and historical provenance. Additional drills cover interrupted two-tab edits and uncertain Run/Spawn delivery across reload. Ports 4179, 4181, 4183, 4185, 4187, 4189, 4191 and 4193 must be available.
 
+Run `npm run test:stress` separately, with port 4180 free, to measure 500 mounted cards under four streams, delayed saves and geometry conflicts. It runs production profiling builds serially across all three engines and writes `artifacts/stress/latest.md` and `latest.json`. See the [interaction verification guide](docs/interaction-verification.md) for measurement definitions, the interactive fixture and the pending physical-device protocol.
+
 Development currently favors direct architectural improvements over compatibility scaffolding. Make focused, atomic commits directly to `main`, verify changes locally before committing, and run `npm run verify` before pushing. GitHub Actions is deferred until it provides a concrete benefit such as catching platform differences, shared verification across independent contributors, or repeatable release artifacts.
 
-| Command                | Purpose                                              |
-| ---------------------- | ---------------------------------------------------- |
-| `npm run dev`          | Browser, API and background workers in watch mode    |
-| `npm run dev:web`      | Vite only                                            |
-| `npm run dev:server`   | API and workers only                                 |
-| `npm run db:migrate`   | Apply pending SQLite migrations                      |
-| `npm run db:seed`      | Create the development account and initial brane     |
-| `npm test`             | Unit and integration tests                           |
-| `npm run test:browser` | Chromium suite and Firefox/WebKit interaction tests  |
-| `npm run typecheck`    | TypeScript validation                                |
-| `npm run format`       | Format application code, tests and documentation     |
-| `npm run format:check` | Check formatting without writing                     |
-| `npm run build`        | Typecheck and build `dist/` and `dist-server/`       |
-| `npm run verify`       | Complete local pre-push checks                       |
-| `npm start`            | Serve the built browser, API and workers on loopback |
+| Command                  | Purpose                                              |
+| ------------------------ | ---------------------------------------------------- |
+| `npm run dev`            | Browser, API and background workers in watch mode    |
+| `npm run dev:web`        | Vite only                                            |
+| `npm run dev:server`     | API and workers only                                 |
+| `npm run db:migrate`     | Apply pending SQLite migrations                      |
+| `npm run db:seed`        | Create the development account and initial brane     |
+| `npm test`               | Unit and integration tests                           |
+| `npm run test:browser`   | Chromium suite and Firefox/WebKit interaction tests  |
+| `npm run test:stress`    | 500-card responsiveness and render-isolation checks  |
+| `npm run preview:stress` | Interactive stress fixture on port 4180              |
+| `npm run typecheck`      | TypeScript validation                                |
+| `npm run format`         | Format application code, tests and documentation     |
+| `npm run format:check`   | Check formatting without writing                     |
+| `npm run build`          | Typecheck and build `dist/` and `dist-server/`       |
+| `npm run verify`         | Complete local pre-push checks                       |
+| `npm start`              | Serve the built browser, API and workers on loopback |
 
 ## Configuration
 

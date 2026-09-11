@@ -1,0 +1,18 @@
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+.stress-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #eee9df;
+  border-bottom: 1px solid #c8c0b2;
+  font-size: 12px;
+}
+.stress-controls small {
+  color: #655f53;
+}

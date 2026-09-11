@@ -13,12 +13,14 @@
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build && esbuild server/app/main.ts --bundle --format=esm --platform=node --target=node22 --packages=external --outfile=dist-server/main.js && cp server/ingestion/pdf-worker.mjs dist-server/pdf-worker.mjs",
     "start": "node --env-file-if-exists=.env dist-server/main.js",
-    "format": "prettier --write src server shared scripts tests docs *.md *.json *.ts *.html",
-    "format:check": "prettier --check src server shared scripts tests docs *.md *.json *.ts *.html",
+    "format": "prettier --write src server shared scripts tests e2e docs *.md *.json *.ts *.html",
+    "format:check": "prettier --check src server shared scripts tests e2e docs *.md *.json *.ts *.html",
     "test:browser": "npm run build && playwright test",
     "verify": "npm run format:check && npm run build && npm test && playwright test",
     "check:production": "node --import tsx --env-file-if-exists=.env scripts/check-production.ts",
-    "smoke:live": "node --import tsx --env-file-if-exists=.env scripts/live-smoke.ts"
+    "smoke:live": "node --import tsx --env-file-if-exists=.env scripts/live-smoke.ts",
+    "test:stress": "vite build --config vite.stress.config.ts && playwright test --config playwright.stress.config.ts",
+    "preview:stress": "vite build --config vite.stress.config.ts && vite preview --config vite.stress.config.ts --host 127.0.0.1 --port 4180 --strictPort"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",

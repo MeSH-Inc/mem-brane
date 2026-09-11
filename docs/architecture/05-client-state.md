@@ -193,6 +193,13 @@ chunks update the document without notifying the entire workspace controller.
 The same content component serves Focus. A React Profiler regression verifies that
 streaming one block causes no render commit in an unrelated editor.
 
+Resize availability is projected only for selected placements, so tool switches do
+not invalidate every card. An opt-in render observer wraps card subtrees in a
+production profiling fixture. Its 500-card workload asserts exact isolation during
+streaming and tool switching, and measures click, drag, typing and wheel response
+through delayed saves and explicit conflicts. The [verification guide](../interaction-verification.md)
+defines the measurement boundary and physical-device coverage still required.
+
 ## Command feedback
 
 `CommandTasks` registers each activation synchronously under an operation/entity
