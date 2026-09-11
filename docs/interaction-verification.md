@@ -1,6 +1,6 @@
 # Interaction verification
 
-The local checks cover gesture ownership, focus, per-entity rendering and responsiveness under a deliberately crowded canvas. The browser-engine runs are automated. Physical trackpad, touchscreen, installed Safari and mobile-device checks remain pending; the protocol below records that evidence separately.
+The local checks cover gesture ownership, focus, per-entity rendering and responsiveness under a deliberately crowded canvas. The browser-engine runs are automated. Injected-input checks have also passed in installed macOS Safari and Chrome on a physical Pixel; iPhone automation is blocked by a stale Safari session. Human trackpad and touchscreen checks remain pending. The [device checkpoint](operations/canvas-device-checkpoint.md) records that distinction and the exact coverage.
 
 ## Repeatable checks
 
@@ -54,15 +54,52 @@ Open `http://127.0.0.1:4180/e2e/stress/index.html?view=canvas`. Start the stream
 
 The fixture supports editing, moving, selecting, resizing, camera/focus changes, context selection, cancellation and geometry-conflict recovery. Create, import and new model submissions are outside its simulated API. Use the isolated full-application tests for those flows.
 
-For a phone/tablet on the same trusted development network, run the built fixture with an explicitly reachable interface:
+For a phone/tablet on the same development network, use the HTTPS fixture so native browser APIs have a secure context:
 
 ```sh
-npx vite preview --config vite.stress.config.ts --host 0.0.0.0 --port 4180 --strictPort
+npm run preview:stress:device
 ```
 
-Open the same path using the development machine's LAN address. The fixture has no live credentials or model calls. It is a canvas/input drill; an insecure LAN origin does not establish production PWA or storage behavior.
+Open `https://<Mac LAN address>:4188/e2e/stress/index.html?view=canvas`. The command creates a temporary self-signed certificate, serves the fixture on reachable interfaces and removes its key files when stopped. It installs no certificate or trust profile. SafariDriver accepts the certificate only for its isolated test session; a human browser must accept its local certificate warning. The fixture has no live credentials or model calls. Plain LAN HTTP is unsuitable for these checks because the app uses secure-context browser APIs.
 
-## Physical-device record — pending
+## Repeatable device automation
+
+Run device checks serially with the fixture already built and served. Keep the target browser foreground and the device unlocked. `test:device:safari` creates and deletes its own isolated Safari automation session. `test:device:android` creates and closes one tab in the attached Chrome; it disconnects without quitting Chrome or tracing other tabs. Both record per-delay assertions and fail with a nonzero exit code when a required interaction does not complete. Reports include browser/environment metadata, source revision and dirty-tree status in ignored `artifacts/stress/device/`. `STRESS_DEVICE_OUTPUT` can redirect the output for a smoke test without overwriting physical-device evidence.
+
+For installed Safari on this Mac, start SafariDriver in another terminal, then run:
+
+```sh
+/usr/bin/safaridriver --port 4184
+```
+
+```sh
+STRESS_DEVICE_LABEL='Mac / installed Safari' npm run test:device:safari
+```
+
+For a paired physical iPhone with Safari Web Inspector and Remote Automation enabled, connect by USB, leave Safari open and use:
+
+```sh
+SAFARI_PLATFORM=iOS SAFARI_DEVICE_UDID='<paired device UDID>' \
+STRESS_DEVICE_LABEL='iPhone model' \
+STRESS_DEVICE_URL='https://<Mac LAN address>:4188/e2e/stress/index.html?view=canvas' \
+npm run test:device:safari
+```
+
+Device discovery is available through `xcrun devicectl list devices`. SafariDriver can host one active test session at a time. Its [iOS input documentation](https://webkit.org/blog/9395/webdriver-is-coming-to-safari-in-ios-13/) describes translating mouse actions into single-finger input; the script uses that route and claims no iOS pinch coverage. A stale-session error is a connection failure, never a functional pass. If Safari reports it is paired with a previous session, stop that automation on the phone before reconnecting.
+
+For an unlocked Android phone with USB debugging authorized and Chrome open, use `npm run preview:stress` for the localhost HTTP fixture, then:
+
+```sh
+adb devices -l
+adb reverse tcp:4180 tcp:4180
+adb forward tcp:59261 localabstract:chrome_devtools_remote
+ANDROID_CDP_URL='ws://127.0.0.1:59261/devtools/browser' \
+STRESS_DEVICE_LABEL='Phone model / Android version' npm run test:device:android
+```
+
+Localhost is a secure context on the phone. If Chrome uses a process-specific debugging socket, inspect `adb shell cat /proc/net/unix` for `chrome_devtools_remote` and forward that socket instead. Choose an unused host port; the values above are examples. After the run, remove only the mappings created for it with `adb forward --remove tcp:59261` and `adb reverse --remove tcp:4180`. Stop the fixture and SafariDriver processes started for testing.
+
+## Human input record — pending
 
 Record device model, OS, browser/version, input hardware, display refresh rate, device pixel ratio, viewport, source revision and fixture delay. Repeat each applicable row in Select, Write and Pan with four streams active, first at 350 ms and then at 1500 ms save delay. Record pass/fail and the exact reproduction for any failure; attach an exported interval and a browser performance trace where available.
 

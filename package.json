@@ -21,7 +21,10 @@
     "smoke:live": "node --import tsx --env-file-if-exists=.env scripts/live-smoke.ts",
     "test:stress": "vite build --config vite.stress.config.ts && playwright test --config playwright.stress.config.ts",
     "test:stress:trace": "vite build --config vite.stress.config.ts && STRESS_TRACE=1 playwright test --config playwright.stress.config.ts --project=chromium",
-    "preview:stress": "vite build --config vite.stress.config.ts && vite preview --config vite.stress.config.ts --host 127.0.0.1 --port 4180 --strictPort"
+    "preview:stress": "vite build --config vite.stress.config.ts && vite preview --config vite.stress.config.ts --host 127.0.0.1 --port 4180 --strictPort",
+    "preview:stress:device": "vite build --config vite.stress.config.ts && node --import tsx scripts/preview-device.ts",
+    "test:device:android": "node --import tsx scripts/test-device-android.ts",
+    "test:device:safari": "node --import tsx scripts/test-device-safari.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",

@@ -1,0 +1,212 @@
+{
+  "recordedOn": "2026-09-11",
+  "source": {
+    "revision": "54ce598bfd575b405651bfd8bf3a117852e530c6",
+    "workingTreeChanges": true,
+    "note": "Application code unchanged; profiling and device harness additions in progress."
+  },
+  "devices": [
+    {
+      "device": "Pixel 9 Pro XL",
+      "platform": "Android",
+      "osVersion": "17",
+      "browser": "Chrome 152.0.7977.83",
+      "viewport": {
+        "width": 448,
+        "height": 851
+      },
+      "devicePixelRatio": 2.25,
+      "hardware": true,
+      "input": "CDP-injected touch, text and keyboard commands",
+      "status": "passed",
+      "reports": [
+        {
+          "delayMs": 350,
+          "checks": {
+            "nativeScrollRetainsCamera": true,
+            "backgroundPan": true,
+            "pinchAcrossEditor": true,
+            "typingDuringConflict": true,
+            "newerGeometrySurvivesConflictAndRetry": true
+          },
+          "metrics": {
+            "inputs": {},
+            "frameIntervalsMs": {
+              "count": 103,
+              "median": 16.600000000000136,
+              "p95": 16.799999999999955,
+              "max": 274.7999999999997
+            },
+            "reactRenderDurationMs": {
+              "count": 59,
+              "median": 0.20000004768371582,
+              "p95": 1.2999999523162842,
+              "max": 2.100000023841858
+            }
+          }
+        },
+        {
+          "delayMs": 1500,
+          "checks": {
+            "nativeScrollRetainsCamera": true,
+            "backgroundPan": true,
+            "pinchAcrossEditor": true,
+            "typingDuringConflict": true,
+            "newerGeometrySurvivesConflictAndRetry": true
+          },
+          "metrics": {
+            "inputs": {},
+            "frameIntervalsMs": {
+              "count": 161,
+              "median": 16.600000000000364,
+              "p95": 16.800000000000182,
+              "max": 241.69999999999982
+            },
+            "reactRenderDurationMs": {
+              "count": 80,
+              "median": 0.20000004768371582,
+              "p95": 0.8000000715255737,
+              "max": 1.7999999523162842
+            }
+          }
+        }
+      ],
+      "limitations": [
+        "Initial probe used pre-correction accessibility waits. Its frame gaps are retained as raw observations, not a clean performance baseline.",
+        "Checked-in expanded probe smoke-tested in emulated Chrome after USB device disconnected; physical rerun pending.",
+        "No human-finger or physical-keyboard checks."
+      ]
+    },
+    {
+      "device": "Mac / installed Safari",
+      "platform": "macOS",
+      "osVersion": "26.6",
+      "browser": "Safari 26.5",
+      "hardware": true,
+      "input": "SafariDriver-injected input in installed Safari; not human gestures or hardware keyboard coverage.",
+      "recordedAt": "2026-09-11T21:15:23.554Z",
+      "environment": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15",
+        "dpr": 2,
+        "viewport": {
+          "width": 1440,
+          "height": 948
+        },
+        "secure": true
+      },
+      "status": "passed",
+      "reports": [
+        {
+          "delayMs": 350,
+          "passed": [
+            "12 Pan/Select switches while streaming",
+            "pointer selection",
+            "newer local geometry survives conflict",
+            "12 text insertions while conflict visible",
+            "retry preserves latest geometry"
+          ],
+          "metrics": {
+            "inputs": {
+              "typing": {
+                "count": 12,
+                "max": 32,
+                "p95": 32,
+                "median": 19
+              },
+              "tool": {
+                "count": 12,
+                "max": 31,
+                "p95": 31,
+                "median": 27
+              }
+            },
+            "frameIntervalsMs": {
+              "count": 100,
+              "max": 67,
+              "p95": 29,
+              "median": 17
+            },
+            "frameGaps": [
+              {
+                "startTime": 1528,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 67
+              },
+              {
+                "startTime": 1958,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 54
+              }
+            ],
+            "reactRenderDurationMs": {
+              "count": 84,
+              "max": 1.0000000000004547,
+              "p95": 1,
+              "median": 0
+            }
+          }
+        },
+        {
+          "delayMs": 1500,
+          "passed": [
+            "12 Pan/Select switches while streaming",
+            "pointer selection",
+            "newer local geometry survives conflict",
+            "12 text insertions while conflict visible",
+            "retry preserves latest geometry"
+          ],
+          "metrics": {
+            "inputs": {
+              "typing": {
+                "count": 12,
+                "max": 27,
+                "p95": 27,
+                "median": 24
+              },
+              "tool": {
+                "count": 12,
+                "max": 32,
+                "p95": 32,
+                "median": 31
+              }
+            },
+            "frameIntervalsMs": {
+              "count": 161,
+              "max": 42,
+              "p95": 19,
+              "median": 17
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 114,
+              "max": 1.0000000000009095,
+              "p95": 1,
+              "median": 0
+            }
+          }
+        }
+      ],
+      "limitations": ["Injected pointer and keyboard input; no physical trackpad inertia or pinch."]
+    },
+    {
+      "device": "iPhone 16e",
+      "platform": "iOS",
+      "osVersion": "26.6.1",
+      "browser": "Safari 26.6.1",
+      "hardware": true,
+      "simulator": false,
+      "status": "blocked",
+      "completedFunctionalChecks": 0,
+      "observed": [
+        "USB connection established; real-device WebDriver capabilities returned.",
+        "HTTPS fixture navigation succeeded; secure context and foreground focus confirmed.",
+        "Subsequent commands timed out; session deletion also timed out.",
+        "After restarting the owned driver, iPhone Safari refused a new session because it was still paired with the previous session."
+      ],
+      "recovery": "Stop the stale automation session in iPhone Safari and rerun test:device:safari."
+    }
+  ],
+  "manualCoverage": "Not performed: fingers, selection handles, long press, trackpad inertia/pinch, rotation, software keyboard transitions and physical keyboard traversal."
+}
