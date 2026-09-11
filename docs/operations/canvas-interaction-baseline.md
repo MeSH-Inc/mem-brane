@@ -45,6 +45,8 @@ Local verification passed 387 unit/API tests, 122 browser cases and all three st
 
 ## Frame gaps and follow-up
 
+The subsequent [trace checkpoint](interaction-trace-checkpoint.md) attributes the tool-switching and conflict gaps to Playwright selector and accessibility-snapshot work. It records a controlled comparison and a corrected, untraced three-engine run; this original baseline remains historical evidence.
+
 | Browser  | Phase                       | Frame interval p95 (ms) | Longest interval (ms) | React render p95 (ms) |
 | -------- | --------------------------- | ----------------------: | --------------------: | --------------------: |
 | chromium | stream-only                 |                    16.7 |                  16.8 |                   0.2 |

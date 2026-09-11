@@ -20,6 +20,7 @@
     "check:production": "node --import tsx --env-file-if-exists=.env scripts/check-production.ts",
     "smoke:live": "node --import tsx --env-file-if-exists=.env scripts/live-smoke.ts",
     "test:stress": "vite build --config vite.stress.config.ts && playwright test --config playwright.stress.config.ts",
+    "test:stress:trace": "vite build --config vite.stress.config.ts && STRESS_TRACE=1 playwright test --config playwright.stress.config.ts --project=chromium",
     "preview:stress": "vite build --config vite.stress.config.ts && vite preview --config vite.stress.config.ts --host 127.0.0.1 --port 4180 --strictPort"
   },
   "dependencies": {

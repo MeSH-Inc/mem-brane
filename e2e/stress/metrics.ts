@@ -11,9 +11,12 @@ export function summarize(values: number[]): TimingSummary {
 export class StressMetrics {
   private recording = false;
   private phase = '';
+  private phaseStarted = 0;
   private cards: Record<string, number> = {};
   private commits: number[] = [];
   private frames: number[] = [];
+  private gaps: { startTime: number; duration: number; visibility: string; focused: boolean }[] =
+    [];
   private lastFrame?: number;
   private samples: InputSample[] = [];
   private eventTimings: { name: string; duration: number; interactionId: number }[] = [];
@@ -29,7 +32,17 @@ export class StressMetrics {
     for (const name of ['pointerup', 'pointermove', 'input', 'wheel'])
       window.addEventListener(name, this.capture, { capture: true, passive: true });
     const frame = (now: number) => {
-      if (this.recording && this.lastFrame !== undefined) this.frames.push(now - this.lastFrame);
+      if (this.recording && this.lastFrame !== undefined) {
+        const duration = now - this.lastFrame;
+        this.frames.push(duration);
+        if (duration > 50)
+          this.gaps.push({
+            startTime: this.lastFrame,
+            duration,
+            visibility: document.visibilityState,
+            focused: document.hasFocus(),
+          });
+      }
       this.lastFrame = this.recording ? now : undefined;
       requestAnimationFrame(frame);
     };
@@ -38,6 +51,7 @@ export class StressMetrics {
       const observer = new PerformanceObserver((list) => {
         if (!this.recording) return;
         for (const entry of list.getEntries()) {
+          if (entry.startTime < this.phaseStarted) continue;
           const event = entry as PerformanceEventTiming & { interactionId?: number };
           this.eventTimings.push({
             name: event.name,
@@ -55,14 +69,22 @@ export class StressMetrics {
     else this.cards[id] = (this.cards[id] ?? 0) + 1;
   };
   reset(phase: string) {
+    this.stop();
     this.phase = phase;
+    this.phaseStarted = performance.now();
+    performance.mark(`stress:phase:${phase}:start`);
     this.cards = {};
     this.commits = [];
     this.frames = [];
+    this.gaps = [];
     this.lastFrame = undefined;
     this.samples = [];
     this.eventTimings = [];
     this.recording = true;
+  }
+  stop() {
+    if (this.recording) performance.mark(`stress:phase:${this.phase}:end`);
+    this.recording = false;
   }
   arm(label: string, event: string, selector: string, property: VisualProperty) {
     if (this.armed) throw new Error('An input measurement is already armed.');
@@ -86,6 +108,9 @@ export class StressMetrics {
       return;
     this.armed = undefined;
     const start = performance.now();
+    performance.mark(`stress:input:${sample.label}`, {
+      detail: { phase: this.phase, event: event.type },
+    });
     const changed = () => {
       if (this.visual(sample.target, sample.property) === sample.before) {
         if (performance.now() - start < 2000) requestAnimationFrame(changed);
@@ -94,13 +119,14 @@ export class StressMetrics {
       // The changed visual state is observable before this frame paints. The
       // following rAF supplies a portable upper bound on that paint opportunity.
       // This includes one frame of measurement overhead, not display latency.
-      requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        performance.measure(`stress:response:${sample.label}`, { start, end: performance.now() });
         this.samples.push({
           label: sample.label,
           event: event.type,
           milliseconds: performance.now() - start,
-        }),
-      );
+        });
+      });
     };
     requestAnimationFrame(changed);
   };
@@ -115,6 +141,7 @@ export class StressMetrics {
   report() {
     return {
       phase: this.phase,
+      phaseStarted: this.phaseStarted,
       metric:
         'Input capture to the animation frame after the visual change; upper bound on a paint opportunity, including one frame of measurement overhead.',
       inputs: Object.fromEntries(
@@ -127,6 +154,7 @@ export class StressMetrics {
       ),
       inputSamples: [...this.samples],
       frameIntervalsMs: summarize(this.frames),
+      frameGaps: [...this.gaps],
       reactRenderDurationMs: summarize(this.commits),
       cardSubtreeCommits: { ...this.cards },
       eventTiming: {

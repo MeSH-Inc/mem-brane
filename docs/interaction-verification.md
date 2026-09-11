@@ -16,6 +16,8 @@ npm run test:stress
 
 The stress entry point is separate from the shipped application. The standard production build does not use React's profiling renderer. Its cards create no Profiler boundary unless a render observer is supplied.
 
+For Chrome CPU/timeline attribution, run `npm run test:stress:trace`. It runs the previous global queries and the corrected scoped queries against the same application, writing `artifacts/stress/trace-comparison.md`, `.json` and `traces/*.json`. Load the raw Chrome trace in DevTools Performance. Phase marks, input marks and response measures align the measured workload with browser tasks, layout, paint and sampled stacks. The [trace checkpoint](operations/interaction-trace-checkpoint.md) explains why broad accessibility searches and retry diagnostics must stay outside the measured input path. Keep ordinary timing baselines untraced.
+
 ## Workload and acceptance
 
 The fixture mounts all 500 React Flow cards, including offscreen cards. Four generated cards receive partial output every 50 ms. The remaining cards contain editable text; the first has enough text for native scrolling. The fixture runs the real workspace controller, document subscriptions, editor drafts, gesture owner and save lanes against simulated transport. It does not exercise an authenticated server, actual model calls, SSE networking or replica replay; those boundaries have separate integration tests.

@@ -1,0 +1,1030 @@
+{
+  "recordedAt": "2026-09-11T21:11:13.620Z",
+  "revision": "54ce598bfd575b405651bfd8bf3a117852e530c6",
+  "dirty": true,
+  "host": {
+    "platform": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M4 Pro",
+    "node": "v24.13.1"
+  },
+  "methodology": "Production React profiling build, 1440×1000 headless browsers, one worker. All 500 card nodes remain mounted; four streams update every 50 ms. Transport is simulated. No live model or backend is used. Input measurements are double-rAF upper bounds on a paint opportunity, not physical display latency. Profiler counts are card-subtree commits, not component function calls. Timing thresholds are broad regression guards, not a frame-rate guarantee.",
+  "trace": [
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "selectors": "global",
+      "traced": true,
+      "status": "passed",
+      "trace": {
+        "dataLossOccurred": false,
+        "phases": [
+          {
+            "phase": "stream-only",
+            "durationMs": 1510.123,
+            "mainThreadTasks": {
+              "count": 410,
+              "over50Ms": 0,
+              "maxMs": 4.449
+            },
+            "sampledSelectorMs": 0,
+            "sampledSnapshotMs": 0,
+            "layoutMs": 20.164,
+            "styleMs": 3.7849999999999997,
+            "paintMs": 15.466
+          },
+          {
+            "phase": "tool-switching-with-streams",
+            "durationMs": 4011.88,
+            "mainThreadTasks": {
+              "count": 1542,
+              "over50Ms": 24,
+              "maxMs": 99.523
+            },
+            "sampledSelectorMs": 2204.2409999999154,
+            "sampledSnapshotMs": 0,
+            "layoutMs": 41.27799999999999,
+            "styleMs": 19.596000000000004,
+            "paintMs": 34.01800000000001
+          },
+          {
+            "phase": "interaction-with-streams",
+            "durationMs": 4944.96,
+            "mainThreadTasks": {
+              "count": 3223,
+              "over50Ms": 0,
+              "maxMs": 7.996
+            },
+            "sampledSelectorMs": 30.457000000000033,
+            "sampledSnapshotMs": 0,
+            "layoutMs": 90.07700000000001,
+            "styleMs": 19.95500000000001,
+            "paintMs": 98.0670000000001
+          },
+          {
+            "phase": "faults",
+            "durationMs": 1500.01,
+            "mainThreadTasks": {
+              "count": 1660,
+              "over50Ms": 4,
+              "maxMs": 143.732
+            },
+            "sampledSelectorMs": 127.8670000000002,
+            "sampledSnapshotMs": 265.9749999999962,
+            "layoutMs": 25.03,
+            "styleMs": 5.376999999999999,
+            "paintMs": 20.00200000000001
+          }
+        ],
+        "path": "traces/chromium-global.json"
+      },
+      "phases": [
+        {
+          "phase": "stream-only",
+          "inputs": {},
+          "frameIntervalsMs": {
+            "count": 92,
+            "median": 16.699999999999818,
+            "p95": 16.700000000000273,
+            "max": 33.40000000000009
+          },
+          "frameGaps": [],
+          "reactRenderDurationMs": {
+            "count": 30,
+            "median": 0,
+            "p95": 0.19999980926513672,
+            "max": 0.20000004768371582
+          },
+          "cardSubtreeCommits": {
+            "card:placement-001": 30,
+            "card:placement-002": 30,
+            "card:placement-004": 30,
+            "card:placement-005": 30
+          }
+        },
+        {
+          "phase": "tool-switching-with-streams",
+          "inputs": {
+            "tool": {
+              "count": 24,
+              "median": 30.799999952316284,
+              "p95": 32,
+              "max": 32.09999990463257
+            }
+          },
+          "frameIntervalsMs": {
+            "count": 149,
+            "median": 16.699999999999818,
+            "p95": 83.30000000000018,
+            "max": 83.40000000000009
+          },
+          "frameGaps": [
+            {
+              "startTime": 2815.7,
+              "duration": 83.30000000000018,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 2982.4,
+              "duration": 83.19999999999982,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 3148.9,
+              "duration": 83.40000000000009,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 3315.6,
+              "duration": 83.30000000000018,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 3482.3,
+              "duration": 83.29999999999973,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 3648.9,
+              "duration": 66.69999999999982,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 3815.6,
+              "duration": 83.40000000000009,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 3982.2,
+              "duration": 66.80000000000018,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 4149,
+              "duration": 83.30000000000018,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 4315.6,
+              "duration": 83.29999999999927,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 4482.3,
+              "duration": 83.30000000000018,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 4648.9,
+              "duration": 66.70000000000073,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 4815.6,
+              "duration": 66.59999999999945,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 4982.2,
+              "duration": 83.30000000000018,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 5148.9,
+              "duration": 83.30000000000018,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 5315.6,
+              "duration": 66.59999999999945,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 5482.2,
+              "duration": 66.69999999999982,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 5648.9,
+              "duration": 83.30000000000018,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 5815.5,
+              "duration": 83.30000000000018,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 5982.2,
+              "duration": 83.30000000000018,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 6148.9,
+              "duration": 83.20000000000073,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 6315.5,
+              "duration": 83.39999999999964,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 6482.1,
+              "duration": 83.39999999999964,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 6648.8,
+              "duration": 83.30000000000018,
+              "visibility": "visible",
+              "focused": true
+            }
+          ],
+          "reactRenderDurationMs": {
+            "count": 104,
+            "median": 0.09999990463256836,
+            "p95": 0.5,
+            "max": 0.9000000953674316
+          },
+          "cardSubtreeCommits": {
+            "card:placement-001": 56,
+            "card:placement-002": 56,
+            "card:placement-004": 56,
+            "card:placement-005": 56
+          }
+        },
+        {
+          "phase": "interaction-with-streams",
+          "inputs": {
+            "click": {
+              "count": 24,
+              "median": 28.800000190734863,
+              "p95": 30.90000009536743,
+              "max": 31
+            },
+            "drag": {
+              "count": 24,
+              "median": 33.39999985694885,
+              "p95": 33.700000047683716,
+              "max": 34
+            },
+            "typing": {
+              "count": 24,
+              "median": 24.5,
+              "p95": 29.90000009536743,
+              "max": 31.700000047683716
+            },
+            "wheel": {
+              "count": 24,
+              "median": 15.799999952316284,
+              "p95": 16.40000009536743,
+              "max": 16.5
+            }
+          },
+          "frameIntervalsMs": {
+            "count": 295,
+            "median": 16.69999999999891,
+            "p95": 16.799999999999272,
+            "max": 16.80000000000109
+          },
+          "frameGaps": [],
+          "reactRenderDurationMs": {
+            "count": 298,
+            "median": 0.09999990463256836,
+            "p95": 0.40000009536743164,
+            "max": 0.6000001430511475
+          },
+          "cardSubtreeCommits": {
+            "card:placement-001": 98,
+            "card:placement-002": 98,
+            "card:placement-004": 98,
+            "card:placement-005": 98,
+            "card:placement-000": 74
+          }
+        },
+        {
+          "phase": "faults",
+          "inputs": {
+            "conflict-typing": {
+              "count": 12,
+              "median": 25.200000047683716,
+              "p95": 29.699999809265137,
+              "max": 29.699999809265137
+            }
+          },
+          "frameIntervalsMs": {
+            "count": 68,
+            "median": 16.69999999999891,
+            "p95": 66.69999999999891,
+            "max": 133.39999999999964
+          },
+          "frameGaps": [
+            {
+              "startTime": 12165.2,
+              "duration": 66.69999999999891,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 12298.6,
+              "duration": 133.39999999999964,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 12465.2,
+              "duration": 133.39999999999964,
+              "visibility": "visible",
+              "focused": true
+            },
+            {
+              "startTime": 13098.6,
+              "duration": 66.69999999999891,
+              "visibility": "visible",
+              "focused": true
+            }
+          ],
+          "reactRenderDurationMs": {
+            "count": 60,
+            "median": 0.09999990463256836,
+            "p95": 0.39999985694885254,
+            "max": 0.6000001430511475
+          },
+          "cardSubtreeCommits": {
+            "card:placement-000": 15,
+            "card:placement-006": 2,
+            "card:placement-001": 24,
+            "card:placement-002": 24,
+            "card:placement-004": 24,
+            "card:placement-005": 10
+          }
+        }
+      ]
+    },
+    {
+      "browser": "chromium",
+      "browserVersion": "153.0.8010.12",
+      "selectors": "scoped",
+      "traced": true,
+      "status": "passed",
+      "trace": {
+        "dataLossOccurred": false,
+        "phases": [
+          {
+            "phase": "stream-only",
+            "durationMs": 1514.03,
+            "mainThreadTasks": {
+              "count": 411,
+              "over50Ms": 0,
+              "maxMs": 3.878
+            },
+            "sampledSelectorMs": 0,
+            "sampledSnapshotMs": 0,
+            "layoutMs": 20.546000000000006,
+            "styleMs": 3.9440000000000004,
+            "paintMs": 13.923999999999996
+          },
+          {
+            "phase": "tool-switching-with-streams",
+            "durationMs": 1606.516,
+            "mainThreadTasks": {
+              "count": 1138,
+              "over50Ms": 0,
+              "maxMs": 20.437
+            },
+            "sampledSelectorMs": 31.029000000000032,
+            "sampledSnapshotMs": 0,
+            "layoutMs": 26.535000000000007,
+            "styleMs": 17.839,
+            "paintMs": 18.979000000000003
+          },
+          {
+            "phase": "interaction-with-streams",
+            "durationMs": 4915.393,
+            "mainThreadTasks": {
+              "count": 4273,
+              "over50Ms": 0,
+              "maxMs": 7.258
+            },
+            "sampledSelectorMs": 28.852000000000036,
+            "sampledSnapshotMs": 0,
+            "layoutMs": 93.59500000000006,
+            "styleMs": 22.321999999999996,
+            "paintMs": 92.81000000000009
+          },
+          {
+            "phase": "faults",
+            "durationMs": 1731.206,
+            "mainThreadTasks": {
+              "count": 1637,
+              "over50Ms": 0,
+              "maxMs": 8.275
+            },
+            "sampledSelectorMs": 14.064,
+            "sampledSnapshotMs": 0,
+            "layoutMs": 32.306000000000004,
+            "styleMs": 6.504,
+            "paintMs": 23.65799999999999
+          }
+        ],
+        "path": "traces/chromium-scoped.json"
+      },
+      "phases": [
+        {
+          "phase": "stream-only",
+          "inputs": {},
+          "frameIntervalsMs": {
+            "count": 92,
+            "median": 16.700000000000045,
+            "p95": 16.800000000000068,
+            "max": 16.800000000000182
+          },
+          "frameGaps": [],
+          "reactRenderDurationMs": {
+            "count": 30,
+            "median": 0,
+            "p95": 0.20000004768371582,
+            "max": 0.2999999523162842
+          },
+          "cardSubtreeCommits": {
+            "card:placement-001": 30,
+            "card:placement-002": 30,
+            "card:placement-004": 30,
+            "card:placement-005": 30
+          }
+        },
+        {
+          "phase": "tool-switching-with-streams",
+          "inputs": {
+            "tool": {
+              "count": 24,
+              "median": 31.299999952316284,
+              "p95": 31.800000190734863,
+              "max": 33.299999952316284
+            }
+          },
+          "frameIntervalsMs": {
+            "count": 95,
+            "median": 16.699999999999818,
+            "p95": 16.700000000000273,
+            "max": 16.800000000000182
+          },
+          "frameGaps": [],
+          "reactRenderDurationMs": {
+            "count": 80,
+            "median": 0.09999990463256836,
+            "p95": 0.5,
+            "max": 0.9000000953674316
+          },
+          "cardSubtreeCommits": {
+            "card:placement-001": 32,
+            "card:placement-002": 32,
+            "card:placement-004": 32,
+            "card:placement-005": 32
+          }
+        },
+        {
+          "phase": "interaction-with-streams",
+          "inputs": {
+            "click": {
+              "count": 24,
+              "median": 28.800000190734863,
+              "p95": 30.200000047683716,
+              "max": 30.699999809265137
+            },
+            "drag": {
+              "count": 24,
+              "median": 33.39999985694885,
+              "p95": 33.799999952316284,
+              "max": 33.799999952316284
+            },
+            "typing": {
+              "count": 24,
+              "median": 25,
+              "p95": 31.799999952316284,
+              "max": 31.899999856948853
+            },
+            "wheel": {
+              "count": 24,
+              "median": 17.299999952316284,
+              "p95": 17.59999990463257,
+              "max": 17.600000143051147
+            }
+          },
+          "frameIntervalsMs": {
+            "count": 293,
+            "median": 16.699999999999818,
+            "p95": 16.799999999999272,
+            "max": 16.800000000000182
+          },
+          "frameGaps": [],
+          "reactRenderDurationMs": {
+            "count": 297,
+            "median": 0.09999990463256836,
+            "p95": 0.40000009536743164,
+            "max": 0.6000001430511475
+          },
+          "cardSubtreeCommits": {
+            "card:placement-000": 74,
+            "card:placement-001": 98,
+            "card:placement-002": 98,
+            "card:placement-004": 98,
+            "card:placement-005": 98
+          }
+        },
+        {
+          "phase": "faults",
+          "inputs": {
+            "conflict-typing": {
+              "count": 12,
+              "median": 24.299999952316284,
+              "p95": 32.299999952316284,
+              "max": 32.299999952316284
+            }
+          },
+          "frameIntervalsMs": {
+            "count": 102,
+            "median": 16.69999999999891,
+            "p95": 16.700000000000728,
+            "max": 16.80000000000109
+          },
+          "frameGaps": [],
+          "reactRenderDurationMs": {
+            "count": 70,
+            "median": 0.09999990463256836,
+            "p95": 0.40000009536743164,
+            "max": 0.8999998569488525
+          },
+          "cardSubtreeCommits": {
+            "card:placement-000": 15,
+            "card:placement-006": 2,
+            "card:placement-001": 35,
+            "card:placement-002": 35,
+            "card:placement-004": 35,
+            "card:placement-005": 10
+          }
+        }
+      ]
+    }
+  ],
+  "untraced": {
+    "recordedAt": "2026-09-11T21:12:34.069Z",
+    "status": "passed",
+    "results": [
+      {
+        "browser": "chromium",
+        "browserVersion": "153.0.8010.12",
+        "selectors": "scoped",
+        "traced": false,
+        "status": "passed",
+        "phases": [
+          {
+            "phase": "stream-only",
+            "inputs": {},
+            "frameIntervalsMs": {
+              "count": 90,
+              "median": 16.699999999999818,
+              "p95": 16.799999999999955,
+              "max": 16.799999999999955
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 30,
+              "median": 0.09999990463256836,
+              "p95": 0.2999999523162842,
+              "max": 0.40000009536743164
+            },
+            "cardSubtreeCommits": {
+              "card:placement-001": 30,
+              "card:placement-002": 30,
+              "card:placement-004": 30,
+              "card:placement-005": 30
+            }
+          },
+          {
+            "phase": "tool-switching-with-streams",
+            "inputs": {
+              "tool": {
+                "count": 24,
+                "median": 30.09999990463257,
+                "p95": 31.40000009536743,
+                "max": 31.5
+              }
+            },
+            "frameIntervalsMs": {
+              "count": 95,
+              "median": 16.699999999999818,
+              "p95": 16.799999999999727,
+              "max": 16.800000000000182
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 80,
+              "median": 0.09999990463256836,
+              "p95": 0.6000001430511475,
+              "max": 0.7000000476837158
+            },
+            "cardSubtreeCommits": {
+              "card:placement-001": 32,
+              "card:placement-002": 32,
+              "card:placement-004": 32,
+              "card:placement-005": 32
+            }
+          },
+          {
+            "phase": "interaction-with-streams",
+            "inputs": {
+              "click": {
+                "count": 24,
+                "median": 26.90000009536743,
+                "p95": 29.200000047683716,
+                "max": 29.299999952316284
+              },
+              "drag": {
+                "count": 24,
+                "median": 33.40000009536743,
+                "p95": 33.5,
+                "max": 33.700000047683716
+              },
+              "typing": {
+                "count": 24,
+                "median": 24.09999990463257,
+                "p95": 30.09999990463257,
+                "max": 31.40000009536743
+              },
+              "wheel": {
+                "count": 24,
+                "median": 15.099999904632568,
+                "p95": 15.399999856948853,
+                "max": 15.5
+              }
+            },
+            "frameIntervalsMs": {
+              "count": 296,
+              "median": 16.699999999999818,
+              "p95": 16.700000000000728,
+              "max": 16.80000000000109
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 299,
+              "median": 0.10000014305114746,
+              "p95": 0.5,
+              "max": 0.9000000953674316
+            },
+            "cardSubtreeCommits": {
+              "card:placement-001": 99,
+              "card:placement-002": 99,
+              "card:placement-004": 99,
+              "card:placement-005": 99,
+              "card:placement-000": 74
+            }
+          },
+          {
+            "phase": "faults",
+            "inputs": {
+              "conflict-typing": {
+                "count": 12,
+                "median": 24.600000143051147,
+                "p95": 32.19999980926514,
+                "max": 32.19999980926514
+              }
+            },
+            "frameIntervalsMs": {
+              "count": 103,
+              "median": 16.69999999999891,
+              "p95": 16.700000000000728,
+              "max": 16.799999999999272
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 71,
+              "median": 0.10000014305114746,
+              "p95": 0.5,
+              "max": 0.6000001430511475
+            },
+            "cardSubtreeCommits": {
+              "card:placement-000": 15,
+              "card:placement-006": 2,
+              "card:placement-001": 35,
+              "card:placement-002": 35,
+              "card:placement-004": 35,
+              "card:placement-005": 10
+            }
+          }
+        ]
+      },
+      {
+        "browser": "firefox",
+        "browserVersion": "155.0",
+        "selectors": "scoped",
+        "traced": false,
+        "status": "passed",
+        "phases": [
+          {
+            "phase": "stream-only",
+            "inputs": {},
+            "frameIntervalsMs": {
+              "count": 188,
+              "median": 8.339999999999918,
+              "p95": 9,
+              "max": 9.320000000000164
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 30,
+              "median": 0,
+              "p95": 1,
+              "max": 1
+            },
+            "cardSubtreeCommits": {
+              "card:placement-001": 30,
+              "card:placement-002": 30,
+              "card:placement-004": 30,
+              "card:placement-005": 30
+            }
+          },
+          {
+            "phase": "tool-switching-with-streams",
+            "inputs": {
+              "tool": {
+                "count": 24,
+                "median": 15,
+                "p95": 16,
+                "max": 17
+              }
+            },
+            "frameIntervalsMs": {
+              "count": 150,
+              "median": 8.320000000000164,
+              "p95": 9.320000000000164,
+              "max": 9.340000000000146
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 72,
+              "median": 0,
+              "p95": 2,
+              "max": 3
+            },
+            "cardSubtreeCommits": {
+              "card:placement-001": 24,
+              "card:placement-002": 24,
+              "card:placement-004": 24,
+              "card:placement-005": 24
+            }
+          },
+          {
+            "phase": "interaction-with-streams",
+            "inputs": {
+              "click": {
+                "count": 24,
+                "median": 15,
+                "p95": 16,
+                "max": 16
+              },
+              "drag": {
+                "count": 24,
+                "median": 16,
+                "p95": 22,
+                "max": 33
+              },
+              "typing": {
+                "count": 24,
+                "median": 10,
+                "p95": 14,
+                "max": 14
+              },
+              "wheel": {
+                "count": 24,
+                "median": 16,
+                "p95": 18,
+                "max": 20
+              }
+            },
+            "frameIntervalsMs": {
+              "count": 416,
+              "median": 8.320000000000164,
+              "p95": 9.099999999999454,
+              "max": 32.44000000000051
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 264,
+              "median": 0,
+              "p95": 1,
+              "max": 10
+            },
+            "cardSubtreeCommits": {
+              "card:placement-000": 73,
+              "card:placement-001": 67,
+              "card:placement-002": 67,
+              "card:placement-004": 67,
+              "card:placement-005": 67
+            }
+          },
+          {
+            "phase": "faults",
+            "inputs": {
+              "conflict-typing": {
+                "count": 12,
+                "median": 11,
+                "p95": 14,
+                "max": 14
+              }
+            },
+            "frameIntervalsMs": {
+              "count": 191,
+              "median": 8.319999999999709,
+              "p95": 9.159999999999854,
+              "max": 25
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 68,
+              "median": 0,
+              "p95": 1,
+              "max": 2
+            },
+            "cardSubtreeCommits": {
+              "card:placement-000": 16,
+              "card:placement-006": 2,
+              "card:placement-001": 30,
+              "card:placement-002": 30,
+              "card:placement-004": 30,
+              "card:placement-005": 9
+            }
+          }
+        ]
+      },
+      {
+        "browser": "webkit",
+        "browserVersion": "26.6",
+        "selectors": "scoped",
+        "traced": false,
+        "status": "passed",
+        "phases": [
+          {
+            "phase": "stream-only",
+            "inputs": {},
+            "frameIntervalsMs": {
+              "count": 92,
+              "median": 17,
+              "p95": 19,
+              "max": 50
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 30,
+              "median": 0,
+              "p95": 1,
+              "max": 1
+            },
+            "cardSubtreeCommits": {
+              "card:placement-001": 30,
+              "card:placement-002": 30,
+              "card:placement-004": 30,
+              "card:placement-005": 30
+            }
+          },
+          {
+            "phase": "tool-switching-with-streams",
+            "inputs": {
+              "tool": {
+                "count": 24,
+                "median": 28,
+                "p95": 32,
+                "max": 32
+              }
+            },
+            "frameIntervalsMs": {
+              "count": 125,
+              "median": 16,
+              "p95": 18,
+              "max": 19
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 78,
+              "median": 0,
+              "p95": 1,
+              "max": 1
+            },
+            "cardSubtreeCommits": {
+              "card:placement-001": 30,
+              "card:placement-002": 30,
+              "card:placement-004": 30,
+              "card:placement-005": 30
+            }
+          },
+          {
+            "phase": "interaction-with-streams",
+            "inputs": {
+              "click": {
+                "count": 24,
+                "median": 24,
+                "p95": 28,
+                "max": 29
+              },
+              "drag": {
+                "count": 24,
+                "median": 25,
+                "p95": 32,
+                "max": 32
+              },
+              "typing": {
+                "count": 24,
+                "median": 24,
+                "p95": 29,
+                "max": 30
+              },
+              "wheel": {
+                "count": 24,
+                "median": 31,
+                "p95": 33,
+                "max": 34
+              }
+            },
+            "frameIntervalsMs": {
+              "count": 298,
+              "median": 16,
+              "p95": 20,
+              "max": 27
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 285,
+              "median": 0,
+              "p95": 1,
+              "max": 1
+            },
+            "cardSubtreeCommits": {
+              "card:placement-000": 74,
+              "card:placement-001": 86,
+              "card:placement-002": 86,
+              "card:placement-004": 86,
+              "card:placement-005": 86
+            }
+          },
+          {
+            "phase": "faults",
+            "inputs": {
+              "conflict-typing": {
+                "count": 12,
+                "median": 24,
+                "p95": 30,
+                "max": 30
+              }
+            },
+            "frameIntervalsMs": {
+              "count": 108,
+              "median": 17,
+              "p95": 22,
+              "max": 49
+            },
+            "frameGaps": [],
+            "reactRenderDurationMs": {
+              "count": 70,
+              "median": 0,
+              "p95": 1,
+              "max": 1
+            },
+            "cardSubtreeCommits": {
+              "card:placement-000": 15,
+              "card:placement-001": 35,
+              "card:placement-002": 35,
+              "card:placement-004": 35,
+              "card:placement-005": 10,
+              "card:placement-006": 2
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
