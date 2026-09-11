@@ -1,10 +1,5 @@
 {
   "recordedOn": "2026-09-11",
-  "source": {
-    "revision": "54ce598bfd575b405651bfd8bf3a117852e530c6",
-    "workingTreeChanges": true,
-    "note": "Application code unchanged; profiling and device harness additions in progress."
-  },
   "devices": [
     {
       "device": "Pixel 9 Pro XL",
@@ -22,60 +17,285 @@
       "reports": [
         {
           "delayMs": 350,
-          "checks": {
-            "nativeScrollRetainsCamera": true,
-            "backgroundPan": true,
-            "pinchAcrossEditor": true,
-            "typingDuringConflict": true,
-            "newerGeometrySurvivesConflictAndRetry": true
-          },
+          "passed": [
+            "native editor scroll retains camera",
+            "background touch pan",
+            "pinch with second finger over editor",
+            "newer local geometry survives conflict",
+            "native text insertion during conflict",
+            "retry preserves latest geometry"
+          ],
           "metrics": {
-            "inputs": {},
-            "frameIntervalsMs": {
-              "count": 103,
-              "median": 16.600000000000136,
-              "p95": 16.799999999999955,
-              "max": 274.7999999999997
+            "phase": "android-350",
+            "inputs": {
+              "pan": {
+                "count": 1,
+                "median": 62.700000047683716,
+                "p95": 62.700000047683716,
+                "max": 62.700000047683716
+              },
+              "pinch": {
+                "count": 1,
+                "median": 9.199999928474426,
+                "p95": 9.199999928474426,
+                "max": 9.199999928474426
+              },
+              "typing": {
+                "count": 12,
+                "median": 17.800000071525574,
+                "p95": 29.899999976158142,
+                "max": 29.899999976158142
+              }
             },
+            "inputSamples": [
+              {
+                "label": "pan:0",
+                "event": "pointermove",
+                "milliseconds": 62.700000047683716
+              },
+              {
+                "label": "pinch:0",
+                "event": "pointermove",
+                "milliseconds": 9.199999928474426
+              },
+              {
+                "label": "typing:0",
+                "event": "input",
+                "milliseconds": 24.899999976158142
+              },
+              {
+                "label": "typing:1",
+                "event": "input",
+                "milliseconds": 29.899999976158142
+              },
+              {
+                "label": "typing:2",
+                "event": "input",
+                "milliseconds": 20.800000071525574
+              },
+              {
+                "label": "typing:3",
+                "event": "input",
+                "milliseconds": 24.600000023841858
+              },
+              {
+                "label": "typing:4",
+                "event": "input",
+                "milliseconds": 7.799999952316284
+              },
+              {
+                "label": "typing:5",
+                "event": "input",
+                "milliseconds": 19.300000071525574
+              },
+              {
+                "label": "typing:6",
+                "event": "input",
+                "milliseconds": 17.299999952316284
+              },
+              {
+                "label": "typing:7",
+                "event": "input",
+                "milliseconds": 24.300000071525574
+              },
+              {
+                "label": "typing:8",
+                "event": "input",
+                "milliseconds": 17.800000071525574
+              },
+              {
+                "label": "typing:9",
+                "event": "input",
+                "milliseconds": 17.59999990463257
+              },
+              {
+                "label": "typing:10",
+                "event": "input",
+                "milliseconds": 17.700000047683716
+              },
+              {
+                "label": "typing:11",
+                "event": "input",
+                "milliseconds": 17.5
+              }
+            ],
+            "frameIntervalsMs": {
+              "count": 202,
+              "median": 16.699999999999818,
+              "p95": 18.799999999999955,
+              "max": 33.299999999999955
+            },
+            "frameGaps": [],
             "reactRenderDurationMs": {
-              "count": 59,
+              "count": 101,
               "median": 0.20000004768371582,
-              "p95": 1.2999999523162842,
-              "max": 2.100000023841858
+              "p95": 1.3000000715255737,
+              "max": 2.299999952316284
+            },
+            "cardSubtreeCommits": {
+              "card:placement-001": 63,
+              "card:placement-002": 63,
+              "card:placement-004": 63,
+              "card:placement-005": 63,
+              "card:placement-000": 15
             }
           }
         },
         {
           "delayMs": 1500,
-          "checks": {
-            "nativeScrollRetainsCamera": true,
-            "backgroundPan": true,
-            "pinchAcrossEditor": true,
-            "typingDuringConflict": true,
-            "newerGeometrySurvivesConflictAndRetry": true
-          },
+          "passed": [
+            "native editor scroll retains camera",
+            "background touch pan",
+            "pinch with second finger over editor",
+            "newer local geometry survives conflict",
+            "native text insertion during conflict",
+            "retry preserves latest geometry"
+          ],
           "metrics": {
-            "inputs": {},
-            "frameIntervalsMs": {
-              "count": 161,
-              "median": 16.600000000000364,
-              "p95": 16.800000000000182,
-              "max": 241.69999999999982
+            "phase": "android-1500",
+            "inputs": {
+              "pan": {
+                "count": 1,
+                "median": 63.700000047683716,
+                "p95": 63.700000047683716,
+                "max": 63.700000047683716
+              },
+              "pinch": {
+                "count": 1,
+                "median": 8.300000071525574,
+                "p95": 8.300000071525574,
+                "max": 8.300000071525574
+              },
+              "typing": {
+                "count": 12,
+                "median": 22.5,
+                "p95": 39.300000071525574,
+                "max": 39.300000071525574
+              }
             },
+            "inputSamples": [
+              {
+                "label": "pan:0",
+                "event": "pointermove",
+                "milliseconds": 63.700000047683716
+              },
+              {
+                "label": "pinch:0",
+                "event": "pointermove",
+                "milliseconds": 8.300000071525574
+              },
+              {
+                "label": "typing:0",
+                "event": "input",
+                "milliseconds": 23
+              },
+              {
+                "label": "typing:1",
+                "event": "input",
+                "milliseconds": 22.800000071525574
+              },
+              {
+                "label": "typing:2",
+                "event": "input",
+                "milliseconds": 17
+              },
+              {
+                "label": "typing:3",
+                "event": "input",
+                "milliseconds": 22.5
+              },
+              {
+                "label": "typing:4",
+                "event": "input",
+                "milliseconds": 22.5
+              },
+              {
+                "label": "typing:5",
+                "event": "input",
+                "milliseconds": 17.5
+              },
+              {
+                "label": "typing:6",
+                "event": "input",
+                "milliseconds": 20.399999976158142
+              },
+              {
+                "label": "typing:7",
+                "event": "input",
+                "milliseconds": 23.5
+              },
+              {
+                "label": "typing:8",
+                "event": "input",
+                "milliseconds": 17.800000071525574
+              },
+              {
+                "label": "typing:9",
+                "event": "input",
+                "milliseconds": 39.300000071525574
+              },
+              {
+                "label": "typing:10",
+                "event": "input",
+                "milliseconds": 26.399999976158142
+              },
+              {
+                "label": "typing:11",
+                "event": "input",
+                "milliseconds": 33.5
+              }
+            ],
+            "frameIntervalsMs": {
+              "count": 258,
+              "median": 16.699999999999818,
+              "p95": 16.800000000000182,
+              "max": 33.29999999999927
+            },
+            "frameGaps": [],
             "reactRenderDurationMs": {
-              "count": 80,
-              "median": 0.20000004768371582,
-              "p95": 0.8000000715255737,
-              "max": 1.7999999523162842
+              "count": 120,
+              "median": 0.30000007152557373,
+              "p95": 0.9000000953674316,
+              "max": 1.8999998569488525
+            },
+            "cardSubtreeCommits": {
+              "card:placement-001": 84,
+              "card:placement-002": 84,
+              "card:placement-004": 84,
+              "card:placement-005": 84,
+              "card:placement-000": 15
             }
           }
         }
       ],
       "limitations": [
-        "Initial probe used pre-correction accessibility waits. Its frame gaps are retained as raw observations, not a clean performance baseline.",
-        "Checked-in expanded probe smoke-tested in emulated Chrome after USB device disconnected; physical rerun pending.",
-        "No human-finger or physical-keyboard checks."
-      ]
+        "Injected input on a physical device, not human fingers or a hardware keyboard.",
+        "Each delay contains one pan sample, one pinch sample and 12 typing samples. Single gesture samples do not establish a latency distribution.",
+        "Input measurements include gesture recognition and one extra animation frame; they do not measure physical display latency."
+      ],
+      "source": {
+        "revision": "85f14e88f859ec1bc1b70c945f1663973eac7b6f",
+        "workingTreeChanges": false
+      },
+      "recordedAt": "2026-09-11T21:24:24.917Z",
+      "environment": {
+        "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36",
+        "secure": true,
+        "dpr": 2.25,
+        "viewport": {
+          "width": 448,
+          "height": 851
+        }
+      },
+      "displayModeObservedAfterRun": {
+        "width": 1008,
+        "height": 2244,
+        "peakRefreshRateHz": 120.00001,
+        "vsyncRateHz": 240.00005,
+        "note": "ADB mode snapshot after the run; not a claim about browser animation-frame frequency during the test."
+      },
+      "rawReport": "artifacts/stress/device/pixel-corrected/android-results.json",
+      "history": "Supersedes the initial Pixel probe recorded in commit 85f14e8, which used pre-correction accessibility waits. This run uses the checked-in script with corrected waits."
     },
     {
       "device": "Mac / installed Safari",
@@ -188,7 +408,14 @@
           }
         }
       ],
-      "limitations": ["Injected pointer and keyboard input; no physical trackpad inertia or pinch."]
+      "limitations": [
+        "Injected pointer and keyboard input; no physical trackpad inertia or pinch."
+      ],
+      "source": {
+        "revision": "54ce598bfd575b405651bfd8bf3a117852e530c6",
+        "workingTreeChanges": true,
+        "note": "Application code unchanged; profiling and device harness additions in progress."
+      }
     },
     {
       "device": "iPhone 16e",
@@ -205,8 +432,14 @@
         "Subsequent commands timed out; session deletion also timed out.",
         "After restarting the owned driver, iPhone Safari refused a new session because it was still paired with the previous session."
       ],
-      "recovery": "Stop the stale automation session in iPhone Safari and rerun test:device:safari."
+      "recovery": "Stop the stale automation session in iPhone Safari and rerun test:device:safari.",
+      "source": {
+        "revision": "54ce598bfd575b405651bfd8bf3a117852e530c6",
+        "workingTreeChanges": true,
+        "note": "Application code unchanged; profiling and device harness additions in progress."
+      }
     }
   ],
-  "manualCoverage": "Not performed: fingers, selection handles, long press, trackpad inertia/pinch, rotation, software keyboard transitions and physical keyboard traversal."
+  "manualCoverage": "Not performed: fingers, selection handles, long press, trackpad inertia/pinch, rotation, software keyboard transitions and physical keyboard traversal.",
+  "latestRecordedAt": "2026-09-11T21:24:24.917Z"
 }
