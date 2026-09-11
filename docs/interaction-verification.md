@@ -1,6 +1,6 @@
 # Interaction verification
 
-The local checks cover gesture ownership, focus, per-entity rendering and responsiveness under a deliberately crowded canvas. The browser-engine runs are automated. Injected-input checks have also passed in installed macOS Safari and Chrome on a physical Pixel; iPhone automation is blocked by a stale Safari session. Human trackpad and touchscreen checks remain pending. The [device checkpoint](operations/canvas-device-checkpoint.md) records that distinction and the exact coverage.
+The local checks cover gesture ownership, focus, per-entity rendering and responsiveness under a deliberately crowded canvas. The browser-engine runs are automated. Injected-input checks have also passed in installed macOS Safari and Chrome on a physical Pixel. Physical iPhone Safari passes the keyboard selection, save-lane, cancellation and conflict-retry subset; native gesture and text-entry coverage is pending. Human trackpad and touchscreen checks remain pending. The [device checkpoint](operations/canvas-device-checkpoint.md) records the exact coverage and the native-runner signing prerequisite.
 
 ## Repeatable checks
 
@@ -76,7 +76,7 @@ For installed Safari on this Mac, start SafariDriver in another terminal, then r
 STRESS_DEVICE_LABEL='Mac / installed Safari' npm run test:device:safari
 ```
 
-For a paired physical iPhone with Safari Web Inspector and Remote Automation enabled, connect by USB, leave Safari open and use:
+For the keyboard subset on a paired physical iPhone with Safari Web Inspector and Remote Automation enabled, connect by USB, leave Safari open and use:
 
 ```sh
 SAFARI_PLATFORM=iOS SAFARI_DEVICE_UDID='<paired device UDID>' \
@@ -85,7 +85,11 @@ STRESS_DEVICE_URL='https://<Mac LAN address>:4188/e2e/stress/index.html?view=can
 npm run test:device:safari
 ```
 
-Device discovery is available through `xcrun devicectl list devices`. SafariDriver can host one active test session at a time. Its [iOS input documentation](https://webkit.org/blog/9395/webdriver-is-coming-to-safari-in-ios-13/) describes translating mouse actions into single-finger input; the script uses that route and claims no iOS pinch coverage. A stale-session error is a connection failure, never a functional pass. If Safari reports it is paired with a previous session, stop that automation on the phone before reconnecting.
+Device discovery is available through `xcrun devicectl list devices`. SafariDriver can host one active test session at a time. The iOS branch now uses Element Send Keys and DOM focus setup, verifies trusted key events, and records its restricted coverage in `ios-safari-keyboard-results.json`. It starts with four streams at each delay, verifies a second card can save and a run can cancel while the first response is held, then checks that newer geometry survives a conflict and keyboard-activated retry. It does not claim text insertion, touch, software-keyboard behavior or hardware keyboard traversal.
+
+Avoid SafariDriver's W3C Actions on this iOS version. Our protocol log matches [WebKit issue 322937](https://bugs.webkit.org/show_bug.cgi?id=322937): an input sequence succeeds, then even the next browsing-context query receives no response. Switching `pointerType` or restarting only the host driver does not resolve the reported issue. Restarting Safari on the phone recovered our session. Element click/text probes were inconclusive too: a successful command response without the expected DOM change is not a pass.
+
+For native iOS gestures, use XCUITest input with web-view observation instead of the affected WebKit Automation input path. Appium 3.7.0, XCUITest driver 12.12.1 and WebDriverAgent 16.12.7 were prepared under ignored `artifacts/stress/device/ios-tools/`; the native test runner compiled unsigned successfully. Its signed launch is blocked because Xcode reports **No Accounts** and has no matching development provisioning profile. Sign in under Xcode → Settings → Accounts, then build/sign the runner for the paired phone and continue the native matrix. The [Appium real-device setup guide](https://appium.github.io/appium-xcuitest-driver/latest/getting-started/device-setup/) describes that prerequisite. A signing certificate alone is insufficient to install this runner.
 
 For an unlocked Android phone with USB debugging authorized and Chrome open, use `npm run preview:stress` for the localhost HTTP fixture, then:
 

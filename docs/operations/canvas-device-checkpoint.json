@@ -424,22 +424,226 @@
       "browser": "Safari 26.6.1",
       "hardware": true,
       "simulator": false,
-      "status": "blocked",
-      "completedFunctionalChecks": 0,
+      "status": "partial",
+      "completedFunctionalChecks": 10,
       "observed": [
-        "USB connection established; real-device WebDriver capabilities returned.",
-        "HTTPS fixture navigation succeeded; secure context and foreground focus confirmed.",
-        "Subsequent commands timed out; session deletion also timed out.",
-        "After restarting the owned driver, iPhone Safari refused a new session because it was still paired with the previous session."
+        "The prior stale Safari session was cleared and 500 cards mounted in a secure foreground page on the physical USB-connected iPhone.",
+        "SafariDriver acknowledged performInteractionSequence, but never responded to its following resolveBrowsingContext command; DELETE session also timed out.",
+        "Restarting Safari on the phone recovered the automation connection.",
+        "Element Send Keys delivered trusted key events and passed the bounded keyboard subset at both delays; each delay started with a fresh four-stream fixture.",
+        "Element-click/text probes did not produce the required state changes and were not counted as functional passes."
       ],
-      "recovery": "Stop the stale automation session in iPhone Safari and rerun test:device:safari.",
+      "recovery": "Continue native XCUITest gesture and text-entry validation after signing is available. SafariDriver keyboard subset can be rerun without the affected Actions endpoint.",
       "source": {
-        "revision": "54ce598bfd575b405651bfd8bf3a117852e530c6",
-        "workingTreeChanges": true,
-        "note": "Application code unchanged; profiling and device harness additions in progress."
+        "revision": "a8bb67d89cc449b30a9057f32f9eaeb9a45f7201",
+        "workingTreeChanges": true
+      },
+      "keyboardChecksStatus": "passed",
+      "recordedAt": "2026-09-11T21:50:03.853Z",
+      "environment": {
+        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15E148 Safari/604.1",
+        "dpr": 3,
+        "viewport": {
+          "width": 390,
+          "height": 699
+        },
+        "secure": true
+      },
+      "coverage": "keyboard selection, geometry, cancellation and retry only",
+      "input": "SafariDriver Element Send Keys with DOM focus setup; trusted keyboard events verified. No touch or text-entry pass is implied.",
+      "unverified": [
+        "native scrolling and pan",
+        "pinch",
+        "text entry and software keyboard",
+        "human input"
+      ],
+      "reports": [
+        {
+          "delayMs": 350,
+          "passed": [
+            "keyboard selection",
+            "another card saves while first response is held",
+            "cancellation progresses while first response is held",
+            "newer local geometry survives conflict",
+            "retry preserves latest geometry"
+          ],
+          "keyboardEvents": {
+            "count": 7,
+            "allTrusted": true
+          },
+          "metrics": {
+            "inputs": {},
+            "frameIntervalsMs": {
+              "count": 86,
+              "max": 98,
+              "p95": 77,
+              "median": 17
+            },
+            "frameGaps": [
+              {
+                "startTime": 840,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 84
+              },
+              {
+                "startTime": 1075,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 80
+              },
+              {
+                "startTime": 1158,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 77
+              },
+              {
+                "startTime": 1256,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 77
+              },
+              {
+                "startTime": 1355,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 76
+              },
+              {
+                "startTime": 1439,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 75
+              },
+              {
+                "startTime": 1856,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 98
+              }
+            ],
+            "reactRenderDurationMs": {
+              "count": 54,
+              "max": 1.0000000000004547,
+              "p95": 1,
+              "median": 0
+            },
+            "cardSubtreeCommits": {
+              "card:placement-000": 4,
+              "card:placement-004": 29,
+              "card:placement-001": 29,
+              "card:placement-005": 18,
+              "card:placement-002": 29,
+              "card:placement-006": 2
+            }
+          }
+        },
+        {
+          "delayMs": 1500,
+          "passed": [
+            "keyboard selection",
+            "another card saves while first response is held",
+            "cancellation progresses while first response is held",
+            "newer local geometry survives conflict",
+            "retry preserves latest geometry"
+          ],
+          "keyboardEvents": {
+            "count": 7,
+            "allTrusted": true
+          },
+          "metrics": {
+            "inputs": {},
+            "frameIntervalsMs": {
+              "count": 224,
+              "max": 109,
+              "p95": 29,
+              "median": 17
+            },
+            "frameGaps": [
+              {
+                "startTime": 631,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 74
+              },
+              {
+                "startTime": 726,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 79
+              },
+              {
+                "startTime": 959,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 78
+              },
+              {
+                "startTime": 1059,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 78
+              },
+              {
+                "startTime": 1142,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 80
+              },
+              {
+                "startTime": 1242,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 79
+              },
+              {
+                "startTime": 1329,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 78
+              },
+              {
+                "startTime": 2908,
+                "visibility": "visible",
+                "focused": true,
+                "duration": 109
+              }
+            ],
+            "reactRenderDurationMs": {
+              "count": 98,
+              "max": 2,
+              "p95": 1,
+              "median": 0
+            },
+            "cardSubtreeCommits": {
+              "card:placement-000": 4,
+              "card:placement-004": 73,
+              "card:placement-001": 73,
+              "card:placement-005": 41,
+              "card:placement-002": 73,
+              "card:placement-006": 3
+            }
+          }
+        }
+      ],
+      "rawReport": "artifacts/stress/device/ios-keyboard/ios-safari-keyboard-results.json",
+      "nativeInput": {
+        "status": "blocked",
+        "upstreamIssue": "https://bugs.webkit.org/show_bug.cgi?id=322937",
+        "relationship": "Observed protocol sequence matches the reported hang; no application-side cause is inferred.",
+        "runner": {
+          "appium": "3.7.0",
+          "xcuitestDriver": "12.12.1",
+          "webDriverAgent": "16.12.7",
+          "unsignedBuild": "passed",
+          "signedLaunch": "blocked: Xcode reports No Accounts and no matching iOS development provisioning profile",
+          "preparedDirectory": "artifacts/stress/device/ios-tools/"
+        },
+        "requiredUserAction": "Sign in to the Apple developer account in Xcode Settings → Accounts so the native test runner can be provisioned."
       }
     }
   ],
   "manualCoverage": "Not performed: fingers, selection handles, long press, trackpad inertia/pinch, rotation, software keyboard transitions and physical keyboard traversal.",
-  "latestRecordedAt": "2026-09-11T21:24:24.917Z"
+  "latestRecordedAt": "2026-09-11T21:50:03.853Z"
 }

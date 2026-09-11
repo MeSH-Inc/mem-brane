@@ -4,7 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import type { StressMeasurement } from '../e2e/stress/metrics';
 
 const ios = process.env.SAFARI_PLATFORM === 'iOS';
-const label = ios ? 'ios-safari' : 'macos-safari';
+const label = ios ? 'ios-safari-keyboard' : 'macos-safari';
 const origin = process.env.SAFARIDRIVER_URL ?? 'http://127.0.0.1:4184';
 const url =
   process.env.STRESS_DEVICE_URL ?? 'https://localhost:4188/e2e/stress/index.html?view=canvas';
@@ -15,7 +15,15 @@ let capabilities: Record<string, unknown> | undefined;
 let environment: unknown;
 let failure: string | undefined;
 let step = 'create session';
-const reports: { delayMs: number; passed: string[]; metrics?: StressMeasurement }[] = [];
+const reports: {
+  delayMs: number;
+  passed: string[];
+  keyboardEvents?: { count: number; allTrusted: boolean };
+  metrics?: StressMeasurement;
+}[] = [];
+const unverified = ios
+  ? ['native scrolling and pan', 'pinch', 'text entry and software keyboard', 'human input']
+  : ['physical trackpad and keyboard input'];
 async function request<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {
   const response = await fetch(origin + path, {
     method,
@@ -37,8 +45,16 @@ async function wait(script: string, description: string) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
-const key = (value: string) =>
-  call('/actions', {
+const elementKey = 'element-6066-11e4-a52e-4f735466cecf';
+async function key(value: string) {
+  if (ios) {
+    // WebKit 322937: /actions can wedge the iOS automation connection after
+    // reporting success. Element Send Keys uses performKeyboardInteractions.
+    const active = await call<Record<string, string>>('/element/active', undefined, 'GET');
+    await call(`/element/${active[elementKey]}/value`, { text: value });
+    return;
+  }
+  await call('/actions', {
     actions: [
       {
         type: 'key',
@@ -50,29 +66,23 @@ const key = (value: string) =>
       },
     ],
   });
+}
 type Point = { x: number; y: number };
-async function pointer(from: Point, to?: Point) {
-  // SafariDriver translates mouse actions into single-finger input on iOS.
-  // Do not claim multi-touch coverage from this endpoint.
-  const move = (point: Point, duration: number) => ({
+async function pointer(point: Point) {
+  const move = {
     type: 'pointerMove',
-    duration,
+    duration: 0,
     origin: 'viewport',
     x: Math.round(point.x),
     y: Math.round(point.y),
-  });
+  };
   await call('/actions', {
     actions: [
       {
         type: 'pointer',
         id: 'mouse',
         parameters: { pointerType: 'mouse' },
-        actions: [
-          move(from, 0),
-          { type: 'pointerDown', button: 0 },
-          ...(to ? [move(to, 250)] : []),
-          { type: 'pointerUp', button: 0 },
-        ],
+        actions: [move, { type: 'pointerDown', button: 0 }, { type: 'pointerUp', button: 0 }],
       },
     ],
   });
@@ -81,14 +91,17 @@ const card = '[data-id="placement-000"]';
 const editor = card + ' textarea';
 const transform = () =>
   js<string>('return document.querySelector(arguments[0]).style.transform', [card]);
-const camera = () =>
-  js<string>('return document.querySelector(".react-flow__viewport").style.transform');
 const box = (selector: string) =>
   js<{ x: number; y: number; width: number; height: number }>(
     'return document.querySelector(arguments[0]).getBoundingClientRect().toJSON()',
     [selector],
   );
-async function click(selector: string) {
+async function activate(selector: string) {
+  if (ios) {
+    await js('document.querySelector(arguments[0]).focus()', [selector]);
+    await key('\ue007');
+    return;
+  }
   const r = await box(selector);
   await pointer({ x: r.x + Math.min(r.width / 2, 70), y: r.y + Math.min(r.height / 2, 20) });
 }
@@ -152,6 +165,16 @@ try {
     'return {userAgent:navigator.userAgent, secure:isSecureContext, dpr:devicePixelRatio, viewport:{width:innerWidth,height:innerHeight}}',
   );
   for (const delayMs of [350, 1500]) {
+    if (ios && reports.length) {
+      // Cancellation changes the active stream set. Restore all four streams
+      // and clear the simulated write log for the next delay's assertions.
+      await call('/url', { url });
+      await wait('return document.querySelectorAll(".react-flow__node").length === 500', 'reload');
+    }
+    if (ios)
+      await js(
+        'window.__keyboardTrust=[];window.addEventListener("keydown",e=>window.__keyboardTrust.push(e.isTrusted),true)',
+      );
     const report: (typeof reports)[number] = { delayMs, passed: [] };
     reports.push(report);
     await js(
@@ -163,10 +186,12 @@ try {
       console.log(label, step);
       for (let i = 0; i < 12; i++)
         await measured(`tool:${i}`, 'pointerup', '.canvas-host', 'class', () =>
-          click(i % 2 ? '.canvas-tools button:nth-child(3)' : '.canvas-tools button:nth-child(2)'),
+          activate(
+            i % 2 ? '.canvas-tools button:nth-child(3)' : '.canvas-tools button:nth-child(2)',
+          ),
         );
       report.passed.push('12 Pan/Select switches while streaming');
-      await click(card + ' .card-grip');
+      await activate(card + ' .card-grip');
       assert(
         await js<boolean>(
           'return document.querySelector(arguments[0]).classList.contains("selected")',
@@ -175,28 +200,8 @@ try {
       );
       report.passed.push('pointer selection');
     } else {
-      step = `${delayMs} ms native scrolling`;
+      step = `${delayMs} ms keyboard selection`;
       console.log(label, step);
-      const before = await camera(),
-        r = await box(editor);
-      const oldScroll = await js<number>('return document.querySelector(arguments[0]).scrollTop', [
-        editor,
-      ]);
-      await pointer({ x: r.x + 100, y: r.y + r.height - 20 }, { x: r.x + 100, y: r.y + 20 });
-      await wait(
-        `return document.querySelector('[data-id="placement-000"] textarea').scrollTop > ${oldScroll + 30}`,
-        step,
-      );
-      assert.equal(await camera(), before);
-      report.passed.push('native editor scroll retains camera');
-      step = `${delayMs} ms touch pan`;
-      console.log(label, step);
-      const host = await box('.canvas-host');
-      await measured('pan:0', 'pointermove', '.react-flow__viewport', 'transform', () =>
-        pointer({ x: host.x + 15, y: host.y + 25 }, { x: host.x + 65, y: host.y + 25 }),
-      );
-      assert.notEqual(await camera(), before);
-      report.passed.push('background single-finger pan');
       await js('document.querySelector(arguments[0]).focus()', [card]);
       if (
         !(await js<boolean>(
@@ -205,6 +210,11 @@ try {
         ))
       )
         await key('\ue007');
+      await wait(
+        'return document.querySelector(\'[data-id="placement-000"]\').classList.contains("selected")',
+        step,
+      );
+      report.passed.push('keyboard selection');
     }
     step = `${delayMs} ms held geometry`;
     console.log(label, step);
@@ -219,29 +229,64 @@ try {
     );
     await key('\ue014');
     const latest = await transform();
+    if (ios) {
+      step = `${delayMs} ms independent save and cancellation`;
+      console.log(label, step);
+      const before = await js<number>('return window.stress.server.writes.length');
+      await activate('[data-id="placement-006"]');
+      await key('\ue014');
+      await wait(
+        `return window.stress.server.writes.slice(${before}).some(w=>w.id==="placement-006" && w.status===200)`,
+        step,
+      );
+      report.passed.push('another card saves while first response is held');
+      await js(
+        'const button=[...document.querySelectorAll(".run-list button")].find(b=>b.textContent==="Cancel run");if(!button)throw Error("No cancellable run");button.focus()',
+      );
+      await key('\ue007');
+      await wait('return window.stress.server.state.runs.some(r=>r.status==="cancelled")', step);
+      assert(
+        await js<boolean>(
+          'return window.stress.server.writes.some(w=>w.id==="placement-000" && w.status===0)',
+        ),
+      );
+      report.passed.push('cancellation progresses while first response is held');
+    }
     await js('window.stress.server.release("placement-000")');
     step = `${delayMs} ms conflict`;
     console.log(label, step);
     await wait('return !!document.querySelector(".error-banner")', step);
     assert.equal(await transform(), latest);
     report.passed.push('newer local geometry survives conflict');
-    step = `${delayMs} ms typing`;
-    console.log(label, step);
-    await click(editor);
-    assert(
-      await js<boolean>('return document.activeElement === document.querySelector(arguments[0])', [
-        editor,
-      ]),
-    );
-    for (let i = 0; i < 12; i++)
-      await measured(`typing:${i}`, 'input', editor, 'value', () => key('x'));
-    report.passed.push('12 text insertions while conflict visible');
+    if (!ios) {
+      step = `${delayMs} ms typing`;
+      console.log(label, step);
+      await activate(editor);
+      assert(
+        await js<boolean>(
+          'return document.activeElement === document.querySelector(arguments[0])',
+          [editor],
+        ),
+      );
+      for (let i = 0; i < 12; i++)
+        await measured(`typing:${i}`, 'input', editor, 'value', () => key('x'));
+      report.passed.push('12 text insertions while conflict visible');
+    }
     step = `${delayMs} ms retry`;
     console.log(label, step);
-    await click('.error-banner button');
+    await activate('.error-banner button');
     await wait('return !document.querySelector(".error-banner")', step);
     assert.equal(await transform(), latest);
     report.passed.push('retry preserves latest geometry');
+    if (ios) {
+      report.keyboardEvents = await js<{ count: number; allTrusted: boolean }>(
+        'return {count:window.__keyboardTrust.length,allTrusted:window.__keyboardTrust.every(Boolean)}',
+      );
+      assert(
+        report.keyboardEvents.count >= 6 && report.keyboardEvents.allTrusted,
+        'Expected trusted browser keyboard events.',
+      );
+    }
     await js('window.stress.server.stopStreams();window.stress.metrics.stop()');
     report.metrics = await js<StressMeasurement>('return window.stress.metrics.report()');
     console.log({ label, delayMs, passed: report.passed, inputs: report.metrics.inputs });
@@ -265,8 +310,13 @@ try {
         simulator: capabilities?.['safari:useSimulator'],
         device: process.env.STRESS_DEVICE_LABEL,
         environment,
-        input:
-          'SafariDriver-injected input in installed Safari; not human gestures or hardware keyboard coverage.',
+        coverage: ios
+          ? 'keyboard selection, geometry, cancellation and retry only'
+          : 'pointer and keyboard checks',
+        unverified,
+        input: ios
+          ? 'SafariDriver Element Send Keys with DOM focus setup; trusted keyboard events verified. No touch or text-entry pass is implied.'
+          : 'SafariDriver-injected input in installed Safari; not human gestures or hardware keyboard coverage.',
         reports,
       },
       null,
