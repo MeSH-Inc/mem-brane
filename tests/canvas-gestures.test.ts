@@ -154,3 +154,15 @@ it('transitions from touch pan to pinch and back without creating, selecting or 
   expect(f.commit).not.toHaveBeenCalled();
   expect(f.create).not.toHaveBeenCalled();
 });
+
+it('retains the current gesture owner when a different input device presses', () => {
+  const f = fixture();
+  f.gestures.begin(press({ kind: 'card', id: 'a' }), 'select');
+  f.gestures.move(1, { x: 140, y: 120 });
+  expect(
+    f.gestures.begin({ ...press({ kind: 'background' }), pointerId: 2, touch: true }, 'pan'),
+  ).toBe(false);
+  f.gestures.end(1, { x: 150, y: 120 });
+  expect(f.commit).toHaveBeenCalledOnce();
+  expect(f.commit).toHaveBeenCalledWith('a', { x: 150, y: 120, width: 300, height: 220 });
+});

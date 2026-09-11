@@ -65,21 +65,21 @@ Mobile defaults to **Focus**, with a full-width editor, horizontal block outline
 
 ## Local verification and development
 
-Install Chromium once before running browser checks, and repeat after a Playwright update that requires a new browser binary:
+Install the three browser engines once before running browser checks, and repeat after a Playwright update that requires new browser binaries:
 
 ```sh
-npx playwright install chromium
+npx playwright install chromium firefox webkit
 npm run verify
 ```
 
-On Linux, if browser system libraries are missing, use `npx playwright install --with-deps chromium` to install the browser and required system packages.
+On Linux, if browser system libraries are missing, use `npx playwright install --with-deps chromium firefox webkit` to install the browsers and required system packages.
 
 `npm run verify` stops at the first failure and runs, in order:
 
 1. Formatting checks.
 2. TypeScript checking and production builds for browser and server.
 3. Vitest unit and integration tests.
-4. Playwright browser tests in Chromium.
+4. Playwright browser tests: the full suite in Chromium and canvas, geometry, selection, presentation, loading and native-input checks in Firefox and WebKit.
 
 The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests include intercepted canvas APIs and an isolated built-server flow through authentication, text saving, generation, SSE reconciliation and session expiration. They do not exercise live provider accounts. The mixed-media workspace rehearsal also covers composer/title recovery, independent tabs, branching and historical provenance. Additional drills cover interrupted two-tab edits and uncertain Run/Spawn delivery across reload. Ports 4179, 4181, 4183, 4185, 4187, 4189, 4191 and 4193 must be available.
 
@@ -93,7 +93,7 @@ Development currently favors direct architectural improvements over compatibilit
 | `npm run db:migrate`   | Apply pending SQLite migrations                      |
 | `npm run db:seed`      | Create the development account and initial brane     |
 | `npm test`             | Unit and integration tests                           |
-| `npm run test:browser` | Chromium interaction tests                           |
+| `npm run test:browser` | Chromium suite and Firefox/WebKit interaction tests  |
 | `npm run typecheck`    | TypeScript validation                                |
 | `npm run format`       | Format application code, tests and documentation     |
 | `npm run format:check` | Check formatting without writing                     |
@@ -180,7 +180,7 @@ shared/             domain types, command schemas and public response contracts
 migrations/         schema changes and immutable-history guards
 scripts/            migration, seed, backup and cost reconciliation
 tests/              unit, API, migration, recovery and invariant tests
-e2e/                Chromium fixtures and interaction tests
+e2e/                browser fixtures and interaction tests
 docs/architecture/  design boundaries and invariants
 ```
 

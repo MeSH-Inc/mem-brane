@@ -19,21 +19,28 @@ surfaces use an eight-screen-pixel click tolerance. Select is the default: a hea
 click selects, Shift-click toggles, empty clicks clear, and empty drags marquee.
 Write clicks create a default-size thought; drags choose its rectangle. Pan and
 middle/right mouse drags move the viewport. Touch pans and pinches the overview.
+An additional finger joins an owned canvas touch gesture even over native content;
+touch and mouse sequences cannot take over each other's active gesture. A touch
+sequence starting inside an editor retains native scrolling and selection.
 Wheel gestures pan, with Control/Command-wheel zooming around the pointer.
 
 Drag/resize previews retain their starting geometry through incoming content
 updates. Completion commits each changed placement once. Escape, tool changes,
 blur, pointer cancellation, capture loss and unmount abort without persistence and
 restore the starting selection. Cancellation never remounts the canvas. Keyboard
-arrows move selected placements by 5 units, or 20 with Shift, outside native editors.
+Enter/Space selects the focused card; Shift+Enter/Space toggles its selection. Tab
+retains the browser's native focus traversal through cards and their controls.
+Arrow keys move selected placements by 5 units, or 20 with Shift, outside native editors.
 
 React Flow is a rendering and viewport adapter. Its selection, drag, resize,
 keyboard, wheel and pointer zoom handlers are disabled. Card pointer targeting is
 explicit even in Pan. Application resize handles and `useCanvasGesture` translate
 browser input into the gesture owner. Node geometry, selection and provenance
 edges remain projections of domain records; library measurement cannot persist
-geometry. Pure state-machine and Chromium tests exercise this interaction contract,
-including jitter, native controls, cancellation and updates during resizing.
+geometry. Pure state-machine and Chromium, Firefox and WebKit tests exercise this
+interaction contract, including jitter, native controls, cancellation and updates
+during resizing. Trusted multi-touch injection currently runs in Chromium; native
+tap tests run in all three engines. Hardware gestures require hands-on verification.
 
 Placement geometry uses optimistic concurrency. Each placement has a monotonically increasing `version`; PATCH requires that version and atomically returns the updated placement or HTTP 409. GET placement applies the same ownership checks. Migration 005 initializes existing placement versions to zero.
 

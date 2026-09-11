@@ -75,7 +75,8 @@ export class CanvasGestures {
     this.owner.preview(preview);
   }
   begin(press: Press, tool: CanvasTool): boolean {
-    if (press.button > 2 || (this.active && !press.touch)) return false;
+    if (press.button > 2 || (this.active && (!press.touch || this.gesture?.touch === false)))
+      return false;
     if (press.touch) {
       this.touches.set(press.pointerId, press.point);
       if (this.touches.size >= 2) {

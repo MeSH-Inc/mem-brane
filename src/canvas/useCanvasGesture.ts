@@ -100,7 +100,14 @@ export function useCanvasGesture(
     ...preview,
     bindings: {
       onPointerDownCapture(event: ReactPointerEvent<HTMLDivElement>) {
-        if (!(event.target instanceof Element) || event.target.closest(nativeSurface)) return;
+        if (!(event.target instanceof Element)) return;
+        // Once the canvas owns a touch sequence, an additional finger belongs
+        // to that gesture even when it lands over a native editor or control.
+        if (
+          event.target.closest(nativeSurface) &&
+          !(event.pointerType === 'touch' && gestures.active)
+        )
+          return;
         const node = event.target.closest<HTMLElement>('.react-flow__node');
         const edge = event.target.closest<HTMLElement>('[data-resize]')?.dataset.resize as
           ResizeEdge | undefined;
@@ -157,11 +164,16 @@ export function useCanvasGesture(
           return;
         const id = event.target.closest<HTMLElement>('.react-flow__node')?.dataset.id;
         if (event.key === 'Escape') callbacks.current.select([]);
-        else if ((event.key === ' ' || event.key === 'Enter') && id)
+        else if ((event.key === ' ' || event.key === 'Enter') && id) {
+          const selected = callbacks.current.selection();
           callbacks.current.select(
-            event.shiftKey ? [...new Set([...callbacks.current.selection(), id])] : [id],
+            event.shiftKey
+              ? selected.includes(id)
+                ? selected.filter((selectedId) => selectedId !== id)
+                : [...selected, id]
+              : [id],
           );
-        else if (
+        } else if (
           tool !== 'pan' &&
           ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
         ) {
