@@ -30,16 +30,16 @@ Vite serves the browser on port 5173 and proxies `/api` to the Node server on po
 ## First exploration
 
 1. Open the seeded brane or choose **New brane**.
-2. In Canvas, choose **Write** and click or drag empty space to create a thought. Type into its editor. In Focus, use the add controls instead.
-3. Choose **Spawn** on a ready artifact to develop it into a generated child. Spawn captures the source's current text and creates a new artifact with provenance; it does not read the global composer or inherit a conversation automatically.
-4. For a composed exploration, choose **Use as context**, order your references, write a prompt and submit. **Continue from here** explicitly selects a conversation's ancestor chain.
-5. Use **Save brane** to flush pending text and placement edits and save the title. Background runs continue when you navigate away.
+2. In Canvas, choose **Write** and click or drag empty space to create a thought. Type into its editor. In Focus, choose **Add → Text** instead.
+3. Choose **Develop** on an active artifact to create a generated child. Develop captures the source's current text and creates a new artifact with provenance; it does not read the global composer or inherit a conversation automatically.
+4. For a composed exploration, choose **Use as context**, order your references, write a prompt and submit. **More → Continue from here** explicitly selects a conversation's ancestor chain.
+5. Titles, text and placement changes save automatically. The composer shows saving status; failed title writes retain the draft and offer Retry. Background runs continue when you navigate away.
 
 The mock model exercises streaming and persistence but does not perform reasoning or image understanding.
 
 ## Import images and PDFs
 
-Paste a screenshot, drop files onto the canvas, or use **Image / PDF**. The **+** button in the prompt attaches files as explicit context. Text paste keeps normal editor behavior. Pending imports show previews, survive navigation and can be recovered after reload; Retry reuses the original import identity.
+Paste a screenshot, drop files onto the canvas, or choose **Add → Image / PDF**. The **+** button in the prompt attaches files as explicit context. Text paste keeps normal editor behavior. Pending imports show previews, survive navigation and can be recovered after reload; Retry reuses the original import identity.
 
 PNG, JPEG, GIF, WebP and PDF files are supported, up to 5 MiB by default. Original files are retained. PDFs expose extracted text by page and work as text context with every configured model. Scanned PDFs can use explicit enhanced extraction when the operator enables OCR and grants page credits. Embedded images are not sent as model context. Documents beyond extraction limits remain downloadable without sending partial text. Animated images are stored but require a still image for model context.
 
@@ -52,6 +52,8 @@ uploads still use local PDF.js. See [OCR admission and credits](docs/ocr-admissi
 for limits, API contracts, and operator commands.
 
 ## Canvas and Focus
+
+Brane navigation collapses from the upper-left menu. **Context · N** beside the prompt opens reference ordering; **History** opens previous runs and exact submitted inputs. Both open as dialogs without resizing the workspace. Running and failed generations remain accessible from the activity row. Card actions appear on selection, hover or keyboard focus, and stay visible on touch screens. **More → Block actions** opens snapshots, placement management and advanced geometry.
 
 | Tool   | Primary drag                                    | Other behavior                                                                      |
 | ------ | ----------------------------------------------- | ----------------------------------------------------------------------------------- |

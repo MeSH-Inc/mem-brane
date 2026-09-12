@@ -86,6 +86,7 @@ test('image paste, native text paste, mixed picker, drop, navigation and lost-re
     await expect.poll(() => requestSeen).toBe(true);
     await expect(page.getByAltText(/Preview of/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Run ↗', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Brane navigation' }).click();
     await page.getByRole('link', { name: /Import B/ }).click();
     release();
     await expect

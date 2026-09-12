@@ -74,6 +74,7 @@ export class WorkspaceController {
   private inspectionGeneration = 0;
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   private estimateTimer?: ReturnType<typeof setTimeout>;
+  private titleTimer?: ReturnType<typeof setTimeout>;
   private poll?: ReturnType<typeof setInterval>;
   private cleanups: (() => void)[] = [];
   private streamRevision = 0;
@@ -81,6 +82,7 @@ export class WorkspaceController {
   private delivering = new Set<string>();
   error = '';
   notice = '';
+  titleError = '';
   models = ['mock'];
   vision: Capabilities = {};
   budget?: Budget;
@@ -179,6 +181,7 @@ export class WorkspaceController {
   get hasPending() {
     return (
       this.commands.activeKeys().length > 0 ||
+      this.draft.title !== undefined ||
       Object.keys(this.deps.drafts.getState().drafts).length > 0 ||
       this.placementSaves.hasPending()
     );
@@ -260,6 +263,7 @@ export class WorkspaceController {
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
     clearTimeout(this.estimateTimer);
+    clearTimeout(this.titleTimer);
     clearInterval(this.poll);
     this.delivering.clear();
   }
@@ -267,6 +271,10 @@ export class WorkspaceController {
     this.requireActive();
     const previous = this.draft.continueFrom;
     this.workspace.update(patch);
+    if ('title' in patch) {
+      this.titleError = '';
+      this.scheduleTitleSave();
+    }
     this.scheduleEstimate();
     if (previous !== this.draft.continueFrom) this.loadLineage();
     this.emit();
@@ -276,10 +284,46 @@ export class WorkspaceController {
   setReferences = (references: string[]) => this.updateDraft({ references });
   setContinue = (continueFrom?: string) => this.updateDraft({ continueFrom });
   private applyState(state: BraneState) {
+    const initial = !this.serverState;
     this.placementSaves.observe(state.placements);
     this.document.install(this.textSaves.reconcile(state));
+    if (initial) this.scheduleTitleSave();
     this.emit();
   }
+  private scheduleTitleSave() {
+    clearTimeout(this.titleTimer);
+    if (this.draft.title === undefined || !this.serverState) return;
+    this.titleTimer = setTimeout(() => void this.saveTitle(), 650);
+  }
+  // Serialize title writes and drain newer edits before clearing the recoverable draft.
+  // Replica admission persists each write locally before it is synchronized remotely.
+  saveTitle = (): Promise<void> => {
+    this.requireActive();
+    clearTimeout(this.titleTimer);
+    if (this.draft.title === undefined || !this.serverState) return Promise.resolve();
+    const epoch = this.epoch;
+    this.titleError = '';
+    return this.commands
+      .run('title', async () => {
+        while (this.valid(epoch) && this.draft.title !== undefined) {
+          const title = this.draft.title;
+          if (!title.trim()) throw new Error('Enter a title.');
+          if (title !== this.serverState!.brane.title) {
+            await this.client.saveTitle(this.braneId, title);
+            if (!this.valid(epoch)) return;
+            await this.refresh();
+            if (!this.valid(epoch)) return;
+          }
+          if (this.draft.title === title) this.updateDraft({ title: undefined });
+        }
+      })
+      .catch((error) => {
+        if (this.valid(epoch)) {
+          this.titleError = error instanceof Error ? error.message : 'Could not save the title';
+          this.emit();
+        }
+      });
+  };
   refresh = async () => {
     this.requireActive();
     const epoch = this.epoch,
@@ -530,23 +574,6 @@ export class WorkspaceController {
   geometry = (id: string, geometry: Geometry) => {
     void this.saveGeometry(id, geometry).catch(() => {});
   };
-  save = () =>
-    this.command('save', async (progress) => {
-      const epoch = this.epoch,
-        title = this.draft.title ?? this.serverState!.brane.title;
-      // Capture every text save before waiting for geometry or another entity.
-      progress('waiting');
-      await Promise.all([this.placementSaves.flush(), this.flush()]);
-      if (!this.valid(epoch)) return;
-      progress('working');
-      await this.client.saveTitle(this.braneId, title);
-      if (!this.valid(epoch)) return;
-      progress('refreshing');
-      await this.refresh();
-      if (!this.valid(epoch)) return;
-      if (this.draft.title === title) this.updateDraft({ title: undefined });
-      this.notice = 'Brane saved on this device';
-    }).catch(() => {});
   private edits(ids: string[], validate = true): Edit[] {
     const drafts = this.deps.drafts.getState().draftRecords;
     return [...new Set(ids)].flatMap((id) => {

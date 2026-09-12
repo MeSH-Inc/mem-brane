@@ -238,7 +238,8 @@ it('disposal cancels timers and ignores delayed reads, while navigation preserve
     references: [f.block],
     title: 'Local title',
   });
-  await next.save();
+  await next.flush();
+  await next.saveTitle();
   expect(f.state.blocks[0].content.text).toBe('Unsaved text');
   expect(f.state.brane.title).toBe('Local title');
   expect(next.draft.title).toBeUndefined();
@@ -605,4 +606,90 @@ it('reports a failed cancellation and permits an explicit retry without duplicat
   await f.c.cancelRun('active');
   expect(f.sent.filter((r) => r.path.endsWith('/cancel'))).toHaveLength(2);
   expect(f.c.error).toBe('');
+});
+
+it('autosaves titles in order and preserves edits made during an earlier acknowledgement', async () => {
+  const f = await fixture();
+  const gate = deferred<void>();
+  let held = false;
+  f.intercept((path, body) => {
+    if (path === `/branes/${f.brane}` && body && !held) {
+      held = true;
+      return gate.promise;
+    }
+  });
+  f.c.updateDraft({ title: 'First title' });
+  expect(f.c.hasPending).toBe(true);
+  await vi.advanceTimersByTimeAsync(650);
+  f.c.updateDraft({ title: 'Second title' });
+  await vi.advanceTimersByTimeAsync(650);
+  expect(
+    f.sent.filter((r) => r.path === `/branes/${f.brane}` && r.body).map((r) => r.body.title),
+  ).toEqual(['First title']);
+  f.state.brane.title = 'First title';
+  gate.resolve();
+  await settle();
+  expect(
+    f.sent.filter((r) => r.path === `/branes/${f.brane}` && r.body).map((r) => r.body.title),
+  ).toEqual(['First title', 'Second title']);
+  expect(f.state.brane.title).toBe('Second title');
+  expect(f.c.draft.title).toBeUndefined();
+  expect(f.c.hasPending).toBe(false);
+});
+
+it('preserves failed title writes and resumes autosave after reopening the workspace', async () => {
+  const f = await fixture();
+  f.intercept((path, body) =>
+    path === `/branes/${f.brane}` && body
+      ? Promise.reject(new Error('Storage unavailable'))
+      : undefined,
+  );
+  f.c.updateDraft({ title: 'Recover this title' });
+  await vi.advanceTimersByTimeAsync(650);
+  expect(f.c.titleError).toBe('Storage unavailable');
+  expect(f.c.draft.title).toBe('Recover this title');
+  f.c.dispose();
+  f.intercept(undefined);
+  const next = f.make();
+  next.start();
+  await settle();
+  await vi.advanceTimersByTimeAsync(650);
+  expect(f.state.brane.title).toBe('Recover this title');
+  expect(next.draft.title).toBeUndefined();
+  expect(next.titleError).toBe('');
+});
+
+it('does not clear a reopened title draft when a disposed controller receives an acknowledgement', async () => {
+  const f = await fixture();
+  const gate = deferred<void>();
+  f.intercept((path, body) => (path === `/branes/${f.brane}` && body ? gate.promise : undefined));
+  f.c.updateDraft({ title: 'Original title' });
+  const saving = f.c.saveTitle();
+  f.c.dispose();
+  const next = f.make();
+  next.start();
+  await settle();
+  next.updateDraft({ title: 'Newer title' });
+  gate.resolve();
+  await saving;
+  expect(next.draft.title).toBe('Newer title');
+  expect(f.make().draft.title).toBe('Newer title');
+});
+
+it('coalesces title typing and reports an empty title without losing the draft', async () => {
+  const f = await fixture();
+  f.c.updateDraft({ title: 'Intermediate' });
+  f.c.updateDraft({ title: 'Latest' });
+  await vi.advanceTimersByTimeAsync(650);
+  expect(
+    f.sent.filter((r) => r.path === `/branes/${f.brane}` && r.body).map((r) => r.body.title),
+  ).toEqual(['Latest']);
+  f.c.updateDraft({ title: '' });
+  await f.c.saveTitle();
+  expect(f.c.titleError).toBe('Enter a title.');
+  expect(f.c.draft.title).toBe('');
+  f.c.updateDraft({ title: 'Valid title' });
+  await f.c.saveTitle();
+  expect(f.c.titleError).toBe('');
+  expect(f.state.brane.title).toBe('Valid title');
 });

@@ -60,9 +60,7 @@ test('installed shell reloads offline, retains edits and creation, and reconcile
     expect(manifest.display).toBe('standalone');
     await context.setOffline(true);
     await editor.fill('My offline thought');
-    await expect(page.getByRole('status')).toHaveText(
-      'Saved on this device · synchronization pending',
-    );
+    await expect(page.getByRole('status')).toHaveText('Saved on device · Syncing…');
     await page.reload();
     await expect(editor).toHaveValue('My offline thought');
     await expect(page.getByLabel('App connection and updates')).toContainText('Disconnected');
@@ -87,16 +85,16 @@ test('installed shell reloads offline, retains edits and creation, and reconcile
       )
       .toBe('My offline thought');
     await context.setOffline(true);
+    await page.getByRole('button', { name: 'Brane navigation' }).click();
     await page.getByRole('button', { name: /New brane/ }).click();
     await expect(page.getByRole('textbox', { name: 'Brane title' })).toHaveValue('Untitled brane');
     await page.reload();
     await expect(page.getByRole('textbox', { name: 'Brane title' })).toHaveValue('Untitled brane');
     await page.getByRole('button', { name: 'Focus', exact: true }).click();
+    await page.getByRole('button', { name: '＋ Add', exact: true }).click();
     await page.getByRole('button', { name: '＋ Text', exact: true }).click();
     await page.getByRole('textbox', { name: 'Block text', exact: true }).fill('Created offline');
-    await expect(page.getByRole('status')).toHaveText(
-      'Saved on this device · synchronization pending',
-    );
+    await expect(page.getByRole('status')).toHaveText('Saved on device · Syncing…');
     await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('button', { name: 'Block actions', exact: true }).click();
     await page.getByText('Placements in this brane (1)', { exact: true }).click();

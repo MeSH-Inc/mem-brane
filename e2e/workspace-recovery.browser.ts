@@ -53,7 +53,6 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
     await page.goto(`${origin}/b/${brane.id}?view=focus`);
     await expect(page.getByRole('textbox', { name: 'Block text', exact: true })).toBeVisible();
     const prompt = page.getByRole('textbox', { name: 'Run prompt' });
-    const title = page.getByRole('textbox', { name: 'Brane title' });
     await page
       .getByRole('textbox', { name: 'Block text', exact: true })
       .fill('Field notes: the north trail floods after heavy rain.');
@@ -67,56 +66,34 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
       .toBe('Field notes: the north trail floods after heavy rain.');
     await page.getByRole('button', { name: '+ Use as context', exact: true }).click();
     await prompt.fill('Plan a safe route using the evidence');
-    await title.fill('Unfinished field study');
     await page.reload();
     await expect(prompt).toHaveValue('Plan a safe route using the evidence');
-    await expect(title).toHaveValue('Unfinished field study');
     await expect(page.locator('.context-chips .chip')).toHaveCount(1);
 
     const other = await page.context().newPage();
     await other.goto(`${origin}/b/${brane.id}?view=focus`);
     await expect(other.getByRole('textbox', { name: 'Run prompt' })).toHaveValue('');
     await other.getByRole('textbox', { name: 'Run prompt' }).fill('Independent tab question');
-    await other.getByRole('textbox', { name: 'Brane title' }).fill('Independent title');
     const second = await (
       await page.request.post(`${origin}/api/branes`, { data: { title: 'Separate workspace' } })
     ).json();
     await page.goto(`${origin}/b/${second.id}?view=focus`);
     await expect(prompt).toHaveValue('');
-    await expect(title).toHaveValue('Separate workspace');
     await page.goto(`${origin}/b/${brane.id}?view=focus`);
     await expect(prompt).toHaveValue('Plan a safe route using the evidence');
-    await expect(title).toHaveValue('Unfinished field study');
 
-    // A save acknowledgement must not erase an edit typed while the request is pending.
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let saving = false;
-    await page.context().route('**/api/sync/commands', async (route) => {
-      if (route.request().postDataJSON().command.type !== 'brane.title') return route.continue();
-      saving = true;
-      await gate;
-      await route.continue();
-    });
-    await page.getByRole('button', { name: 'Save brane', exact: true }).click();
-    await expect.poll(() => saving).toBe(true);
-    await title.fill('Newer unfinished title');
-    release();
-    await expect(page.getByRole('status')).toContainText('Brane saved');
-    await page.reload();
-    await expect(title).toHaveValue('Newer unfinished title');
     await other.reload();
     await expect(other.getByRole('textbox', { name: 'Run prompt' })).toHaveValue(
       'Independent tab question',
     );
-    await expect(other.getByRole('textbox', { name: 'Brane title' })).toHaveValue(
-      'Independent title',
-    );
     await other.close();
 
-    const read = async () => (await page.request.get(`${origin}/api/branes/${brane.id}`)).json();
+    const read = async () => {
+      const response = await page.request.get(`${origin}/api/branes/${brane.id}`);
+      if (!response.ok())
+        throw new Error(`Workspace read failed: ${response.status()} ${await response.text()}`);
+      return response.json();
+    };
     // Capture -> Spawn: local note edits are frozen before generation.
     await page.getByRole('button', { name: 'Develop', exact: true }).click();
     await expect.poll(async () => (await read()).runs[0]?.status).toBe('completed');

@@ -84,7 +84,6 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     state,
     workspace,
     error,
-    notice,
     models,
     busy,
     inspected,
@@ -108,7 +107,6 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     edit,
     saveGeometry,
     geometry,
-    save,
     run,
     setError,
   } = controller;
@@ -238,11 +236,19 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           <input
             aria-label="Brane title"
             className="brane-title"
+            maxLength={200}
             value={titleDraft ?? state.brane.title}
             onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={() => void controller.saveTitle()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur();
+            }}
           />
-          {titleDraft !== undefined && titleDraft !== state.brane.title && (
-            <small className="muted">Unsaved title · choose Save brane to publish this edit</small>
+          {controller.titleError && (
+            <div className="title-error" role="alert">
+              Title not saved: {controller.titleError}
+              <button onClick={() => void controller.saveTitle()}>Retry title save</button>
+            </div>
           )}
         </div>
         <div className="toolbar-actions">
@@ -272,16 +278,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               Focus
             </button>
           </div>
-          <CommandButton
-            tasks={commands}
-            taskKey="save"
-            pendingLabel="Saving…"
-            onClick={() => void save()}
-          >
-            Save brane
-          </CommandButton>
           <button
-            onClick={() => {
+            onClick={(event) => {
+              event.currentTarget.focus();
               setInspectorTab('history');
               ui.setInspector(true);
             }}
@@ -625,7 +624,8 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
             <div className="context-chips">
               <button
                 className="context-toggle"
-                onClick={() => {
+                onClick={(event) => {
+                  event.currentTarget.focus();
                   setInspectorTab('context');
                   ui.setInspector(true);
                 }}
@@ -737,12 +737,20 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 </span>
               )}
               <span className="save-notice" role="status">
-                {commands.activeKeys().some((key) => key.startsWith('create:'))
-                  ? 'Creating thought…'
-                  : Object.keys(ui.drafts).length || placementSaves.hasPending()
-                    ? 'Unsaved edits'
+                {controller.titleError ||
+                placementFailures.length ||
+                Object.keys(ui.draftRecords).some((id) => {
+                  const block = state.blocks.find((block) => block.id === id);
+                  return block && draftDisposition(ui.draftRecords[id], block) === 'conflict';
+                })
+                  ? 'Changes need attention'
+                  : titleDraft !== undefined ||
+                      Object.keys(ui.drafts).length ||
+                      placementSaves.hasPending() ||
+                      commands.pending('title')
+                    ? 'Saving…'
                     : sync.pending
-                      ? 'Saved on this device · synchronization pending'
+                      ? 'Saved on device · Syncing…'
                       : 'Saved'}
               </span>
             </div>
