@@ -136,7 +136,9 @@ export class WorkspaceReplica {
           );
       }
       if (this.actor !== actor) throw new Error('Account changed. Reopen this workspace.');
-      return this.remote(path, body, method, actor);
+      const result = await this.remote(path, body, method, actor);
+      if (/^\/ocr\/jobs\/[^/]+\/apply$/.test(path)) await this.changed(actor);
+      return result;
     }
     // Ensure destinations exist locally before entering the atomic mutation.
     if (

@@ -1,13 +1,16 @@
 import { useAssetUrl } from './LocalAsset';
 import { useEffect, useState } from 'react';
 import { client } from '../services/client';
+import { EnhancedPdf } from './EnhancedPdf';
 import type { PdfContent as Pdf, PdfSummary, PdfRepresentation } from '../../shared/types/domain';
 export function PdfContent({
   content,
   showProvenance = false,
+  block,
 }: {
   content: Pdf | PdfSummary;
   showProvenance?: boolean;
+  block?: { id: string; version: number };
 }) {
   const original = useAssetUrl(content.assetId);
   const identity = 'representationId' in content ? content.representationId : undefined;
@@ -84,6 +87,15 @@ export function PdfContent({
         </>
       ) : (
         <p className="error">Not available as model context: {representation.reason}</p>
+      )}
+      {block && (
+        <EnhancedPdf
+          key={`${block.id}:${content.assetId}`}
+          assetId={content.assetId}
+          blockId={block.id}
+          version={block.version}
+          appliedPolicy={content.extractionPolicy}
+        />
       )}
     </div>
   );

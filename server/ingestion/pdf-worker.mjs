@@ -48,7 +48,7 @@ async function extract(bytes, policy) {
     }
     if (!pages.some((page) => page.text)) {
       return unavailable(
-        'This PDF has no extractable text. OCR is not available; the original PDF is retained.',
+        'This PDF has no extractable text and needs OCR. The original PDF is retained.',
       );
     }
     return {

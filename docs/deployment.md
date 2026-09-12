@@ -85,7 +85,10 @@ Paid admission requires positive `GLOBAL_DAILY_SPEND_LIMIT` and
 these shared model/OCR operator budgets. Defaults keep paid execution disabled.
 Optional `MODEL_DAILY_SPEND_LIMIT` and `MODEL_MONTHLY_SPEND_LIMIT` add model-category
 ceilings. OCR category ceilings default to $10/day and $100/month; paid OCR remains
-disabled until a provider is connected. See [OCR controls](ocr-admission.md).
+disabled by default. Explicit `OCR_PROVIDER=mistral`, a server `MISTRAL_API_KEY`,
+positive shared/category budgets and granted credits are required. Follow the
+deliberately authorized one-page pilot in [OCR controls](ocr-admission.md) before
+activating paid processing; local verification uses a blocked-network fixture.
 
 `RUN_QUEUE_LIMIT` caps active/queued generations (default 8). Imports have global
 and actor limits (`IMPORT_QUEUE_LIMIT=6`, `USER_IMPORT_LIMIT=3`). Image bytes,
@@ -197,7 +200,9 @@ configuration structure without printing secrets or making provider requests.
 Live generation requires `OPENAI_API_KEY`, allowed model IDs, operator-verified
 pricing/capabilities and positive user/global daily/global monthly budgets. Local
 file storage needs no additional key. R2 requires all four R2 settings. Enhanced
-OCR, checkout and email recovery still have no enabled provider configuration.
+OCR now has a pinned provider adapter but remains disabled by default; its live
+credential, recognition and billing check has not been run. Checkout and email
+recovery still have no enabled provider configuration.
 
 `npm run smoke:live` exercises the deployed API under a test account. Supply
 `SMOKE_ORIGIN`, `SMOKE_EMAIL`, `SMOKE_PASSWORD`, and optionally `SMOKE_MODEL` through

@@ -6,6 +6,9 @@ import { DomainError, requireOwned } from '../domain/access.js';
 import { money } from '../domain/money.js';
 import { inspectPdf } from '../ingestion/pdf.js';
 import { policyIdentity } from '../ingestion/policy.js';
+import { ocrResultSchema } from '../../shared/ocr.js';
+import { abortable } from '../app/abort.js';
+import { decodeContent, encodeContent } from './representations.js';
 import type { AssetStore } from '../storage/assets.js';
 import { reconcileSpend, reserveSpend, spendHeadroom, type CategoryLimits } from './spend.js';
 
@@ -210,16 +213,81 @@ export class OcrService {
     if (job.owner_id !== actor) throw new DomainError(404, 'OCR job not found');
     return {
       id: job.id,
+      assetId: job.asset_id,
+      policyId: job.policy_id,
+      policy: this.policySummary(ocrPolicySchema.parse(JSON.parse(job.policy_json))),
       status: job.status,
       pages: job.pages,
       committedPages: job.credit_pages,
       error: job.error,
     };
   }
+  private policySummary(policy: OcrPolicy) {
+    return { provider: policy.provider, model: policy.model, version: policy.version };
+  }
+  assetState(actor: string, assetId: string) {
+    const asset = this.asset(actor, assetId);
+    const latest = this.db
+      .prepare(
+        'SELECT id FROM ocr_jobs WHERE owner_id=? AND asset_digest=? ORDER BY created_at DESC,id DESC LIMIT 1',
+      )
+      .get(actor, asset.digest) as { id: string } | undefined;
+    return {
+      enabled: this.enabled,
+      currentPolicyId: this.identity?.id ?? null,
+      credits: ocrCredits(this.db, actor),
+      job: latest ? this.read(actor, latest.id) : null,
+    };
+  }
   result(actor: string, id: string) {
     this.read(actor, id);
     const job = this.job(id);
     return job.result_json === null ? null : (JSON.parse(job.result_json) as unknown);
+  }
+  // Adoption is separate from paid execution: preserve existing frozen revisions and
+  // change only the explicitly selected PDF block. A lost acknowledgement is idempotent.
+  apply(actor: string, id: string, blockId: string, version: number) {
+    safeInt.parse(version);
+    return this.db
+      .transaction(() => {
+        this.read(actor, id);
+        const job = this.job(id);
+        if (job.status !== 'succeeded')
+          throw new DomainError(409, 'Verified extraction is not ready');
+        requireOwned(this.db, 'blocks', actor, blockId);
+        const live = this.db
+          .prepare('SELECT content_json,version FROM block_live_state WHERE block_id=?')
+          .get(blockId) as { content_json: string; version: number } | undefined;
+        if (!live) throw new DomainError(409, 'Choose an imported PDF block');
+        const content = decodeContent(this.db, live.content_json);
+        if (content.format !== 'pdf' || content.assetHash !== job.asset_digest)
+          throw new DomainError(409, 'Extraction belongs to a different PDF');
+        if (content.extractionPolicy === job.policy_id) return { version: live.version };
+        if (live.version !== version)
+          throw new DomainError(409, 'This PDF changed; reload before applying extraction');
+        const normalized = ocrResultSchema.parse(this.result(actor, id));
+        const json = encodeContent(this.db, actor, {
+          ...content,
+          extractionPolicy: job.policy_id,
+          pageCount: job.pages,
+          representation: {
+            kind: 'pdf-text-v1' as const,
+            status: 'ready' as const,
+            extractor: `${normalized.evidence.provider}/${normalized.evidence.model}`,
+            pages: normalized.document.pages.map((page) => ({
+              number: page.page,
+              text: page.markdown,
+            })),
+          },
+        });
+        this.db
+          .prepare(
+            'UPDATE block_live_state SET content_json=?,version=version+1,updated_at=? WHERE block_id=?',
+          )
+          .run(json, Date.now(), blockId);
+        return { version: live.version + 1 };
+      })
+      .immediate();
   }
   private asset(actor: string, assetId: string) {
     const asset = requireOwned(this.db, 'assets', actor, assetId);
@@ -250,6 +318,7 @@ export class OcrService {
     if (cached)
       return {
         policyId: this.identity!.id,
+        policy: this.policySummary(this.policy!),
         pages: this.job(cached.id).pages,
         requiredCredits: 0,
         job: this.read(actor, cached.id),
@@ -258,6 +327,7 @@ export class OcrService {
     const { pages } = await this.inspect(actor, assetId);
     return {
       policyId: this.identity!.id,
+      policy: this.policySummary(this.policy!),
       pages,
       requiredCredits: pages,
       job: null,
@@ -419,7 +489,8 @@ export class OcrService {
       .immediate();
   }
   // One claim/attempt per job. Queued work survives restart; dispatched work never auto-replays.
-  async runNext(): Promise<boolean> {
+  async runNext(signal?: AbortSignal, canDispatch: () => boolean = () => true): Promise<boolean> {
+    if (signal?.aborted || !canDispatch()) return false;
     this.requireEnabled();
     this.recover();
     const claimed = this.db
@@ -450,6 +521,7 @@ export class OcrService {
     if (!claimed) return false;
     let dispatched = false;
     const controller = new AbortController();
+    const attemptSignal = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
@@ -460,24 +532,32 @@ export class OcrService {
     try {
       const work = async () => {
         const asset = this.asset(claimed.owner_id, claimed.asset_id);
-        const bytes = await this.store.get(claimed.asset_id, controller.signal);
+        const bytes = await this.store.get(claimed.asset_id, attemptSignal);
         if (bytes.byteLength !== asset.size || hash(bytes) !== claimed.asset_digest)
           throw new Error('PDF bytes failed integrity verification');
-        controller.signal.throwIfAborted();
+        attemptSignal.throwIfAborted();
+        if (!canDispatch()) throw new Error('OCR dispatch is paused');
         dispatched = true;
         return this.provider!.parse({
           bytes,
           pages: claimed.pages,
           policy: ocrPolicySchema.parse(JSON.parse(claimed.policy_json)),
           jobId: claimed.id,
-          signal: controller.signal,
+          signal: attemptSignal,
         });
       };
-      const response = await Promise.race([work(), deadline]);
+      const response = await abortable(Promise.race([work(), deadline]), attemptSignal);
       const billedPages = safeInt.max(claimed.pages).parse(response.billedPages);
       const json = JSON.stringify(response.result);
       if (!json || Buffer.byteLength(json) > this.limits.maxResultBytes)
         throw new Error('Invalid or oversized OCR result');
+      const result = ocrResultSchema.parse(response.result);
+      if (
+        result.document.pages.length !== claimed.pages ||
+        result.evidence.provider !== this.policy!.provider ||
+        result.evidence.model !== this.policy!.model
+      )
+        throw new Error('OCR result does not match the frozen document and parser');
       this.db
         .transaction(() => {
           const changed = this.db

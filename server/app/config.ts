@@ -29,6 +29,7 @@ const env = z
     MODEL_MONTHLY_SPEND_LIMIT: z.coerce.number().nonnegative().optional(),
     OCR_DAILY_SPEND_LIMIT: z.coerce.number().nonnegative().default(10),
     OCR_MONTHLY_SPEND_LIMIT: z.coerce.number().nonnegative().default(100),
+    OCR_PROVIDER: z.enum(['disabled', 'mistral']).default('disabled'),
     GLOBAL_DAILY_SPEND_LIMIT: z.coerce.number().nonnegative().default(0),
     CHECKPOINT_INTERVAL_MS: positive(1000),
     CHECKPOINT_CHARACTERS: positive(256),

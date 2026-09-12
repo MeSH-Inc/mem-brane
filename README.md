@@ -41,10 +41,12 @@ The mock model exercises streaming and persistence but does not perform reasonin
 
 Paste a screenshot, drop files onto the canvas, or use **Image / PDF**. The **+** button in the prompt attaches files as explicit context. Text paste keeps normal editor behavior. Pending imports show previews, survive navigation and can be recovered after reload; Retry reuses the original import identity.
 
-PNG, JPEG, GIF, WebP and PDF files are supported, up to 5 MiB by default. Original files are retained. PDFs expose extracted text by page and work as text context with every configured model. PDF images, diagrams and layout are not included; scanned PDFs need OCR, which is not yet supported. Documents beyond extraction limits remain downloadable without sending partial text. Animated images are stored but require a still image for model context.
+PNG, JPEG, GIF, WebP and PDF files are supported, up to 5 MiB by default. Original files are retained. PDFs expose extracted text by page and work as text context with every configured model. Scanned PDFs can use explicit enhanced extraction when the operator enables OCR and grants page credits. Embedded images are not sent as model context. Documents beyond extraction limits remain downloadable without sending partial text. Animated images are stored but require a still image for model context.
 
-The enhanced-OCR admission layer is implemented but disabled: no paid OCR provider or
-checkout is connected. It provides a shared model/OCR spend ledger, one-time invited
+Enhanced PDF extraction has a pinned Mistral OCR 4.1 adapter, explicit page-credit
+confirmation, durable execution, page preview and separate adoption into future
+model context. It remains disabled by default and no live paid call has been run.
+It uses a shared model/OCR spend ledger, one-time invited
 trial grants, operator-verified prepaid credits, and durable parsing jobs. Ordinary
 uploads still use local PDF.js. See [OCR admission and credits](docs/ocr-admission.md)
 for limits, API contracts, and operator commands.

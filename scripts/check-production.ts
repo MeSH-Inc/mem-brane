@@ -10,6 +10,19 @@ const secret = process.env.BETTER_AUTH_SECRET ?? '';
 if (secret.length < 32 || secret.startsWith('replace-'))
   issues.push('Generate BETTER_AUTH_SECRET with at least 32 random bytes.');
 const paid = config.models.filter((model) => model !== 'mock');
+if (config.OCR_PROVIDER !== 'disabled') {
+  if (!process.env.MISTRAL_API_KEY || /\s/.test(process.env.MISTRAL_API_KEY))
+    issues.push('Set a valid server-side MISTRAL_API_KEY for the selected OCR provider.');
+  if (
+    ![
+      config.GLOBAL_DAILY_SPEND_LIMIT,
+      config.GLOBAL_MONTHLY_SPEND_LIMIT,
+      config.OCR_DAILY_SPEND_LIMIT,
+      config.OCR_MONTHLY_SPEND_LIMIT,
+    ].every((value) => value > 0)
+  )
+    issues.push('Enhanced OCR requires positive shared and category daily/monthly budgets.');
+}
 if (paid.length) {
   if (!process.env.OPENAI_API_KEY) issues.push('Set OPENAI_API_KEY on the server.');
   if (

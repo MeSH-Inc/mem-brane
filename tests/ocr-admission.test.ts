@@ -4,7 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { openDatabase, type DB } from '../server/db';
-import { uid, createBrane, revisions } from '../server/services/content';
+import {
+  uid,
+  createBrane,
+  revisions,
+  createBlock,
+  readRevision,
+  readBrane,
+} from '../server/services/content';
+import { OcrWorker } from '../server/jobs/ocr-worker';
 import { submitRun } from '../server/services/runs';
 import { budgetState } from '../server/services/costs';
 import { committedSpend } from '../server/services/spend';
@@ -18,6 +26,7 @@ import {
 } from '../server/services/ocr';
 import type { AssetStore } from '../server/storage/assets';
 import { pdfFixture } from './fixtures/pdf';
+import { ocrResult } from './fixtures/ocr';
 import { createApi } from '../server/api';
 import { EventHub } from '../server/sse/hub';
 import type { createAuth } from '../server/auth';
@@ -49,7 +58,7 @@ const limits: OcrLimits = {
 };
 const parse = vi.fn<OcrProvider['parse']>(async ({ pages }) => ({
   billedPages: pages,
-  result: { text: 'Verified extraction' },
+  result: ocrResult(pages),
 }));
 const provider: OcrProvider = { policy, parse };
 const user = () => {
@@ -101,7 +110,7 @@ beforeEach(() => {
   parse.mockReset();
   parse.mockImplementation(async ({ pages }) => ({
     billedPages: pages,
-    result: { text: 'Verified extraction' },
+    result: ocrResult(pages),
   }));
 });
 afterEach(() => {
@@ -276,7 +285,7 @@ it('settles extraction once and serves the persisted result without another char
     job = await submit(s, asset(2));
   expect(ocrCredits(db, actor).availablePages).toBe(498);
   await s.runNext();
-  expect(s.result(actor, job.id)).toEqual({ text: 'Verified extraction' });
+  expect(s.result(actor, job.id)).toEqual(ocrResult(2));
   expect(
     db.prepare('SELECT status,confirmed_microusd FROM spend_commitments WHERE id=?').get(job.id),
   ).toEqual({ status: 'confirmed', confirmed_microusd: 8000 });
@@ -300,7 +309,7 @@ it('limits dispatch to one active job per account and two globally', async () =>
   });
   parse.mockImplementation(async ({ pages }) => {
     await gate;
-    return { billedPages: pages, result: 'done' };
+    return { billedPages: pages, result: ocrResult(pages) };
   });
   const a = s.runNext(),
     b = s.runNext();
@@ -461,4 +470,156 @@ it('rolls back job admission if the durable receipt cannot be written', async ()
   expect(ocrCredits(db, actor).committedPages).toBe(0);
   expect(db.prepare('SELECT * FROM spend_commitments').all()).toEqual([]);
   expect(db.prepare('SELECT * FROM ocr_jobs').all()).toEqual([]);
+});
+
+it('applies verified pages to one owned block, preserving frozen context and replaying lost acknowledgements', async () => {
+  grant();
+  const s = service(),
+    id = asset(2),
+    brane = createBrane(db, actor);
+  const metadata = db.prepare('SELECT digest FROM assets WHERE id=?').get(id) as { digest: string };
+  const content = {
+    format: 'pdf' as const,
+    text: 'Original',
+    filename: 'Research.pdf',
+    assetId: id,
+    assetHash: metadata.digest,
+    mimeType: 'application/pdf' as const,
+    pageCount: 2,
+    representation: {
+      kind: 'pdf-text-v1' as const,
+      extractor: 'local',
+      status: 'ready' as const,
+      pages: [
+        { number: 1, text: 'Original first page' },
+        { number: 2, text: 'Original second page' },
+      ],
+    },
+  };
+  const selected = createBlock(db, actor, 'pdf', content, brane.id);
+  const unchanged = createBlock(db, actor, 'pdf', content, brane.id);
+  const frozen = revisions(db).snapshotBlock(actor, selected.id);
+  const job = await submit(s, id);
+  expect(() => s.apply(actor, job.id, selected.id, 0)).toThrow('not ready');
+  await s.runNext();
+  const disabled = new OcrService(db, store);
+  expect(disabled.assetState(actor, id)).toMatchObject({
+    enabled: false,
+    job: { id: job.id, status: 'succeeded' },
+  });
+  expect(() => disabled.apply(user(), job.id, selected.id, 0)).toThrow('not found');
+  expect(() => disabled.apply(actor, job.id, selected.id, 1)).toThrow('changed');
+  expect(disabled.apply(actor, job.id, selected.id, 0)).toEqual({ version: 1 });
+  expect(disabled.apply(actor, job.id, selected.id, 0)).toEqual({ version: 1 });
+  const revised = revisions(db).snapshotBlock(actor, selected.id);
+  expect(revised.id).not.toBe(frozen.id);
+  expect(revised.content).toMatchObject({
+    extractionPolicy: job.policyId,
+    representation: {
+      extractor: 'test/ocr-test',
+      pages: [
+        { number: 1, text: 'Verified extraction 1' },
+        { number: 2, text: 'Verified extraction 2' },
+      ],
+    },
+  });
+  expect(readRevision(db, actor, frozen.id).content).toEqual(content);
+  expect(revisions(db).snapshotBlock(actor, unchanged.id).content).toEqual(content);
+  expect(
+    readBrane(db, actor, brane.id).blocks.find((b) => b.id === selected.id)?.content,
+  ).toMatchObject({ representation: { status: 'ready' } });
+  expect(parse).toHaveBeenCalledTimes(1);
+  expect(() => db.prepare("UPDATE ocr_jobs SET result_json='{}' WHERE id=?").run(job.id)).toThrow(
+    'immutable',
+  );
+  expect(() => db.prepare("UPDATE ocr_jobs SET status='queued' WHERE id=?").run(job.id)).toThrow(
+    'terminal',
+  );
+});
+
+it('rejects wrong-document adoption and malformed normalized page identities', async () => {
+  grant();
+  const s = service(),
+    id = asset(),
+    job = await submit(s, id);
+  const wrong = createBlock(db, actor, 'text', { format: 'text', text: 'Different document' });
+  await s.runNext();
+  expect(() => s.apply(actor, job.id, wrong.id, 0)).toThrow('different PDF');
+  const bad = await submit(s);
+  parse.mockResolvedValue({ billedPages: 1, result: ocrResult(2) });
+  await s.runNext();
+  expect(s.read(actor, bad.id).status).toBe('uncertain');
+  expect(ocrCredits(db, actor).committedPages).toBe(2);
+});
+
+it('pauses worker claims at the storage gate, aborts dispatched work on shutdown and never replays', async () => {
+  grant();
+  const s = service(),
+    job = await submit(s);
+  let allowed = false;
+  const fatal = vi.fn(),
+    worker = new OcrWorker(s, () => allowed, fatal);
+  worker.tick();
+  expect(s.read(actor, job.id).status).toBe('queued');
+  let signal: AbortSignal | undefined;
+  parse.mockImplementation(async (request) => {
+    signal = request.signal;
+    return new Promise(() => {});
+  });
+  allowed = true;
+  worker.tick();
+  await expect.poll(() => parse.mock.calls.length).toBe(1);
+  await worker.stop();
+  expect(signal?.aborted).toBe(true);
+  expect(s.read(actor, job.id).status).toBe('uncertain');
+  expect(ocrCredits(db, actor).committedPages).toBe(1);
+  expect(await s.runNext()).toBe(false);
+  expect(fatal).not.toHaveBeenCalled();
+});
+
+it('shutdown while preparation ignores abort releases liabilities and fences late dispatch', async () => {
+  grant();
+  const id = asset(),
+    initial = service(),
+    job = await submit(initial, id);
+  let release!: (bytes: Uint8Array) => void;
+  const pendingStore = {
+    ...store,
+    get: vi.fn(
+      () =>
+        new Promise<Uint8Array>((resolve) => {
+          release = resolve;
+        }),
+    ),
+  };
+  const s = new OcrService(db, pendingStore, provider, limits);
+  const worker = new OcrWorker(s, () => true, vi.fn());
+  worker.tick();
+  await expect.poll(() => pendingStore.get.mock.calls.length).toBe(1);
+  await worker.stop();
+  expect(s.read(actor, job.id).status).toBe('failed');
+  expect(ocrCredits(db, actor).committedPages).toBe(0);
+  release(objects.get(id)!);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(parse).not.toHaveBeenCalled();
+});
+
+it('a disabled executor recovers expired attempts only while maintenance writes are allowed', async () => {
+  grant();
+  const job = await submit(service());
+  db.prepare("UPDATE ocr_jobs SET status='running',attempt_id=?,deadline=1 WHERE id=?").run(
+    uid(),
+    job.id,
+  );
+  const s = new OcrService(db, store),
+    denied = new OcrWorker(s, () => false, vi.fn());
+  denied.tick();
+  expect(s.read(actor, job.id).status).toBe('running');
+  const allowed = new OcrWorker(s, () => true, vi.fn());
+  allowed.tick();
+  expect(s.read(actor, job.id).status).toBe('uncertain');
+  expect(parse).not.toHaveBeenCalled();
+  await allowed.stop();
+  await denied.stop();
 });

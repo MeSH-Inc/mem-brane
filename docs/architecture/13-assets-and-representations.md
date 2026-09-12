@@ -18,9 +18,14 @@ pinned to the old result.
 
 Image dimensions and PDF page text live in representation payloads. PDF
 `ready`/`unavailable` describes the immutable extraction outcome, not mutable job
-progress. Import operations own pending/ready delivery progress. Extraction runs
-synchronously in the bounded import operation, with PDF parsing in a bounded worker;
-there is no additional extraction queue or duplicated job state.
+progress. Import operations own pending/ready delivery progress. Local extraction
+runs synchronously in the bounded import operation, with PDF parsing in a bounded
+worker. Explicit enhanced PDF extraction has its own durable paid job and held
+page credits; it does not alter the import receipt or original bytes. See the
+[OCR admission boundary](../ocr-admission.md). Applying a verified job chooses a
+new representation for one PDF block with version checking, leaving frozen
+revisions and run inputs unchanged. Enhanced pages remain outside workspace
+summaries and are expanded only at explicit page/context reads.
 
 Workspace reads use an immutable summary projection for PDF metadata and omit page
 text. The UI retrieves pages on demand by their pinned representation identity.

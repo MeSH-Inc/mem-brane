@@ -102,6 +102,9 @@ export function createApi(
   app.get('/ocr/credits', (c) =>
     c.json({ enabled: ocr.enabled, ...ocrCredits(db, c.get('actor')) }),
   );
+  app.get('/assets/:id/ocr', (c) =>
+    c.json(ocr.assetState(c.get('actor'), id.parse(c.req.param('id')))),
+  );
   app.post('/assets/:id/ocr/quote', async (c) =>
     c.json(await ocr.quote(c.get('actor'), id.parse(c.req.param('id')))),
   );
@@ -122,6 +125,15 @@ export function createApi(
   app.post('/ocr/jobs/:id/cancel', (c) => {
     ocr.cancel(c.get('actor'), id.parse(c.req.param('id')));
     return c.json({ ok: true });
+  });
+  app.post('/ocr/jobs/:id/apply', async (c) => {
+    const body = z
+      .object({ blockId: id, version: z.number().int().nonnegative().safe() })
+      .strict()
+      .parse(await c.req.json());
+    return c.json(
+      ocr.apply(c.get('actor'), id.parse(c.req.param('id')), body.blockId, body.version),
+    );
   });
   app.post('/sync/commands', async (c) =>
     c.json(

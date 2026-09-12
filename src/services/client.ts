@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { api } from './api';
 import * as response from '../../shared/contracts';
+import { ocrAssetSchema, ocrQuoteSchema, ocrJobSchema, ocrResultSchema } from '../../shared/ocr';
 import { submissionReceipt, pdfRepresentation } from '../../shared/schemas';
 import type {
   Edit,
@@ -62,6 +63,18 @@ export function createClient(request: typeof api) {
     snapshot: (blockId: string) =>
       read(response.revisionResponse, `/blocks/${blockId}/snapshot`, {}),
     pdfPages: (id: string) => read(pdfRepresentation, `/representations/${id}/pages`),
+    ocrAsset: (id: string) => read(ocrAssetSchema, `/assets/${id}/ocr`),
+    ocrQuote: (id: string) => read(ocrQuoteSchema, `/assets/${id}/ocr/quote`, {}),
+    ocrSubmit: (id: string, policyId: string) =>
+      read(ocrJobSchema, `/assets/${id}/ocr`, { key: `ocr:${id}:${policyId}`, policyId }),
+    ocrJob: (id: string) => read(ocrJobSchema, `/ocr/jobs/${id}`),
+    ocrResult: (id: string) => read(ocrResultSchema.nullable(), `/ocr/jobs/${id}/result`),
+    ocrCancel: (id: string) => request(`/ocr/jobs/${id}/cancel`, {}),
+    ocrApply: (id: string, blockId: string, version: number) =>
+      read(z.object({ version: z.number().int().nonnegative() }), `/ocr/jobs/${id}/apply`, {
+        blockId,
+        version,
+      }),
     importWebpage: (braneId: string, url: string) =>
       read(response.createdBlockResponse, '/ingest', { braneId, url }),
     importFile: (body: FormData) => read(response.importReceiptResponse, '/imports', body),

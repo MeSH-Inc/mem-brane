@@ -2,13 +2,16 @@
 
 ## Current boundary
 
-The shared spend ledger, OCR admission API, credit grants, and durable job executor
-are implemented. Production constructs the service without a provider, reports
-`enabled: false`, and rejects new enhanced-parsing quotes/submissions with 503.
-There is no payment processor, public checkout, paid OCR request, or parsing button
-connected yet. Existing local PDF.js imports and extracted-text context continue
-to work. Operator grant commands support an invited pilot and manually verified
-prepaid receipts; they do not themselves collect or verify a payment.
+The upload → page-credit confirmation → durable execution → page preview → explicit
+context adoption flow is implemented. The provider is pinned to Mistral OCR 4.1
+(`mistral-ocr-4-1`) at $4/1,000 synchronous pages, verified on 2026-09-11 from the
+[official model and pricing page](https://docs.mistral.ai/models/ocr-4-1).
+Production remains disabled by default (`OCR_PROVIDER=disabled`) and requires an
+explicit provider selection, server credential, positive shared/category budgets,
+and operator-granted page credits before dispatch. No paid provider call was made
+while implementing or verifying this flow. There is no payment processor, public
+checkout, or automatic refill. Operator grant commands support an invited pilot
+and manually verified prepaid receipts; they do not collect or verify a payment.
 
 ## Default limits
 
@@ -75,11 +78,17 @@ checks, body bounds, and read-only/storage maintenance controls. Granting credit
 is never exposed through this API.
 
 - `GET /api/ocr/credits`: enabled state and granted/committed/available pages.
+- `GET /api/assets/:id/ocr`: enabled state, current policy identity, credits, and the
+  latest owned job, including saved results while new processing is disabled.
 - `POST /api/assets/:id/ocr/quote`: policy ID, pages, required credits, existing job.
 - `POST /api/assets/:id/ocr`: `{ "key": "durable-client-key", "policyId": "quote-hash" }`.
 - `GET /api/ocr/jobs/:id`: owned job state and credit commitment.
 - `GET /api/ocr/jobs/:id/result`: persisted provider result, or null if unavailable.
 - `POST /api/ocr/jobs/:id/cancel`: release a queued job before dispatch.
+- `POST /api/ocr/jobs/:id/apply`: `{ "blockId": "PDF_BLOCK_UUID", "version": 0 }`.
+  Adopt verified text into that owned PDF block; reject another document or stale
+  version. Repeating an already applied job returns its current version without
+  another edit or charge. Existing immutable revisions and run inputs stay pinned.
 
 Insufficient credits returns 402. Page/queue/spend exhaustion returns 429. A policy
 or request identity conflict returns 409. Unauthorized resources return 404.
@@ -122,19 +131,64 @@ Zero releases the held credit amount only when the provider confirms no charge.
 Reconciliation does not fabricate a missing extraction result. Model reconciliation
 continues through `scripts/reconcile-cost.ts` and cannot reconcile OCR commitments.
 
-## Provider and checkout integration follow-up
+## Provider and product boundary
 
-Implement a pinned-price `OcrProvider` with transport retries disabled, bounded
-response reads, confirmed billed-page validation, and abort propagation. Schedule
-`runNext()` with the app's disk/read-only/shutdown gates and call recovery during
-startup. No environment flag alone can currently enable a paid provider.
+The adapter uses one direct HTTPS request with retries and redirects disabled.
+It sends original PDF bytes as a data URI with an explicit complete page range.
+It requests native blocks without embedded images, annotations, batch processing,
+or paid extras. Request options, normalization limits and the exact model/price
+are part of the policy hash. The response must identify the exact model, contain
+all pages in order, and confirm the same page count through
+`usage_info.pages_processed`. Incomplete billing, invalid blocks, malformed JSON,
+stream errors, timeout and oversized results retain uncertain liabilities.
 
-Keep the provider response as evidence, then normalize it into a page/block
-representation for context selection and source highlights. The admission result
-is not yet substituted into artifact model context.
+Response bytes are read incrementally under a 10 MiB bound; normalized output plus
+unaltered provider evidence must also fit that bound. Normalization preserves
+page Markdown, dimensions, native block text and unit-coordinate bounds in
+`ocr-pages-v1`. Each page is limited to 20,000 characters and 2,000 blocks. The
+result evidence becomes immutable on success. Terminal jobs cannot be reset to
+queued. No external URLs from provider output are fetched or rendered as HTML.
 
-Add an explicit page-credit confirmation in the PDF UI and a verified payment
-webhook that invokes the operator grant boundary with the canonical receipt ID.
-The proposed $5/500-page pack is a product decision, not configured billing. Keep
-automatic refill off. Validate the provider and payment sandbox end to end before
-opening paid parsing to accounts.
+`OcrWorker` recovers expired attempts and claims work under the application's disk
+and read-only gates. Shutdown aborts active transports; dispatched work becomes
+uncertain while known preparation failures release credits and spend. A disabled
+provider still permits recovery and reading/applying previously saved output.
+
+Open **Enhanced PDF extraction** on an imported PDF. Review verified pages and
+available credits before confirming transfer to Mistral and a reservation. Merely
+uploading, viewing, quoting, refreshing or reopening the panel cannot dispatch
+paid work. A deterministic client key and server content/policy identity recover
+lost acknowledgements and reloads. Historical jobs expose their parser identity;
+quoting a newer parser explicitly shows a separate credit reservation. Cancelled
+and failed identities remain terminal in this bounded release.
+
+Preview enhanced pages, then choose **Use enhanced text for model context** to
+adopt the result into that PDF's immutable representation. Future snapshots use
+the enhanced text; earlier snapshots remain unchanged. Other open tabs refresh
+through the existing replica broadcast. Normal context character and monetary
+admission limits still apply to expanded PDF text. Native block coordinates are
+retained for later source-highlighting UI; page Markdown is the current preview.
+
+## Activation and next verification
+
+1. Keep `OCR_PROVIDER=disabled` until an operator deliberately authorizes a small
+   live provider check. Reverify the pinned model, contract and price first.
+2. Supply `MISTRAL_API_KEY`, select `OCR_PROVIDER=mistral`, and set explicit shared
+   and OCR daily/monthly ceilings. `npm run check:production` checks this structure
+   without disclosing credentials or calling the provider.
+3. Grant the invited account its one 50-page trial. On an isolated pilot instance,
+   authorize one known one-page PDF, confirm the page-credit prompt, compare the
+   retained response to the provider usage record, and verify the $0.004 charge.
+4. Turn processing off again and verify the stored result still previews/applies.
+   Exercise manual reconciliation only with real provider billing evidence before
+   expanding the pilot. A checkout/payment integration is separate future scope.
+
+Local verification uses the real HTTP/auth/upload/admission/worker/provider
+adapter and context paths with an explicitly blocked external network fixture.
+Adapter contract tests cover billing/model/page mismatches, native block bounds,
+byte limits, transport failure and abort. Service tests cover budget/credit races,
+shutdown/restart, adoption/version conflicts, frozen revisions and immutable
+evidence. The browser test covers consent, insufficient credits, cancel-before-
+confirmation, reload recovery, cross-tab adoption, future model inputs and an
+uncertain provider outcome. These checks do not verify live Mistral credentials,
+actual recognition accuracy or invoiced charges.

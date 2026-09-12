@@ -38,7 +38,7 @@ export function BlockContent({
     frame = requestAnimationFrame(focus);
     return () => cancelAnimationFrame(frame);
   }, [focusRequest]);
-  if (block.content.format === 'pdf') return <PdfContent content={block.content} />;
+  if (block.content.format === 'pdf') return <PdfContent content={block.content} block={block} />;
   if (block.kind === 'image')
     return (
       <figure className="image-content">

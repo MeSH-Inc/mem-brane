@@ -12,6 +12,9 @@ import { createAuth } from '../auth/index.js';
 import { createApi } from '../api/index.js';
 import { EventHub } from '../sse/hub.js';
 import { RunWorker } from '../jobs/worker.js';
+import { OcrWorker } from '../jobs/ocr-worker.js';
+import { OcrService, defaultOcrLimits } from '../services/ocr.js';
+import { createMistralOcrProvider } from '../ingestion/mistral-ocr.js';
 import { IngestionWorker } from '../ingestion/webpage.js';
 import { executeModel } from '../llm/model.js';
 import { BeforeInvocationError } from '../llm/errors.js';
@@ -28,6 +31,21 @@ const db = openDatabase(config.DATABASE_PATH),
   hub = new EventHub();
 let closing = false;
 let exitCode = 0;
+const ocr = new OcrService(
+  db,
+  storage,
+  config.OCR_PROVIDER === 'mistral'
+    ? createMistralOcrProvider({ apiKey: process.env.MISTRAL_API_KEY ?? '' })
+    : undefined,
+  {
+    ...defaultOcrLimits,
+    maxUploadBytes: config.MAX_UPLOAD_BYTES,
+    globalDailyLimitUsd: config.GLOBAL_DAILY_SPEND_LIMIT,
+    globalMonthlyLimitUsd: config.GLOBAL_MONTHLY_SPEND_LIMIT,
+    categoryDailyLimitUsd: config.OCR_DAILY_SPEND_LIMIT,
+    categoryMonthlyLimitUsd: config.OCR_MONTHLY_SPEND_LIMIT,
+  },
+);
 const app = new Hono();
 app.use('*', async (c, next) => {
   if (config.READ_ONLY === '1' && !['GET', 'HEAD', 'OPTIONS'].includes(c.req.method))
@@ -45,10 +63,11 @@ app.use('*', async (c, next) => {
   await next();
 });
 app.get('/health', (c) => {
-  const ready = !closing && worker.healthy && ingestion.healthy && disk.allowsWrites;
+  const ready =
+    !closing && worker.healthy && ingestion.healthy && ocrWorker.healthy && disk.allowsWrites;
   return c.json({ status: ready ? 'ok' : 'unavailable', app: 'mem-brane' }, ready ? 200 : 503);
 });
-app.route('/api', createApi(db, auth, hub, storage));
+app.route('/api', createApi(db, auth, hub, storage, ocr));
 app.get('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 app.use('/*', async (c, next) => {
   c.header(
@@ -89,6 +108,7 @@ const ingestion = new IngestionWorker(
   fatal,
   () => disk.allowsWrites && config.READ_ONLY !== '1',
 );
+const ocrWorker = new OcrWorker(ocr, () => disk.allowsWrites && config.READ_ONLY !== '1', fatal);
 const telemetry = new Telemetry(db, config.TELEMETRY_INTERVAL_MS, fatal);
 telemetry.start();
 const maintenance = new Maintenance(
@@ -100,6 +120,7 @@ if (config.READ_ONLY !== '1') maintenance.start();
 if (config.READ_ONLY !== '1') {
   worker.start();
   ingestion.start();
+  ocrWorker.start();
 }
 const server = serve({ fetch: app.fetch, port: config.PORT, hostname: '127.0.0.1' }, () =>
   console.log(`mem-brane API http://127.0.0.1:${config.PORT}`),
@@ -123,7 +144,7 @@ async function shutdown() {
     const drained = new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );
-    await Promise.all([drained, worker.stop(), ingestion.stop(), disk.stop()]);
+    await Promise.all([drained, worker.stop(), ingestion.stop(), ocrWorker.stop(), disk.stop()]);
     db.close();
   } catch {
     exitCode = 1;
