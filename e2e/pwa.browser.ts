@@ -97,6 +97,7 @@ test('installed shell reloads offline, retains edits and creation, and reconcile
     await expect(page.getByRole('status')).toHaveText(
       'Saved on this device · synchronization pending',
     );
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('button', { name: 'Block actions', exact: true }).click();
     await page.getByText('Placements in this brane (1)', { exact: true }).click();
     await page.getByRole('spinbutton', { name: 'x', exact: true }).fill('850');

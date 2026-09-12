@@ -1,3 +1,4 @@
+import { ActionMenu } from '../components/ActionMenu';
 import { pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapters';
 import { toolPolicy } from './toolPolicy';
 import { useCanvasGesture } from './useCanvasGesture';
@@ -100,9 +101,6 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         onEdit={data.onEdit}
       />
       <footer className="nodrag nopan">
-        <button aria-label="Block actions" onClick={() => data.onManage(block.id)}>
-          ⋯
-        </button>
         <SpawnButton
           block={block}
           busy={activity.busy}
@@ -111,9 +109,14 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
           onSpawn={() => data.onSpawn(block.id, id)}
         />
         <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
-        {block.messageId && (
-          <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
-        )}
+        <ActionMenu label="More" align="right">
+          <button aria-label="Block actions" onClick={() => data.onManage(block.id)}>
+            Block actions
+          </button>
+          {block.messageId && (
+            <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
+          )}
+        </ActionMenu>
       </footer>
     </article>
   );
@@ -338,7 +341,6 @@ function Inner(props: Props) {
           style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
         />
       )}
-      <div className="canvas-hint">{policy.hint} </div>
     </div>
   );
 }

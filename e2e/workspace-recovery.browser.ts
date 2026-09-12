@@ -118,7 +118,7 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
 
     const read = async () => (await page.request.get(`${origin}/api/branes/${brane.id}`)).json();
     // Capture -> Spawn: local note edits are frozen before generation.
-    await page.getByRole('button', { name: 'Spawn', exact: true }).click();
+    await page.getByRole('button', { name: 'Develop', exact: true }).click();
     await expect.poll(async () => (await read()).runs[0]?.status).toBe('completed');
     const spawned = (await read()).runs[0];
     const detail = await (await page.request.get(`${origin}/api/runs/${spawned.id}`)).json();
@@ -183,6 +183,7 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
     // Branch, inspect frozen provenance, then reopen the source's older snapshot.
     const generated = (await read()).blocks.find((b: any) => b.messageId);
     await page.goto(`${origin}/b/${brane.id}?view=focus&focus=${generated.id}`);
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('button', { name: '⑂ Continue from here' }).click();
     await prompt.fill('Explain the tradeoffs on this branch');
     await page.reload();
@@ -192,6 +193,7 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
       .poll(async () => (await read()).runs.filter((r: any) => r.status === 'completed').length)
       .toBe(3);
     await page.reload();
+    await page.getByRole('button', { name: 'History', exact: true }).click();
     await page.locator('.run-inspect').first().click();
     await expect(page.locator('.frozen-inspector')).toContainText(
       'Explain the tradeoffs on this branch',
@@ -203,6 +205,7 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
     await page
       .getByRole('textbox', { name: 'Block text', exact: true })
       .fill('Updated field notes: south trail selected.');
+    await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('button', { name: 'Block actions', exact: true }).click();
     await page.getByText(/Saved snapshots \(/).click();
     await page

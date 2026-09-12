@@ -26,18 +26,18 @@ export function SpawnButton({
       disabled={busy || (!retry && !ready)}
       title={
         ready
-          ? 'Generate a new artifact from this. Develops the selected artifact using the current model.'
-          : (incompatibility ?? 'Wait for this artifact to finish before spawning.')
+          ? 'Develop this artifact into a new response using the current model. Only this artifact is used as context.'
+          : (incompatibility ?? 'Wait for this artifact to finish before developing it.')
       }
       onClick={onSpawn}
     >
       {busy
         ? phase === 'waiting'
           ? 'Waiting for source…'
-          : 'Spawning…'
+          : 'Developing…'
         : retry
-          ? 'Retry Spawn'
-          : 'Spawn'}
+          ? 'Retry Develop'
+          : 'Develop'}
     </button>
   );
 }

@@ -105,7 +105,7 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
     await saved(other, 'Tab B: take the south route')
       .getByRole('button', { name: 'Recover a copy' })
       .click();
-    await other.getByRole('button', { name: 'Spawn', exact: true }).click();
+    await other.getByRole('button', { name: 'Develop', exact: true }).click();
     await expect(other.getByText('This block changed elsewhere', { exact: true })).toBeVisible();
     await other.getByText('Compare original, my draft and server text', { exact: true }).click();
     const comparison = other
@@ -128,7 +128,7 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
     await other.getByRole('button', { name: 'Overwrite with my draft', exact: true }).click();
     await expect(text(other)).toHaveValue('Tab B: take the south route');
     await expect(other.getByText('This block changed elsewhere', { exact: true })).toHaveCount(0);
-    await other.getByRole('button', { name: 'Spawn', exact: true }).click();
+    await other.getByRole('button', { name: 'Develop', exact: true }).click();
     await expect
       .poll(
         async () =>

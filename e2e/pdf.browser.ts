@@ -97,7 +97,7 @@ test('PDF originals, page text, frozen context and unavailable representations i
     await expect(page.getByText('Not available as model context:', { exact: false })).toContainText(
       'OCR',
     );
-    await expect(page.getByRole('button', { name: 'Spawn', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Develop', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: '+ Use as context', exact: true }).click();
     await page.getByRole('textbox', { name: 'Run prompt' }).fill('Read the scan');
     await expect(page.getByRole('button', { name: 'Run ↗', exact: true })).toBeDisabled();

@@ -105,8 +105,8 @@ test('uncertain compose and Spawn retry their original requests after reload wit
     await page
       .getByRole('textbox', { name: 'Block text', exact: true })
       .fill('Source that must spawn once');
-    await page.getByRole('button', { name: 'Spawn', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Retry Spawn', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Develop', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Retry Develop', exact: true })).toBeEnabled();
     expect(spawns[0].edits).toHaveLength(1);
     await page
       .getByRole('textbox', { name: 'Block text', exact: true })
@@ -139,8 +139,8 @@ test('uncertain compose and Spawn retry their original requests after reload wit
       },
       { times: 1 },
     );
-    await page.getByRole('button', { name: 'Retry Spawn', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Spawn', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Retry Develop', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Develop', exact: true })).toBeEnabled();
     expect(spawns).toHaveLength(2);
     expect(spawns[1]).toEqual(spawns[0]);
     await expect(page.getByText('This block changed elsewhere', { exact: true })).toBeVisible();

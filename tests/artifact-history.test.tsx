@@ -7,6 +7,21 @@ import { ArtifactActions } from '../src/components/ArtifactActions';
 import { api } from '../src/services/api';
 import type { RevisionPage } from '../shared/types/history';
 vi.mock('../src/services/api', () => ({ api: vi.fn() }));
+// JSDOM does not implement the native dialog lifecycle; browser tests cover focus and Escape.
+Object.defineProperties(HTMLDialogElement.prototype, {
+  showModal: {
+    configurable: true,
+    value() {
+      this.setAttribute('open', '');
+    },
+  },
+  close: {
+    configurable: true,
+    value() {
+      this.removeAttribute('open');
+    },
+  },
+});
 let root: Root | undefined;
 afterEach(() => {
   if (root) act(() => root!.unmount());

@@ -196,83 +196,67 @@ function Shell() {
   if (!session) return <AuthScreen onSignedIn={refreshSession} />;
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <Link to="/" className="wordmark">
-          mem-brane
-          <span className="brand-dot" />
-        </Link>
-        <span className="sidebar-subtitle">ROOM FOR THOUGHT</span>
-        <button
-          className="new-brane"
-          onClick={async () => {
-            try {
-              const b = await client.createBrane('Untitled brane');
-              refreshBranes();
-              await navigate({ to: '/b/$braneId', params: { braneId: b.id } });
-            } catch (e) {
-              setError((e as Error).message);
-            }
-          }}
-        >
-          ＋ New brane <span>↗</span>
-        </button>
-        <div className="section-label">
-          YOUR BRANES <span>{branes.length.toString().padStart(2, '0')}</span>
-        </div>
-        <nav className="brane-nav">
-          {branes.map((b, i) => (
-            <Link
-              to="/b/$braneId"
-              params={{ braneId: b.id }}
-              key={b.id}
-              activeProps={{ className: 'active' }}
-            >
-              <span>◇</span>
-              <div>
-                {b.title}
-                <small>
-                  {new Date(b.updated_at).toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </small>
-              </div>
-              <span className="brane-index">{String(i + 1).padStart(2, '0')}</span>
-            </Link>
-          ))}
-        </nav>
-        {error && <p className="error">{error}</p>}
-        <div className="sidebar-note">
-          <span>✳</span>
-          <p>
-            Collect a thought.
-            <br />
-            Follow a possibility.
-          </p>
-        </div>
-        <div className="user-menu">
-          <span className="avatar">{session.user.name.slice(0, 1).toUpperCase()}</span>
-          <span>
-            {session.user.name}
-            <small>Personal workspace</small>
-          </span>
+      <details className="navigation-drawer">
+        <summary role="button" aria-label="Brane navigation">
+          ☰ <span>Branes</span>
+        </summary>
+        <aside className="sidebar">
+          <Link to="/" className="wordmark">
+            mem-brane
+            <span className="brand-dot" />
+          </Link>
           <button
-            className="icon-button"
-            title="Sign out"
+            className="new-brane"
             onClick={async () => {
               try {
-                await client.signOut();
-                await imports.activate(undefined);
-                setSession(null);
+                const b = await client.createBrane('Untitled brane');
+                refreshBranes();
+                await navigate({ to: '/b/$braneId', params: { braneId: b.id } });
               } catch (e) {
                 setError((e as Error).message);
               }
             }}
           >
-            ↪
+            ＋ New brane
           </button>
-        </div>
-      </aside>
+          <div className="section-label">
+            YOUR BRANES <span>{branes.length.toString().padStart(2, '0')}</span>
+          </div>
+          <nav className="brane-nav">
+            {branes.map((b) => (
+              <Link
+                to="/b/$braneId"
+                params={{ braneId: b.id }}
+                key={b.id}
+                activeProps={{ className: 'active' }}
+              >
+                <span>◇</span>
+                <div>{b.title}</div>
+              </Link>
+            ))}
+          </nav>
+          {error && <p className="error">{error}</p>}
+          <div className="user-menu">
+            <span className="avatar">{session.user.name.slice(0, 1).toUpperCase()}</span>
+            <span>{session.user.name}</span>
+            <button
+              className="icon-button"
+              title="Sign out"
+              onClick={async () => {
+                try {
+                  await client.signOut();
+                  await imports.activate(undefined);
+                  setSession(null);
+                } catch (e) {
+                  setError((e as Error).message);
+                }
+              }}
+            >
+              ↪
+            </button>
+          </div>
+        </aside>
+      </details>
       <main className="main-content">
         <AppStatus />
         <Outlet />

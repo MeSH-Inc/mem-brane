@@ -43,5 +43,5 @@ it('only permits ready sources, blocks duplicate clicks in flight, and allows re
   });
   expect(host.querySelector('button')!.disabled).toBe(true);
   render(source, false, true);
-  expect(host.querySelector('button')!.textContent).toBe('Retry Spawn');
+  expect(host.querySelector('button')!.textContent).toBe('Retry Develop');
 });

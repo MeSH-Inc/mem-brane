@@ -102,7 +102,7 @@ export const useInteraction = create<Interaction>((set, get) => ({
   selectedPlacements: [],
   drafts: {},
   tool: 'select',
-  inspector: true,
+  inspector: false,
   setSelectedPlacements: (ids) =>
     set((state) => {
       const selectedPlacements = [...new Set(ids)].sort();

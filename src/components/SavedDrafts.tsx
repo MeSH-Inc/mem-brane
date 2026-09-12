@@ -37,6 +37,7 @@ export function SavedDrafts({
       setBusy(false);
     }
   }
+  if (!drafts.length && !error && !notice) return null;
   return (
     <details className="draft-recovery">
       <summary>Other saved drafts ({drafts.length})</summary>

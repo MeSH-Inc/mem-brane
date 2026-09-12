@@ -51,6 +51,7 @@ export function AppStatus() {
   }
   const disconnected = !connected || !sync.connected;
   if (!disconnected && !update && !problem && !sync.pending && !sync.error) return null;
+  if (!disconnected && !update && !problem && !sync.error && !sync.conflict) return null;
   return (
     <aside className="app-status" aria-label="App connection and updates">
       {!connected && <p>Disconnected. Reconnect to synchronize your workspace and use AI.</p>}
@@ -129,7 +130,7 @@ export function AppStatus() {
           )}
         </div>
       )}
-      {(disconnected || !!sync.pending || !!sync.error) && (
+      {(disconnected || !!sync.error) && (
         <button disabled={busy} onClick={() => void act(() => replica.retry())}>
           Retry synchronization
         </button>

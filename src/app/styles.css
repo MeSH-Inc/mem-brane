@@ -1540,3 +1540,414 @@ a {
 .brane-workspace {
   display: contents;
 }
+
+/* Workspace chrome: keep secondary workflows behind deliberate controls. */
+.navigation-drawer {
+  position: relative;
+  flex: 0 0 52px;
+  background: #edeee5;
+  border-right: 1px solid var(--line);
+}
+.navigation-drawer[open] {
+  flex-basis: 208px;
+}
+.navigation-drawer > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 18px;
+  height: 56px;
+  font-size: 14px;
+}
+.navigation-drawer > summary::-webkit-details-marker,
+.action-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.navigation-drawer:not([open]) > summary span {
+  display: none;
+}
+.navigation-drawer .sidebar {
+  width: 100%;
+  height: calc(100dvh - 56px);
+  padding: 12px 16px 16px;
+  border: 0;
+}
+.sidebar .wordmark {
+  font-size: 21px;
+  margin-bottom: 24px;
+}
+.sidebar .new-brane {
+  margin-bottom: 24px;
+}
+.sidebar .user-menu {
+  margin-top: auto;
+}
+.brane-toolbar {
+  height: 56px;
+  min-height: 56px;
+  padding: 8px 20px;
+}
+.brane-title {
+  font-size: 19px;
+  padding: 0;
+}
+.toolbar-actions {
+  gap: 8px;
+}
+.tools {
+  height: 48px;
+  padding: 6px 16px;
+}
+.tools button,
+.canvas-card footer button,
+.canvas-tools button {
+  font-size: 12px;
+}
+.view-toggle button {
+  font-size: 12px;
+}
+.tools .canvas-tools {
+  gap: 2px;
+}
+.action-menu {
+  position: relative;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.action-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.action-menu > summary::after {
+  content: '⌄';
+  margin-left: 6px;
+  color: var(--muted);
+}
+.action-menu > summary:hover,
+.action-menu[open] > summary {
+  background: #e8ebde;
+}
+summary:focus-visible {
+  outline: 2px solid #72874e;
+  outline-offset: 2px;
+}
+.menu-content {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 40px));
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: 0 6px 24px #30342c20;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.menu-content.align-right {
+  left: auto;
+  right: 0;
+}
+.menu-content > button {
+  text-align: left;
+  border: 0;
+  padding: 10px;
+}
+.menu-content p {
+  line-height: 1.5;
+  margin: 5px;
+}
+.model-menu .menu-content {
+  bottom: calc(100% + 4px);
+  top: auto;
+}
+.model-menu label {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 6px;
+}
+.model-menu select {
+  max-width: 100%;
+  font-size: 13px;
+  padding: 8px;
+}
+.composer {
+  padding: 10px 20px;
+}
+.composer-meta {
+  font-size: 12px;
+  margin-top: 5px;
+  min-height: 28px;
+}
+.context-chips {
+  margin-bottom: 6px;
+  min-height: 28px;
+}
+.context-chips .muted,
+.chip {
+  font-size: 12px;
+}
+.context-toggle {
+  border: 0;
+  background: none;
+  padding: 5px 0;
+  margin-right: 6px;
+}
+.save-notice {
+  font-size: 12px;
+}
+.workspace-dialog {
+  color: inherit;
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  margin: auto;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 12px 60px #30342c30;
+  overflow: auto;
+}
+.workspace-dialog::backdrop {
+  background: #30342c44;
+}
+.dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.dialog-heading h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.dialog-heading button {
+  font-size: 20px;
+  padding: 4px 12px;
+}
+.workspace-dialog .inspector,
+.workspace-dialog .artifact-actions {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  max-height: none;
+  overflow: visible;
+}
+.inspector .section-label,
+.inspector p,
+.context-item strong,
+.context-item p,
+.run-item small {
+  font-size: 12px;
+}
+.inspector-empty {
+  padding: 24px 0;
+}
+.inspector-empty > span {
+  display: none;
+}
+.workspace-dialog .artifact-actions details {
+  padding: 10px 0;
+}
+.run-activity {
+  padding: 8px 20px;
+  background: #eef1e5;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.run-activity > summary {
+  cursor: pointer;
+}
+.activity-list {
+  max-height: 180px;
+  overflow: auto;
+}
+.activity-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+}
+.activity-item p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.canvas-card footer {
+  min-height: 0;
+  height: 0;
+  padding: 0 10px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.canvas-card:is(.selected, :focus-within, :hover) footer {
+  height: auto;
+  min-height: 40px;
+  padding: 4px 8px;
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
+  gap: 2px;
+}
+.canvas-card:has(.action-menu[open]) {
+  overflow: visible;
+}
+.canvas-card footer .menu-content {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+.canvas-card footer button {
+  padding: 6px;
+}
+.card-grip {
+  font-size: 11px;
+}
+.card-status {
+  font-size: 10px;
+}
+.focus-card footer button {
+  font-size: 12px;
+}
+.focus-card footer .menu-content {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+.focus-card > .eyebrow {
+  display: none;
+}
+.focus-layout {
+  padding: 20px;
+  gap: 20px;
+}
+.block-outline {
+  width: 160px;
+}
+.block-outline button {
+  font-size: 12px;
+}
+.canvas-empty {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  text-align: center;
+}
+.canvas-empty h2 {
+  font-size: 20px;
+}
+.canvas-empty p {
+  font-size: 13px;
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .navigation-drawer {
+    flex: none;
+    width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .navigation-drawer[open] {
+    flex-basis: auto;
+  }
+  .navigation-drawer > summary {
+    height: 44px;
+    padding: 12px 16px;
+  }
+  .navigation-drawer:not([open]) > summary span {
+    display: inline;
+  }
+  .navigation-drawer .sidebar {
+    height: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .sidebar .wordmark,
+  .sidebar .new-brane {
+    margin: 0;
+  }
+  .sidebar .brane-nav {
+    flex-direction: column;
+    max-height: 240px;
+  }
+  .sidebar .user-menu {
+    display: flex;
+  }
+  .main-content {
+    min-height: calc(100dvh - 44px);
+  }
+  .brane-toolbar {
+    height: auto;
+    min-height: 56px;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .brane-title {
+    width: min(80vw, 420px);
+  }
+  .toolbar-actions {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .toolbar-actions > button {
+    font-size: 12px;
+    padding: 8px;
+  }
+  .tools {
+    padding: 6px 12px;
+    min-height: 44px;
+  }
+  .focus-layout {
+    padding: 12px;
+    gap: 8px;
+  }
+  .focus-card {
+    padding: 12px;
+    min-height: 280px;
+  }
+  .focus-card footer {
+    gap: 6px;
+    padding-top: 8px;
+  }
+  .focus-card footer button,
+  .focus-card footer summary {
+    min-height: 40px;
+  }
+  .composer {
+    padding: 8px 12px;
+  }
+  .composer-meta {
+    font-size: 12px;
+  }
+  .save-notice {
+    display: inline;
+  }
+  .workspace-dialog {
+    width: 100%;
+    max-height: 85dvh;
+    margin: auto 0 0;
+    border-radius: 14px 14px 0 0;
+    padding: 16px;
+  }
+  .workspace-dialog .inspector {
+    padding: 0;
+  }
+  .canvas-card footer {
+    min-height: 40px;
+    height: auto;
+    opacity: 1;
+    padding: 4px 8px;
+    pointer-events: auto;
+    overflow: visible;
+  }
+}

@@ -1,3 +1,6 @@
+import { ActionMenu } from '../components/ActionMenu';
+import { Dialog } from '../components/Dialog';
+import { RunActivity } from '../components/RunActivity';
 import { CommandButton } from '../components/CommandButton';
 import { localAsset } from '../services/local-assets';
 import { client } from '../services/client';
@@ -130,6 +133,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   const setPrompt = (prompt: string) => controller.updateDraft({ prompt });
   const setModel = (model: string) => controller.updateDraft({ model });
   const setTitleDraft = (title: string) => controller.updateDraft({ title });
+  const [inspectorTab, setInspectorTab] = useState<'context' | 'history'>('context');
   const [webOpen, setWebOpen] = useState(false),
     [url, setUrl] = useState(''),
     [managed, setManaged] = useState<string>();
@@ -158,6 +162,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   const navigate = useNavigate();
   const focusBlock = useCallback(
     (id: string) => {
+      useInteraction.getState().setInspector(false);
       presentation.getState().remember({ focus: id });
       void navigate({
         to: '/b/$braneId',
@@ -230,7 +235,6 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     >
       <div className="brane-toolbar">
         <div>
-          <span className="eyebrow">YOUR THINKING SPACE</span>
           <input
             aria-label="Brane title"
             className="brane-title"
@@ -277,11 +281,12 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
             Save brane
           </CommandButton>
           <button
-            className="icon-button"
-            title="Context inspector"
-            onClick={() => ui.setInspector(!ui.inspector)}
+            onClick={() => {
+              setInspectorTab('history');
+              ui.setInspector(true);
+            }}
           >
-            ☷
+            History
           </button>
         </div>
       </div>
@@ -385,37 +390,40 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           onDrop={(event) => dropFiles(event, attachFiles)}
         >
           <div className="tools">
-            <div className="canvas-tools" role="group" aria-label="Canvas tools">
-              {canvasTools.map(({ id, label }) => (
-                <button
-                  key={id}
-                  className={ui.tool === id ? 'active' : ''}
-                  aria-pressed={ui.tool === id}
-                  onClick={() => ui.setTool(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <span className="divider" />
-            <CommandButton
-              tasks={commands}
-              taskKey="create"
-              pendingLabel="Creating…"
-              onClick={() => void create()}
-            >
-              ＋ Text
-            </CommandButton>
-            <button
-              onClick={() => {
-                pickerTarget.current = 'canvas';
-                fileInput.current?.click();
-              }}
-            >
-              ▧ Image / PDF
-            </button>
-            <button onClick={() => setWebOpen(!webOpen)}>↗ Webpage</button>
-            {selectedBlocks.length > 0 && (
+            {!focusMode && (
+              <div className="canvas-tools" role="group" aria-label="Canvas tools">
+                {canvasTools.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    className={ui.tool === id ? 'active' : ''}
+                    aria-pressed={ui.tool === id}
+                    onClick={() => ui.setTool(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <ActionMenu label="＋ Add">
+              <CommandButton
+                tasks={commands}
+                taskKey="create"
+                pendingLabel="Creating…"
+                onClick={() => void create()}
+              >
+                ＋ Text
+              </CommandButton>
+              <button
+                onClick={() => {
+                  pickerTarget.current = 'canvas';
+                  fileInput.current?.click();
+                }}
+              >
+                ▧ Image / PDF
+              </button>
+              <button onClick={() => setWebOpen(!webOpen)}>↗ Webpage</button>
+            </ActionMenu>
+            {!focusMode && selectedBlocks.length > 0 && (
               <button onClick={() => ui.addReferences(selectedBlocks)}>
                 Use {selectedBlocks.length} as context
               </button>
@@ -485,8 +493,8 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           )}
           {retrySpawns.length > 0 && (
             <p>
-              Spawn delivery is uncertain. Retry Spawn checks the original request, including its
-              original source edits.
+              Develop delivery is uncertain. Retry Develop checks the original request, including
+              its original source edits.
             </p>
           )}
           {importTasks.length > 0 && <ImportTray tasks={importTasks} />}
@@ -495,6 +503,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               {imports.recoveryError}
             </p>
           )}
+          <RunActivity controller={controller} onOpen={focusBlock} />
           {focusMode ? (
             <div className="focus-layout">
               <nav className="block-outline">
@@ -526,7 +535,6 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     onEdit={edit}
                   />
                   <footer>
-                    <button onClick={() => setManaged(focused.id)}>Block actions</button>
                     <SpawnButton
                       block={focused}
                       busy={spawning.includes(focused.id)}
@@ -537,26 +545,29 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                         if (placement) spawn(focused.id, placement.id);
                       }}
                     />
-                    {state.derivations
-                      .filter((d) => d.outputBlockId === focused.id)
-                      .map((d) => (
-                        <button
-                          key={`${d.runId}:${d.position}`}
-                          onClick={() => focusBlock(d.sourceBlockId)}
-                          disabled={!state.blocks.some((b) => b.id === d.sourceBlockId)}
-                        >
-                          Spawned from{' '}
-                          {state.blocks
-                            .find((b) => b.id === d.sourceBlockId)
-                            ?.content.text.slice(0, 24) || 'source artifact'}
-                        </button>
-                      ))}
                     <button onClick={() => ui.addReferences([focused.id])}>+ Use as context</button>
-                    {focused.messageId && (
-                      <button onClick={() => ui.setContinue(focused.messageId)}>
-                        ⑂ Continue from here
-                      </button>
-                    )}
+                    <ActionMenu label="More" align="right">
+                      <button onClick={() => setManaged(focused.id)}>Block actions</button>
+                      {focused.messageId && (
+                        <button onClick={() => ui.setContinue(focused.messageId)}>
+                          ⑂ Continue from here
+                        </button>
+                      )}
+                      {state.derivations
+                        .filter((d) => d.outputBlockId === focused.id)
+                        .map((d) => (
+                          <button
+                            key={`${d.runId}:${d.position}`}
+                            onClick={() => focusBlock(d.sourceBlockId)}
+                            disabled={!state.blocks.some((b) => b.id === d.sourceBlockId)}
+                          >
+                            Source:{' '}
+                            {state.blocks
+                              .find((b) => b.id === d.sourceBlockId)
+                              ?.content.text.slice(0, 30) || 'artifact'}
+                          </button>
+                        ))}
+                    </ActionMenu>
                   </footer>
                 </article>
               ) : (
@@ -581,6 +592,20 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 </div>
               }
             >
+              {!state.blocks.length && (
+                <div className="canvas-empty">
+                  <h2>Start with a thought</h2>
+                  <CommandButton
+                    tasks={commands}
+                    taskKey="create"
+                    pendingLabel="Creating…"
+                    onClick={() => void create()}
+                  >
+                    Add your first thought
+                  </CommandButton>
+                  <p>Or drop an image or PDF here.</p>
+                </div>
+              )}
               <BraneCanvas
                 onContext={controller.addReferences}
                 onContinue={controller.setContinue}
@@ -598,6 +623,16 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           )}
           <div className="composer">
             <div className="context-chips">
+              <button
+                className="context-toggle"
+                onClick={() => {
+                  setInspectorTab('context');
+                  ui.setInspector(true);
+                }}
+              >
+                Context · {ui.references.length}
+                {ui.continueFrom ? ' + branch' : ''}
+              </button>
               {ui.continueFrom && (
                 <button className="chip branch" onClick={() => ui.setContinue(undefined)}>
                   ⑂ Continuing a branch ×
@@ -614,9 +649,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 </button>
               ))}
               {!ui.references.length && !ui.continueFrom && (
-                <span className="muted">
-                  Only your prompt will be sent. Add context explicitly.
-                </span>
+                <span className="muted">Prompt only</span>
               )}
             </div>
             <div
@@ -673,30 +706,36 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               </p>
             )}
             <div className="composer-meta">
-              <label>
-                <span className="model-dot" />
-                <select aria-label="Model" value={model} onChange={(e) => setModel(e.target.value)}>
-                  {models.map((m) => (
-                    <option key={m}>{m}</option>
-                  ))}
-                </select>
-              </label>
-              <span>
-                {model === 'mock'
-                  ? 'Local mock · no model spend'
-                  : `Daily budget remaining: $${((budget?.availableMicrousd ?? 0) / 1e6).toFixed(4)}`}
-              </span>
-              {estimate && (
+              <ActionMenu label={model === 'mock' ? 'Local mock' : model} className="model-menu">
+                <label>
+                  Model
+                  <select
+                    aria-label="Model"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                  >
+                    {models.map((m) => (
+                      <option key={m}>{m}</option>
+                    ))}
+                  </select>
+                </label>
+                <p>
+                  {model === 'mock'
+                    ? 'Local mock · no model spend'
+                    : `Daily budget remaining: $${((budget?.availableMicrousd ?? 0) / 1e6).toFixed(2)}`}
+                </p>
+                <p>
+                  {vision[model]?.vision
+                    ? 'Image + PDF text context'
+                    : 'Text-only model · PDF text supported'}
+                </p>
+              </ActionMenu>
+              {estimate && model !== 'mock' && (
                 <span>
                   {estimate.canAfford ? 'Up to' : 'Exceeds budget:'} $
                   {(estimate.reservedMicrousd / 1e6).toFixed(6)} reserved
                 </span>
               )}
-              <span>
-                {vision[model]?.vision
-                  ? 'Image + PDF text context'
-                  : 'Text-only model · PDF text supported'}
-              </span>
               <span className="save-notice" role="status">
                 {commands.activeKeys().some((key) => key.startsWith('create:'))
                   ? 'Creating thought…'
@@ -704,192 +743,203 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     ? 'Unsaved edits'
                     : sync.pending
                       ? 'Saved on this device · synchronization pending'
-                      : notice || 'All thoughts have room here'}
+                      : 'Saved'}
               </span>
             </div>
           </div>
         </div>
         {ui.inspector && (
-          <aside className="inspector">
-            <div className="inspector-heading">
-              <h2>Context, clearly.</h2>
-              <span>↗</span>
-            </div>
-            <p>
-              What the model sees is a choice.
-              <br />
-              Space alone doesn’t make a connection.
-            </p>
-            <div className="section-label">
-              NEXT RUN <span>{ui.references.length} references</span>
-            </div>
-            {ui.continueFrom && (
-              <div className="lineage-note">
-                ⑂ Conversation lineage ({lineage.length} messages)
-                <ol>
-                  {lineage.map((m) => (
-                    <li key={m.id}>
-                      <button
-                        onClick={() => {
-                          const block = state.blocks.find((b) => b.id === m.block_id);
-                          if (block) focusBlock(block.id);
-                          else
-                            void controller
-                              .previewRevision(m.revision_id)
-                              .catch((e) => setError(e.message));
-                        }}
-                      >
-                        {m.role}: {m.content.text.slice(0, 55)}
-                      </button>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
-            {ui.references.length ? (
-              ui.references.map((id, i) => (
-                <div className="context-item" key={id}>
-                  <span className="context-number">{i + 1}</span>
-                  <div>
-                    <strong>{state.blocks.find((b) => b.id === id)?.kind ?? 'Artifact'}</strong>
-                    <p>
-                      {(
-                        ui.drafts[id] ??
-                        state.blocks.find((b) => b.id === id)?.content.text ??
-                        ''
-                      ).slice(0, 100) || 'Empty block'}
-                    </p>
+          <Dialog
+            title={inspectorTab === 'context' ? 'Context' : 'History'}
+            onClose={() => ui.setInspector(false)}
+          >
+            <aside className="inspector">
+              {inspectorTab === 'context' && (
+                <>
+                  <div className="section-label">
+                    NEXT RUN <span>{ui.references.length} references</span>
                   </div>
-                  <div className="order-actions">
-                    <button
-                      aria-label="Move reference up"
-                      disabled={i === 0}
-                      onClick={() => {
-                        const ids = [...ui.references];
-                        [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]];
-                        ui.setReferences(ids);
-                      }}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      aria-label="Remove reference"
-                      onClick={() => ui.setReferences(ui.references.filter((x) => x !== id))}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="inspector-empty">
-                <span>◇</span>
-                <p>Choose “Use as context” on a block to bring it into your next exploration.</p>
-              </div>
-            )}
-            <div className="snapshot-note">
-              Drafts stay in this tab across reloads. At Run, current reference content becomes an
-              immutable snapshot.
-            </div>
-            <div className="section-label">
-              VISIBLE / ACTIVE EXPLORATIONS <span>{state.runs.length}</span>
-            </div>
-            <div className="run-list">
-              {[...state.runs].reverse().map((r, i) => (
-                <div className="run-item" key={r.id}>
-                  <button
-                    className="run-inspect"
-                    onClick={() => void controller.inspect(r.id).catch((e) => setError(e.message))}
-                  >
-                    <span className={`status-dot ${r.status}`} />
-                    <div>
-                      <strong>Exploration {state.runs.length - i}</strong>
-                      <small>
-                        {r.model} · {r.status}
-                        {r.retry_of ? ' · retry' : ''}
-                      </small>
+                  {ui.continueFrom && (
+                    <div className="lineage-note">
+                      ⑂ Conversation lineage ({lineage.length} messages)
+                      <ol>
+                        {lineage.map((m) => (
+                          <li key={m.id}>
+                            <button
+                              onClick={() => {
+                                const block = state.blocks.find((b) => b.id === m.block_id);
+                                if (block) focusBlock(block.id);
+                                else
+                                  void controller
+                                    .previewRevision(m.revision_id)
+                                    .catch((e) => setError(e.message));
+                              }}
+                            >
+                              {m.role}: {m.content.text.slice(0, 55)}
+                            </button>
+                          </li>
+                        ))}
+                      </ol>
                     </div>
-                    <span>↗</span>
-                  </button>
-                  {['queued', 'claimed', 'running', 'cancel_requested'].includes(r.status) && (
-                    <CommandButton
-                      tasks={commands}
-                      taskKey={`cancel:${r.id}`}
-                      pendingLabel="Cancelling…"
-                      disabled={r.status === 'cancel_requested'}
-                      onClick={() => void controller.cancelRun(r.id).catch(() => {})}
-                    >
-                      {r.status === 'cancel_requested' ? 'Cancellation requested' : 'Cancel run'}
-                    </CommandButton>
                   )}
-                  {['failed', 'interrupted', 'cancelled'].includes(r.status) && (
-                    <CommandButton
-                      tasks={commands}
-                      taskKey={`retry:${r.id}`}
-                      pendingLabel="Retrying…"
-                      onClick={async () => {
-                        try {
-                          await controller.retryRun(r.id);
-                        } catch (e) {
-                          setError((e as Error).message);
-                        }
-                      }}
-                    >
-                      Retry frozen context
-                    </CommandButton>
+                  {ui.references.length ? (
+                    ui.references.map((id, i) => (
+                      <div className="context-item" key={id}>
+                        <span className="context-number">{i + 1}</span>
+                        <div>
+                          <strong>
+                            {state.blocks.find((b) => b.id === id)?.kind ?? 'Artifact'}
+                          </strong>
+                          <p>
+                            {(
+                              ui.drafts[id] ??
+                              state.blocks.find((b) => b.id === id)?.content.text ??
+                              ''
+                            ).slice(0, 100) || 'Empty block'}
+                          </p>
+                        </div>
+                        <div className="order-actions">
+                          <button
+                            aria-label="Move reference up"
+                            disabled={i === 0}
+                            onClick={() => {
+                              const ids = [...ui.references];
+                              [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]];
+                              ui.setReferences(ids);
+                            }}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            aria-label="Remove reference"
+                            onClick={() => ui.setReferences(ui.references.filter((x) => x !== id))}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="inspector-empty">
+                      <span>◇</span>
+                      <p>
+                        Choose “Use as context” on a block to bring it into your next exploration.
+                      </p>
+                    </div>
                   )}
-                  {r.error && <small className="error">{r.error}</small>}
-                  {r.usage_json && <small>Confirmed usage: {r.usage_json}</small>}
-                  <button onClick={() => focusBlock(r.output_block_id)}>Open response</button>
+                </>
+              )}
+              {inspectorTab === 'history' && (
+                <>
+                  <div className="section-label">
+                    EXPLORATIONS <span>{state.runs.length}</span>
+                  </div>
+                  <div className="run-list">
+                    {[...state.runs].reverse().map((r, i) => (
+                      <div className="run-item" key={r.id}>
+                        <button
+                          className="run-inspect"
+                          onClick={() =>
+                            void controller.inspect(r.id).catch((e) => setError(e.message))
+                          }
+                        >
+                          <span className={`status-dot ${r.status}`} />
+                          <div>
+                            <strong>Exploration {state.runs.length - i}</strong>
+                            <small>
+                              {r.model} · {r.status}
+                              {r.retry_of ? ' · retry' : ''}
+                            </small>
+                          </div>
+                          <span>↗</span>
+                        </button>
+                        {['queued', 'claimed', 'running', 'cancel_requested'].includes(
+                          r.status,
+                        ) && (
+                          <CommandButton
+                            tasks={commands}
+                            taskKey={`cancel:${r.id}`}
+                            pendingLabel="Cancelling…"
+                            disabled={r.status === 'cancel_requested'}
+                            onClick={() => void controller.cancelRun(r.id).catch(() => {})}
+                          >
+                            {r.status === 'cancel_requested'
+                              ? 'Cancellation requested'
+                              : 'Cancel run'}
+                          </CommandButton>
+                        )}
+                        {['failed', 'interrupted', 'cancelled'].includes(r.status) && (
+                          <CommandButton
+                            tasks={commands}
+                            taskKey={`retry:${r.id}`}
+                            pendingLabel="Retrying…"
+                            onClick={async () => {
+                              try {
+                                await controller.retryRun(r.id);
+                              } catch (e) {
+                                setError((e as Error).message);
+                              }
+                            }}
+                          >
+                            Retry frozen context
+                          </CommandButton>
+                        )}
+                        {r.error && <small className="error">{r.error}</small>}
+                        {r.usage_json && <small>Confirmed usage: {r.usage_json}</small>}
+                        <button onClick={() => focusBlock(r.output_block_id)}>Open response</button>
+                      </div>
+                    ))}
+                  </div>
+                  <RunHistory
+                    key={braneId}
+                    braneId={braneId}
+                    onInspect={async (id) => {
+                      await controller.inspect(id);
+                    }}
+                  />
+                </>
+              )}
+              {inspected && (
+                <div className="frozen-inspector">
+                  <div className="section-label">
+                    EXACT SUBMITTED INPUTS{' '}
+                    <button onClick={() => void controller.inspect()}>×</button>
+                  </div>
+                  {inspected.cost && (
+                    <p className="cost-detail">
+                      {inspected.cost.status === 'confirmed'
+                        ? `Usage-rated: $${((inspected.cost.confirmed_microusd ?? 0) / 1e6).toFixed(6)}`
+                        : `${inspected.cost.status}: $${(inspected.cost.reserved_microusd / 1e6).toFixed(6)} reserved (upper estimate)`}
+                    </p>
+                  )}
+                  {inspected.inputs.map((input) => (
+                    <details key={input.position} open>
+                      <summary>
+                        {input.position + 1}. {input.kind} · {input.label}
+                      </summary>
+                      <code>{input.revision_id}</code>
+                      <pre>{input.content.text}</pre>
+                      {input.content.format === 'pdf' && (
+                        <PdfContent content={input.content} showProvenance />
+                      )}
+                      {input.content.format === 'image' && (
+                        <>
+                          <LocalImage
+                            className="context-image"
+                            assetId={input.content.assetId!}
+                            alt="Submitted image"
+                          />
+                          <small>
+                            Frozen image · low detail · SHA-256 {input.content.assetHash}
+                          </small>
+                        </>
+                      )}
+                    </details>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <RunHistory
-              key={braneId}
-              braneId={braneId}
-              onInspect={async (id) => {
-                await controller.inspect(id);
-              }}
-            />
-            {inspected && (
-              <div className="frozen-inspector">
-                <div className="section-label">
-                  EXACT SUBMITTED INPUTS{' '}
-                  <button onClick={() => void controller.inspect()}>×</button>
-                </div>
-                {inspected.cost && (
-                  <p className="cost-detail">
-                    {inspected.cost.status === 'confirmed'
-                      ? `Usage-rated: $${((inspected.cost.confirmed_microusd ?? 0) / 1e6).toFixed(6)}`
-                      : `${inspected.cost.status}: $${(inspected.cost.reserved_microusd / 1e6).toFixed(6)} reserved (upper estimate)`}
-                  </p>
-                )}
-                {inspected.inputs.map((input) => (
-                  <details key={input.position} open>
-                    <summary>
-                      {input.position + 1}. {input.kind} · {input.label}
-                    </summary>
-                    <code>{input.revision_id}</code>
-                    <pre>{input.content.text}</pre>
-                    {input.content.format === 'pdf' && (
-                      <PdfContent content={input.content} showProvenance />
-                    )}
-                    {input.content.format === 'image' && (
-                      <>
-                        <LocalImage
-                          className="context-image"
-                          assetId={input.content.assetId!}
-                          alt="Submitted image"
-                        />
-                        <small>Frozen image · low detail · SHA-256 {input.content.assetHash}</small>
-                      </>
-                    )}
-                  </details>
-                ))}
-              </div>
-            )}
-            <div className="inspector-bottom">ARRANGE FREELY. THINK DELIBERATELY.</div>
-          </aside>
+              )}
+            </aside>
+          </Dialog>
         )}
       </div>
     </div>

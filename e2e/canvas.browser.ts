@@ -102,6 +102,7 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
   await expect(first).toHaveClass(/selected/);
   await page.getByRole('button', { name: 'Focus', exact: true }).click();
   await expect(first).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Canvas tools' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   await expect(first).toHaveClass(/selected/);
   await second.locator('.card-grip').click({ modifiers: ['Shift'] });
@@ -140,5 +141,24 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
   await page.keyboard.press('ArrowRight');
   await expect.poll(() => writes.length).toBeGreaterThan(1);
   await expect(page.getByText('Something went wrong!', { exact: true })).toHaveCount(0);
+  // Secondary UI opens deliberately, preserves context, and does not resize the workspace.
+  await expect(page.getByText('Other saved drafts (0)', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.inspector')).toHaveCount(0);
+  await page.locator('.run-activity summary').click();
+  await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toBeVisible();
+  await page.locator('.run-activity summary').click();
+  const canvasBounds = await page.locator('.canvas-host').boundingBox();
+  const contextButton = page.getByRole('button', { name: 'Context · 1', exact: true });
+  await contextButton.click();
+  await expect(page.getByRole('dialog', { name: 'Context', exact: true })).toBeVisible();
+  await expect(page.locator('.context-item')).toHaveCount(1);
+  expect(await page.locator('.canvas-host').boundingBox()).toEqual(canvasBounds);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(contextButton).toBeFocused();
+  await page.getByRole('button', { name: '＋ Add', exact: true }).click();
+  await expect(page.getByRole('button', { name: '↗ Webpage', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '↗ Webpage', exact: true })).not.toBeVisible();
   expect(errors).toEqual([]);
 });
