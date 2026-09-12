@@ -98,6 +98,7 @@ test('installed shell reloads offline, retains edits and creation, and reconcile
     await page.getByRole('button', { name: 'More', exact: true }).click();
     await page.getByRole('button', { name: 'Block actions', exact: true }).click();
     await page.getByText('Placements in this brane (1)', { exact: true }).click();
+    await page.getByText('Size and position', { exact: true }).click();
     await page.getByRole('spinbutton', { name: 'x', exact: true }).fill('850');
     await page.getByRole('button', { name: 'Apply geometry', exact: true }).click();
     await expect(page.getByText('Placement geometry saved', { exact: true })).toBeVisible();

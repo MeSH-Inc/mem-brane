@@ -8,6 +8,7 @@ import type {
   EditReceipt,
   Edit,
   SubmissionReceipt,
+  Revision,
 } from '../../shared/types/domain';
 import type { ConversationMessage } from '../../shared/types/conversation';
 import { submitRun, spawnArtifact } from '../../shared/schemas';
@@ -72,6 +73,7 @@ export class WorkspaceController {
   private estimateGeneration = 0;
   private lineageGeneration = 0;
   private inspectionGeneration = 0;
+  private previewGeneration = 0;
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   private estimateTimer?: ReturnType<typeof setTimeout>;
   private titleTimer?: ReturnType<typeof setTimeout>;
@@ -81,8 +83,8 @@ export class WorkspaceController {
   private streamed = new Map<string, { revision: number; text: string }>();
   private delivering = new Set<string>();
   error = '';
-  notice = '';
   titleError = '';
+  previewed?: Revision;
   models = ['mock'];
   vision: Capabilities = {};
   budget?: Budget;
@@ -275,7 +277,8 @@ export class WorkspaceController {
       this.titleError = '';
       this.scheduleTitleSave();
     }
-    this.scheduleEstimate();
+    if (['prompt', 'model', 'references', 'continueFrom'].some((key) => key in patch))
+      this.scheduleEstimate();
     if (previous !== this.draft.continueFrom) this.loadLineage();
     this.emit();
   };
@@ -696,7 +699,6 @@ export class WorkspaceController {
       );
       if (!this.valid(epoch)) return;
       if (this.draft.prompt === accepted.request.payload.prompt) this.updateDraft({ prompt: '' });
-      this.notice = 'Run submitted · context frozen';
       progress('refreshing');
       await this.refresh();
     }).catch(() => {});
@@ -728,7 +730,6 @@ export class WorkspaceController {
         progress,
       );
       if (!this.valid(epoch)) return;
-      this.notice = 'Artifact spawned · source context frozen';
       progress('refreshing');
       await this.refresh();
       if (this.valid(epoch)) return accepted.receipt.outputBlockId;
@@ -747,12 +748,16 @@ export class WorkspaceController {
       if (this.valid(epoch)) return block.id;
     }).catch(() => undefined);
   };
-  previewRevision = async (id: string) => {
+  previewRevision = async (id?: string) => {
     this.requireActive();
-    const epoch = this.epoch;
+    const epoch = this.epoch,
+      generation = ++this.previewGeneration;
+    this.previewed = undefined;
+    this.emit();
+    if (!id) return;
     const revision = await this.client.revision(id);
-    if (this.valid(epoch)) {
-      this.notice = revision.content.text.slice(0, 180);
+    if (this.valid(epoch) && generation === this.previewGeneration) {
+      this.previewed = revision;
       this.emit();
     }
   };

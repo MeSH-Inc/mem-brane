@@ -166,17 +166,20 @@ export function ArtifactActions({
           {placements.map((p, i) => (
             <div className="artifact-row" key={p.id}>
               <span>Placement {i + 1}</span>
-              <GeometryForm
-                placement={p}
-                commands={commands}
-                onApply={(g) =>
-                  void action(
-                    `geometry:${p.id}`,
-                    () => onGeometry(p.id, g),
-                    'Placement geometry saved',
-                  )
-                }
-              />
+              <details>
+                <summary>Size and position</summary>
+                <GeometryForm
+                  placement={p}
+                  commands={commands}
+                  onApply={(g) =>
+                    void action(
+                      `geometry:${p.id}`,
+                      () => onGeometry(p.id, g),
+                      'Placement geometry saved',
+                    )
+                  }
+                />
+              </details>
               <CommandButton
                 tasks={commands}
                 taskKey={`remove:${p.id}`}

@@ -160,5 +160,17 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
   await expect(page.getByRole('button', { name: '↗ Webpage', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: '↗ Webpage', exact: true })).not.toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Focus', exact: true }).click();
+  await expect(page.locator('.tools')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '＋ Add', exact: true })).toBeVisible();
+  await contextButton.click();
+  const dialog = await page.getByRole('dialog', { name: 'Context', exact: true }).boundingBox();
+  expect(dialog!.x).toBeGreaterThanOrEqual(0);
+  expect(dialog!.x + dialog!.width).toBeLessThanOrEqual(390);
+  expect(dialog!.width).toBe(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.keyboard.press('Escape');
+  await expect(contextButton).toBeFocused();
   expect(errors).toEqual([]);
 });

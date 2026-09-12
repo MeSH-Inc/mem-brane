@@ -693,3 +693,40 @@ it('coalesces title typing and reports an empty title without losing the draft',
   expect(f.c.titleError).toBe('');
   expect(f.state.brane.title).toBe('Valid title');
 });
+
+it('inspects an off-canvas source snapshot without allowing a slower selection to replace it', async () => {
+  const f = await fixture();
+  const old = deferred<unknown>();
+  const snapshot = (id: string) => ({
+    id,
+    block_id: f.block,
+    created_at: 1,
+    content: { format: 'text', text: id },
+  });
+  f.intercept((path) =>
+    path === '/revisions/old'
+      ? old.promise
+      : path === '/revisions/new'
+        ? Promise.resolve(snapshot('new'))
+        : undefined,
+  );
+  const pending = f.c.previewRevision('old');
+  await f.c.previewRevision('new');
+  old.resolve(snapshot('old'));
+  await pending;
+  expect(f.c.previewed?.content.text).toBe('new');
+  await f.c.previewRevision();
+  expect(f.c.previewed).toBeUndefined();
+});
+
+it('title autosave does not invalidate a prompt estimate', async () => {
+  const f = await fixture();
+  f.c.updateDraft({ prompt: 'A question' });
+  await vi.advanceTimersByTimeAsync(400);
+  const estimate = f.c.estimate;
+  expect(estimate).toBeDefined();
+  f.c.updateDraft({ title: 'New title' });
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(f.c.estimate).toBe(estimate);
+  expect(f.sent.filter((r) => r.path === '/runs/estimate')).toHaveLength(1);
+});

@@ -252,6 +252,25 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           )}
         </div>
         <div className="toolbar-actions">
+          <ActionMenu label="＋ Add">
+            <CommandButton
+              tasks={commands}
+              taskKey="create"
+              pendingLabel="Creating…"
+              onClick={() => void create()}
+            >
+              ＋ Text
+            </CommandButton>
+            <button
+              onClick={() => {
+                pickerTarget.current = 'canvas';
+                fileInput.current?.click();
+              }}
+            >
+              ▧ Image / PDF
+            </button>
+            <button onClick={() => setWebOpen(!webOpen)}>↗ Webpage</button>
+          </ActionMenu>
           <div className="view-toggle">
             <button
               className={!focusMode ? 'active' : ''}
@@ -289,6 +308,18 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           </button>
         </div>
       </div>
+      <input
+        ref={fileInput}
+        type="file"
+        accept={acceptedFiles}
+        multiple
+        hidden
+        onChange={(event) => {
+          const files = Array.from(event.currentTarget.files ?? []);
+          event.currentTarget.value = '';
+          acceptFiles(files, pickerTarget.current);
+        }}
+      />
       {ui.recoveryError && (
         <div role="alert" className="error-banner">
           {ui.recoveryError}
@@ -388,8 +419,8 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           onDragOver={allowFileDrop}
           onDrop={(event) => dropFiles(event, attachFiles)}
         >
-          <div className="tools">
-            {!focusMode && (
+          {!focusMode && (
+            <div className="tools">
               <div className="canvas-tools" role="group" aria-label="Canvas tools">
                 {canvasTools.map(({ id, label }) => (
                   <button
@@ -402,44 +433,13 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   </button>
                 ))}
               </div>
-            )}
-            <ActionMenu label="＋ Add">
-              <CommandButton
-                tasks={commands}
-                taskKey="create"
-                pendingLabel="Creating…"
-                onClick={() => void create()}
-              >
-                ＋ Text
-              </CommandButton>
-              <button
-                onClick={() => {
-                  pickerTarget.current = 'canvas';
-                  fileInput.current?.click();
-                }}
-              >
-                ▧ Image / PDF
-              </button>
-              <button onClick={() => setWebOpen(!webOpen)}>↗ Webpage</button>
-            </ActionMenu>
-            {!focusMode && selectedBlocks.length > 0 && (
-              <button onClick={() => ui.addReferences(selectedBlocks)}>
-                Use {selectedBlocks.length} as context
-              </button>
-            )}
-            <input
-              ref={fileInput}
-              type="file"
-              accept={acceptedFiles}
-              multiple
-              hidden
-              onChange={(event) => {
-                const files = Array.from(event.currentTarget.files ?? []);
-                event.currentTarget.value = '';
-                acceptFiles(files, pickerTarget.current);
-              }}
-            />
-          </div>
+              {selectedBlocks.length > 0 && (
+                <button onClick={() => ui.addReferences(selectedBlocks)}>
+                  Use {selectedBlocks.length} as context
+                </button>
+              )}
+            </div>
+          )}
           {webOpen && (
             <form
               className="web-form"
@@ -762,6 +762,11 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
             onClose={() => ui.setInspector(false)}
           >
             <aside className="inspector">
+              {error && (
+                <p className="error" role="alert">
+                  {error}
+                </p>
+              )}
               {inspectorTab === 'context' && (
                 <>
                   <div className="section-label">
@@ -789,6 +794,27 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                         ))}
                       </ol>
                     </div>
+                  )}
+                  {controller.previewed && (
+                    <section className="revision-preview">
+                      <div className="section-label">
+                        Source snapshot{' '}
+                        <button onClick={() => void controller.previewRevision()}>
+                          Close snapshot
+                        </button>
+                      </div>
+                      <pre>{controller.previewed.content.text}</pre>
+                      {controller.previewed.content.format === 'pdf' && (
+                        <PdfContent content={controller.previewed.content} showProvenance />
+                      )}
+                      {controller.previewed.content.format === 'image' && (
+                        <LocalImage
+                          className="context-image"
+                          assetId={controller.previewed.content.assetId!}
+                          alt="Source snapshot"
+                        />
+                      )}
+                    </section>
                   )}
                   {ui.references.length ? (
                     ui.references.map((id, i) => (

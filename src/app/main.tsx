@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   createRootRoute,
@@ -137,6 +137,13 @@ function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
   );
 }
 function Shell() {
+  const navigation = useRef<HTMLDetailsElement>(null);
+  const closeMobileNavigation = () => {
+    if (window.matchMedia('(max-width: 760px)').matches) {
+      navigation.current?.removeAttribute('open');
+      navigation.current?.querySelector('summary')?.focus();
+    }
+  };
   const [session, setSession] = useState<Session | undefined>(undefined),
     [branes, setBranes] = useState<Brane[]>([]),
     [error, setError] = useState('');
@@ -196,7 +203,7 @@ function Shell() {
   if (!session) return <AuthScreen onSignedIn={refreshSession} />;
   return (
     <div className="app-shell">
-      <details className="navigation-drawer">
+      <details ref={navigation} className="navigation-drawer">
         <summary role="button" aria-label="Brane navigation">
           ☰ <span>Branes</span>
         </summary>
@@ -212,6 +219,7 @@ function Shell() {
                 const b = await client.createBrane('Untitled brane');
                 refreshBranes();
                 await navigate({ to: '/b/$braneId', params: { braneId: b.id } });
+                closeMobileNavigation();
               } catch (e) {
                 setError((e as Error).message);
               }
@@ -222,7 +230,12 @@ function Shell() {
           <div className="section-label">
             YOUR BRANES <span>{branes.length.toString().padStart(2, '0')}</span>
           </div>
-          <nav className="brane-nav">
+          <nav
+            className="brane-nav"
+            onClick={(event) => {
+              if ((event.target as Element).closest('a')) closeMobileNavigation();
+            }}
+          >
             {branes.map((b) => (
               <Link
                 to="/b/$braneId"
@@ -267,14 +280,8 @@ function Shell() {
 function Welcome() {
   return (
     <div className="welcome">
-      <span className="eyebrow">A BLANK SPACE IS A BEGINNING</span>
       <h1>What’s on your mind?</h1>
-      <p>
-        Open a brane from the sidebar, or make a new one.
-        <br />
-        Your thoughts don’t have to arrive in order.
-      </p>
-      <div className="welcome-glyph">◇</div>
+      <p>Open Branes in the upper-left corner to choose a workspace or create one.</p>
     </div>
   );
 }
