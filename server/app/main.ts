@@ -1,3 +1,4 @@
+import { Backups } from './backups.js';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DiskMonitor } from './disk.js';
@@ -137,6 +138,8 @@ if (config.READ_ONLY !== '1') {
   ingestion.start();
   ocrWorker.start();
 }
+const backups = new Backups();
+if (process.env.BACKUP_BUCKET && config.READ_ONLY !== '1') backups.start();
 const server = serve({ fetch: app.fetch, port: config.PORT, hostname: config.HOST }, () =>
   console.log(`mem-brane API http://${config.HOST}:${config.PORT}`),
 );
@@ -159,7 +162,14 @@ async function shutdown() {
     const drained = new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );
-    await Promise.all([drained, worker.stop(), ingestion.stop(), ocrWorker.stop(), disk.stop()]);
+    await Promise.all([
+      drained,
+      worker.stop(),
+      ingestion.stop(),
+      ocrWorker.stop(),
+      disk.stop(),
+      backups.stop(),
+    ]);
     db.close();
   } catch {
     exitCode = 1;

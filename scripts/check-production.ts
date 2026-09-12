@@ -39,6 +39,17 @@ if (paid.length) {
     if (!costPolicy.prices[model])
       issues.push(`Add verified pricing and capabilities for ${model}.`);
 }
+const backup = [
+  'BACKUP_ENDPOINT',
+  'BACKUP_BUCKET',
+  'BACKUP_REGION',
+  'BACKUP_ACCESS_KEY_ID',
+  'BACKUP_SECRET_ACCESS_KEY',
+];
+if (backup.some((key) => process.env[key]) && !backup.every((key) => process.env[key]))
+  issues.push('Set all five BACKUP settings or leave all empty.');
+if (process.env.BACKUP_ENDPOINT && !process.env.BACKUP_ENDPOINT.startsWith('https://'))
+  issues.push('Use an HTTPS backup endpoint.');
 const r2 = ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'];
 if (r2.some((key) => process.env[key]) && !r2.every((key) => process.env[key]))
   issues.push('Set all four R2 settings or leave all four empty.');

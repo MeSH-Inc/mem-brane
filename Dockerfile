@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 make g+
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build && npx esbuild scripts/check-production.ts scripts/backup-bundle.ts scripts/verify-bundle.ts --bundle --format=esm --platform=node --target=node24 --packages=external --outdir=dist-ops && npm prune --omit=dev
+RUN npm run build && npx esbuild scripts/check-production.ts scripts/backup-bundle.ts scripts/verify-bundle.ts scripts/backup-remote.ts --bundle --format=esm --platform=node --target=node24 --packages=external --outdir=dist-ops && npm prune --omit=dev
 
 FROM node:24.13.1-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates gosu && rm -rf /var/lib/apt/lists/*

@@ -45,9 +45,29 @@ use replicas. Validate the exact uploaded deployment's successful status before
 changing DNS, then verify certificate issuance, `/health`, auth cookies, uploads,
 SSE and persistence across a restart.
 
-Enable Railway daily and weekly volume backups. In addition, take a portable,
-verified online SQL-plus-assets bundle before releases and periodically retrieve
-one to an independent machine for a restore rehearsal:
+The current Railway plan does not include managed volume backups (the dashboard
+requires Pro). The deployment instead uses a separate private S3-compatible bucket.
+Set `BACKUP_ENDPOINT`, `BACKUP_BUCKET`, `BACKUP_REGION`, `BACKUP_ACCESS_KEY_ID`, and
+`BACKUP_SECRET_ACCESS_KEY` on the app. A bounded subprocess checks at startup and
+every hour, creating one portable SQL-plus-assets backup per UTC day. It validates
+the local bundle, uploads the compressed archive, reads it back to verify SHA-256,
+and publishes a `.verified` marker only after verification. Failed or interrupted
+uploads without that marker are retried. Only this deployment's dated objects
+older than 14 days are expired, and only after a new verified backup succeeds.
+The job runs for at most five minutes; failures emit `backup_job_failed` and
+`remote_backup_failed` logs and retry on the next hourly check. Read-only recovery
+mode disables the scheduler. The application remains available on backup failure.
+
+Archive keys are under `mem-brane/production/`. Runtime access is scoped to the
+backup bucket; provider/model keys never enter its object names or log output.
+The bucket is independent of the live volume but remains in the same Railway
+account. Monitor failed jobs and rehearse recovery regularly. The scheduler's
+hourly check provides eventual daily backup, not a strict midnight SLA.
+
+Take a release backup with `node dist-ops/backup-remote.js --force`. This creates a
+unique dated object even if today's scheduled backup exists. Download an archive
+to an independent machine, extract it, and use the restore rehearsal below.
+Alternatively, take a local portable bundle before releases:
 
 ```sh
 # In the deployed container; use a new destination each time.
@@ -58,9 +78,9 @@ node --import tsx scripts/rehearse-restore.ts /downloaded/backup-YYYY-MM-DD
 ```
 
 Local bundles consume live volume space; move completed bundles off-host and
-remove only those verified copies after transfer. Platform snapshots supplement
-these portable bundles. A second independent recurring backup destination remains
-an operator choice. Keep backup and restore receipts out of logs containing
+remove only those verified copies after transfer. Managed platform snapshots can supplement
+these portable bundles if the account later upgrades to Pro. A recurring copy to
+a separate provider/account remains an operator choice. Keep backup and restore receipts out of logs containing
 credentials. No GitHub Actions workflow is required: validate locally and upload
 the committed checkout through the Railway CLI.
 

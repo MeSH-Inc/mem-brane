@@ -1,4 +1,4 @@
-import { defineRailway, preserve, project, service, volume } from 'railway/iac';
+import { bucket, defineRailway, preserve, project, service, volume } from 'railway/iac';
 
 export default defineRailway(() => {
   const memBraneVolume = volume('mem-brane-volume', {
@@ -7,6 +7,7 @@ export default defineRailway(() => {
     region: 'sfo',
     sizeMB: 5000,
   });
+  const memBraneBackups = bucket('mem-brane-backups', { region: 'sjc' });
   const memBrane = service('mem-brane', {
     build: { buildEnvironment: 'V3', builder: 'DOCKERFILE', dockerfilePath: 'Dockerfile' },
     healthcheck: '/health',
@@ -21,6 +22,11 @@ export default defineRailway(() => {
     env: {
       APP_ORIGIN: preserve(),
       ASSET_DIRECTORY: preserve(),
+      BACKUP_ACCESS_KEY_ID: preserve(),
+      BACKUP_BUCKET: preserve(),
+      BACKUP_ENDPOINT: preserve(),
+      BACKUP_REGION: preserve(),
+      BACKUP_SECRET_ACCESS_KEY: preserve(),
       BETTER_AUTH_SECRET: preserve(),
       DAILY_USER_SPEND_LIMIT: preserve(),
       DATABASE_PATH: preserve(),
@@ -41,6 +47,6 @@ export default defineRailway(() => {
   });
 
   return project('mem-brane', {
-    resources: [memBrane, memBraneVolume],
+    resources: [memBrane, memBraneVolume, memBraneBackups],
   });
 });
