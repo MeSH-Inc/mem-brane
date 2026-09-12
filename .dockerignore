@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+node_modules
+dist
+dist-server
+dist-ops
+dist-stress
+data
+artifacts
+coverage
+test-results
+playwright-report
+*.sqlite*

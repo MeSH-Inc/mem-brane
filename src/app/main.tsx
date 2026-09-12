@@ -22,7 +22,14 @@ import { AppStatus } from '../components/AppStatus';
 function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
   const [signup, setSignup] = useState(false),
     [error, setError] = useState(''),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [signupMode, setSignupMode] = useState<'open' | 'invite' | 'closed'>('closed');
+  useEffect(() => {
+    void client
+      .signupPolicy()
+      .then((policy) => setSignupMode(policy.mode))
+      .catch(() => {});
+  }, []);
   return (
     <main className="auth-screen">
       <div className="auth-art">
@@ -60,7 +67,11 @@ function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
               password: String(form.get('password') ?? ''),
             };
             if (signup)
-              await client.signUp({ ...credentials, name: String(form.get('name') ?? '') });
+              await client.signUp({
+                ...credentials,
+                name: String(form.get('name') ?? ''),
+                inviteCode: String(form.get('inviteCode') ?? ''),
+              });
             else await client.signIn(credentials);
             onSignedIn();
           } catch (err) {
@@ -102,6 +113,12 @@ function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
             placeholder="At least 12 characters"
           />
         </label>
+        {signup && signupMode === 'invite' && (
+          <label>
+            Invitation code
+            <input name="inviteCode" type="password" required autoComplete="off" />
+          </label>
+        )}
         {error && (
           <p role="alert" className="error">
             {error}
@@ -110,9 +127,11 @@ function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
         <button disabled={busy} className="primary">
           {busy ? 'One moment…' : signup ? 'Create your space ↗' : 'Open your space ↗'}
         </button>
-        <button type="button" className="text-button" onClick={() => setSignup(!signup)}>
-          {signup ? 'Already have an account? Sign in' : 'New here? Create an account'}
-        </button>
+        {signupMode !== 'closed' && (
+          <button type="button" className="text-button" onClick={() => setSignup(!signup)}>
+            {signup ? 'Already have an account? Sign in' : 'New here? Create an account'}
+          </button>
+        )}
       </form>
     </main>
   );

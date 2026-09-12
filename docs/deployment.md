@@ -1,4 +1,70 @@
-# One-VPS deployment
+# Railway deployment at mem-brane.com
+
+The repository includes a pinned Node 24.13.1 Debian Docker image and Railway
+configuration. Deploy exactly one always-running service, with a persistent volume
+mounted at `/data`. Allocate at least 5 GB: the application keeps 1 GiB free disk
+headroom, in addition to database and asset storage. Disable service sleeping.
+
+The image builds UI, API, and operational commands, retains production dependencies
+and migrations, prepares volume directory ownership, then runs Node as the
+unprivileged `node` user. `/health` gates deployment readiness; allow 25 seconds
+for graceful shutdown. Migrations execute at application startup, after the volume
+is mounted. Do not run SQLite migrations in a separate pre-deploy container.
+
+Set the variables from `.env.production.example`, with paths
+`DATABASE_PATH=/data/mem-brane.sqlite` and `ASSET_DIRECTORY=/data/assets`.
+`APP_ORIGIN=https://mem-brane.com`, `HOST=0.0.0.0`, and
+`REDIRECT_HOSTS=www.mem-brane.com` keep UI and API on the canonical origin.
+`PORT` must match the Railway domain's target port (3001 by default).
+
+Production defaults to closed registration. Set `SIGNUP_MODE=invite` and a separate
+random `SIGNUP_INVITE_CODE` of at least 32 characters for private registration.
+The UI prompts for the code; the auth hook rejects invalid requests before user
+creation, including direct calls to the auth API. This is a reusable invitation:
+anyone holding it can register. Rotate the code to revoke unused invitations;
+existing accounts remain valid. `SIGNUP_MODE=closed` stops all new registrations,
+while `open` deliberately enables public signup. Email ownership verification and
+password recovery are not configured. Do not use an email allowlist as proof of
+identity. Generate the auth secret and invitation separately and retain them in
+private operator storage outside the repository.
+
+Keep `MODEL_DEFAULT=mock`, `MODEL_ALLOWLIST=mock`, zero model/global spend budgets,
+and `OCR_PROVIDER=disabled` for the initial infrastructure verification.
+
+In Porkbun, retain its nameservers and configure only the web records:
+
+- Root: ALIAS with blank Host, Answer set to Railway's assigned root-domain target.
+- `www`: CNAME pointing to Railway's assigned target for that custom domain.
+- Add each ownership TXT record exactly as Railway returns it.
+- Replace conflicting parking records for those web hosts. Preserve MX, unrelated
+  TXT, and unrelated subdomains. Register both domains in Railway before DNS changes.
+
+Railway supplies HTTPS. The application redirects `www` to the canonical origin,
+preserving paths and queries. Volume redeployments have brief downtime and cannot
+use replicas. Validate the exact uploaded deployment's successful status before
+changing DNS, then verify certificate issuance, `/health`, auth cookies, uploads,
+SSE and persistence across a restart.
+
+Enable Railway daily and weekly volume backups. In addition, take a portable,
+verified online SQL-plus-assets bundle before releases and periodically retrieve
+one to an independent machine for a restore rehearsal:
+
+```sh
+# In the deployed container; use a new destination each time.
+node dist-ops/backup-bundle.js /data/backup-YYYY-MM-DD
+node dist-ops/verify-bundle.js /data/backup-YYYY-MM-DD
+# Download the directory/archive, then run locally against that downloaded copy:
+node --import tsx scripts/rehearse-restore.ts /downloaded/backup-YYYY-MM-DD
+```
+
+Local bundles consume live volume space; move completed bundles off-host and
+remove only those verified copies after transfer. Platform snapshots supplement
+these portable bundles. A second independent recurring backup destination remains
+an operator choice. Keep backup and restore receipts out of logs containing
+credentials. No GitHub Actions workflow is required: validate locally and upload
+the committed checkout through the Railway CLI.
+
+## One-VPS alternative
 
 Use one Linux VPS with persistent disk, Node 22.13+, Caddy and a dedicated unprivileged `membrane` service user. Deploy the repository (including migrations), run `npm ci` and `npm run build`, and retain production dependencies. Build assets are `dist/` and `dist-server/`. The server resolves migrations and assets relative to its working directory.
 

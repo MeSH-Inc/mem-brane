@@ -47,6 +47,21 @@ const ocr = new OcrService(
   },
 );
 const app = new Hono();
+const redirectHosts = new Set(
+  config.REDIRECT_HOSTS.split(',')
+    .map((host) => host.trim())
+    .filter(Boolean),
+);
+app.use('*', async (c, next) => {
+  const url = new URL(c.req.url);
+  if (redirectHosts.has(url.hostname)) {
+    const canonical = new URL(config.APP_ORIGIN);
+    canonical.pathname = url.pathname;
+    canonical.search = url.search;
+    return c.redirect(canonical.toString(), 308);
+  }
+  await next();
+});
 app.use('*', async (c, next) => {
   if (config.READ_ONLY === '1' && !['GET', 'HEAD', 'OPTIONS'].includes(c.req.method))
     return c.json({ error: 'Server is in read-only recovery mode' }, 503);
@@ -122,8 +137,8 @@ if (config.READ_ONLY !== '1') {
   ingestion.start();
   ocrWorker.start();
 }
-const server = serve({ fetch: app.fetch, port: config.PORT, hostname: '127.0.0.1' }, () =>
-  console.log(`mem-brane API http://127.0.0.1:${config.PORT}`),
+const server = serve({ fetch: app.fetch, port: config.PORT, hostname: config.HOST }, () =>
+  console.log(`mem-brane API http://${config.HOST}:${config.PORT}`),
 );
 function fatal() {
   exitCode = 1;

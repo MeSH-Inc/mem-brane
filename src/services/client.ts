@@ -1,3 +1,4 @@
+import { signupPolicyResponse } from '../../shared/auth';
 import { z } from 'zod';
 import { api } from './api';
 import * as response from '../../shared/contracts';
@@ -81,7 +82,8 @@ export function createClient(request: typeof api) {
     importStatus: (key: string) => read(response.importStatusResponse, `/imports/${key}`),
     session: () => read(response.sessionResponse, '/auth/get-session'),
     signIn: (body: { email: string; password: string }) => request('/auth/sign-in/email', body),
-    signUp: (body: { name: string; email: string; password: string }) =>
+    signupPolicy: () => read(signupPolicyResponse, '/signup-policy'),
+    signUp: (body: { name: string; email: string; password: string; inviteCode?: string }) =>
       request('/auth/sign-up/email', body),
     signOut: () => request('/auth/sign-out', {}),
   };

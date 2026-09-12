@@ -10,3 +10,4 @@ playwright-report/
 /AGENTS.md
 dist-stress/
 artifacts/stress/
+dist-ops/

@@ -5,6 +5,11 @@ const positive = (fallback: number) => z.coerce.number().int().positive().defaul
 const env = z
   .object({
     PORT: positive(3001),
+    HOST: z.string().min(1).default('127.0.0.1'),
+    SIGNUP_MODE: z
+      .enum(['open', 'invite', 'closed'])
+      .default(process.env.NODE_ENV === 'production' ? 'closed' : 'open'),
+    REDIRECT_HOSTS: z.string().default(''),
     READ_ONLY: z.enum(['0', '1']).default('0'),
     APP_ORIGIN: z.string().url().default('http://localhost:5173'),
     DATABASE_PATH: z.string().default('data/mem-brane.sqlite'),

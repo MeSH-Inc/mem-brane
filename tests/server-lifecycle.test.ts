@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
+import { get } from 'node:http';
 import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,6 +21,10 @@ it('runs real auth, uploads, SSE and worker shutdown against an isolated server'
       ...process.env,
       NODE_ENV: 'test',
       PORT: String(port),
+      HOST: '0.0.0.0',
+      SIGNUP_MODE: 'invite',
+      SIGNUP_INVITE_CODE: 'lifecycle-invitation-with-32-characters',
+      REDIRECT_HOSTS: 'www.mem-brane.test',
       APP_ORIGIN: origin,
       DATABASE_PATH: database,
       ASSET_DIRECTORY: join(directory, 'assets'),
@@ -43,12 +48,30 @@ it('runs real auth, uploads, SSE and worker shutdown against an isolated server'
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
     await expect.poll(() => output, { timeout: 10000 }).toContain('mem-brane API');
+    const policy = await fetch(`${origin}/api/signup-policy`);
+    expect(await policy.json()).toEqual({ mode: 'invite' });
+    // Node fetch normalizes Host; use HTTP directly to exercise virtual hosting.
+    const redirected = await new Promise<{ status?: number; location?: string }>(
+      (resolve, reject) => {
+        get(
+          `${origin}/b/example?view=focus`,
+          { headers: { host: 'www.mem-brane.test' } },
+          (res) => {
+            res.resume();
+            resolve({ status: res.statusCode, location: res.headers.location });
+          },
+        ).on('error', reject);
+      },
+    );
+    expect(redirected.status).toBe(308);
+    expect(redirected.location).toBe(`${origin}/b/example?view=focus`);
     const signup = await fetch(`${origin}/api/auth/sign-up/email`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin },
       body: JSON.stringify({
         email: 'lifecycle@example.com',
         name: 'Lifecycle',
+        inviteCode: 'lifecycle-invitation-with-32-characters',
         password: 'test-lifecycle-password',
       }),
     });

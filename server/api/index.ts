@@ -80,6 +80,7 @@ export function createApi(
       onError: (c) => c.json({ error: 'Request exceeds size limit' }, 413),
     }),
   );
+  app.get('/signup-policy', (c) => c.json({ mode: config.SIGNUP_MODE }));
   app.on(['GET', 'POST'], '/auth/*', (c) => auth.handler(c.req.raw));
   app.use('*', async (c, next) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });

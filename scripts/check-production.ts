@@ -9,6 +9,8 @@ if (
 const secret = process.env.BETTER_AUTH_SECRET ?? '';
 if (secret.length < 32 || secret.startsWith('replace-'))
   issues.push('Generate BETTER_AUTH_SECRET with at least 32 random bytes.');
+if (config.SIGNUP_MODE === 'invite' && (process.env.SIGNUP_INVITE_CODE ?? '').length < 32)
+  issues.push('Generate SIGNUP_INVITE_CODE with at least 32 random characters.');
 const paid = config.models.filter((model) => model !== 'mock');
 if (config.OCR_PROVIDER !== 'disabled') {
   if (!process.env.MISTRAL_API_KEY || /\s/.test(process.env.MISTRAL_API_KEY))
