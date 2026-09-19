@@ -1,3 +1,4 @@
+import { guestCapacity, guestTextCapacity } from './guest-limits.js';
 import {
   loadBlockStates,
   planTextEdit,
@@ -26,6 +27,7 @@ import { canEditBrane, canReadBrane, DomainError, requireOwned } from '../domain
 export const uid = () => randomUUID();
 export const now = () => Date.now();
 export function createBrane(db: DB, actor: string, title = 'Untitled brane', id: string = uid()) {
+  guestCapacity(db, actor, 'brane');
   if (
     (db.prepare('SELECT count(*) n FROM branes WHERE owner_id=?').get(actor) as { n: number }).n >=
     100
@@ -98,6 +100,8 @@ export function createBlock(
   content = contentSchema.parse(content);
   if (kind !== content.format) throw new DomainError(400, 'Block kind must match content format');
   return db.transaction(() => {
+    guestCapacity(db, actor, 'block');
+    guestTextCapacity(db, actor, content.text);
     const id = identities?.blockId ?? uid();
     db.prepare('INSERT INTO blocks (id,owner_id,kind,created_at,origin) VALUES (?,?,?,?,?)').run(
       id,
@@ -133,6 +137,7 @@ export function updateBlockLiveState(db: DB, actor: string, edit: Edit): SavedTe
   const planned = planBlockEdit(db, actor, edit);
   if (planned.version === edit.version) return planned;
   const { content } = planned;
+  guestTextCapacity(db, actor, content.text, edit.blockId);
   const result = db
     .prepare(
       'UPDATE block_live_state SET content_json=?, version=version+1, updated_at=? WHERE block_id=? AND version=?',

@@ -9,6 +9,14 @@ const env = z
     SIGNUP_MODE: z
       .enum(['open', 'invite', 'closed'])
       .default(process.env.NODE_ENV === 'production' ? 'closed' : 'open'),
+    GUEST_MODE: z.enum(['enabled', 'disabled']).default('enabled'),
+    GUEST_LIFETIME_DAYS: positive(30),
+    GUEST_LIBRARY_LIMIT: positive(10000),
+    GUEST_HOURLY_LIMIT: positive(100),
+    GUEST_STORAGE_BYTES: positive(10485760),
+    GUEST_TOTAL_STORAGE_BYTES: positive(104857600),
+    GUEST_MAX_BLOCKS: positive(100),
+    GUEST_MAX_OPERATIONS: positive(10000),
     REDIRECT_HOSTS: z.string().default(''),
     READ_ONLY: z.enum(['0', '1']).default('0'),
     APP_ORIGIN: z.string().url().default('http://localhost:5173'),

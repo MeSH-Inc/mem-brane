@@ -39,25 +39,36 @@ async function fixture() {
   let connected = true,
     dropReceipt = false;
   let sessionActor: string | null = actor;
+  let sessionLibrary: string | null = actor;
   const sent: WorkspaceOperation[] = [];
-  const transport: typeof networkApi = async (path, raw, method, expectedActor) => {
+  const transport: typeof networkApi = async (
+    path,
+    raw,
+    method,
+    expectedActor,
+    expectedPrincipal,
+  ) => {
     if (!connected) throw new TypeError('Network disconnected');
     if (path === '/session')
       return sessionActor
         ? {
             user: { id: sessionActor, name: 'Local', email: `${sessionActor}@example.com` },
-            libraryId: sessionActor,
-            libraries: [sessionActor],
+            libraryId: sessionLibrary,
+            libraries: [sessionLibrary],
           }
         : null;
-    if (expectedActor !== sessionActor) throw new ApiError(401, 'Account changed');
+    if (
+      expectedActor !== sessionLibrary ||
+      (expectedPrincipal && expectedPrincipal !== sessionActor)
+    )
+      throw new ApiError(401, 'Account changed');
     if (path === '/branes') return [brane];
     if (path.startsWith('/branes/')) return readBrane(db, actor, path.split('/')[2]);
     if (path === '/sync/commands') {
       const op = raw as WorkspaceOperation;
       sent.push(structuredClone(op));
       try {
-        const receipt = applyWorkspaceOperation(db, sessionActor!, op);
+        const receipt = applyWorkspaceOperation(db, sessionLibrary!, op);
         if (dropReceipt) {
           dropReceipt = false;
           throw new TypeError('Lost response after commit');
@@ -96,6 +107,10 @@ async function fixture() {
       dropReceipt = true;
     },
     session: (id: string | null) => {
+      sessionActor = id;
+      sessionLibrary = id;
+    },
+    claim: (id: string) => {
       sessionActor = id;
     },
   };
@@ -476,4 +491,31 @@ it('coordinates concurrent replay across clients without duplicate transmissions
   await Promise.all([f.replica.synchronize(), second.synchronize()]);
   expect(f.sent).toHaveLength(2);
   expect(readBrane(db, f.actor, f.brane.id).blocks[0].content.text).toBe('Second');
+});
+
+it('keeps two tabs and their pending operation identities on the same library after account claiming', async () => {
+  const f = await fixture();
+  const second = new WorkspaceReplica(new IndexedReplicaStorage(f.storeName), f.transport);
+  await second.request('/session');
+  f.offline();
+  await f.client.saveText({ blockId: f.block.id, version: 0, text: 'Before signing in' });
+  const pending = (await f.storage.read(f.actor)).pending;
+  const principal = uid();
+  f.claim(principal);
+  f.online();
+  await f.client.session();
+  await second.request('/session');
+  await Promise.all([f.replica.synchronize(), second.synchronize()]);
+  expect(f.replica.actor).toBe(f.actor);
+  expect(second.actor).toBe(f.actor);
+  expect(f.replica.principal).toBe(principal);
+  expect(second.principal).toBe(principal);
+  expect((await f.storage.read(f.actor)).pending).toHaveLength(0);
+  expect(readBrane(db, f.actor, f.brane.id).blocks[0]).toMatchObject({
+    version: 1,
+    content: { text: 'Before signing in' },
+  });
+  expect(db.prepare('SELECT operation_key FROM workspace_operations').all()).toEqual([
+    { operation_key: pending[0].key },
+  ]);
 });

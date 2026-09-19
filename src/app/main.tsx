@@ -1,3 +1,5 @@
+import { openEntry, enterGuest } from '../services/entry';
+import { Dialog } from '../components/Dialog';
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
@@ -19,15 +21,31 @@ import { BraneView } from '../routes/BraneView';
 import type { Brane } from '../../shared/types/domain';
 import './styles.css';
 import { AppStatus } from '../components/AppStatus';
-function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
-  const [signup, setSignup] = useState(false),
+function AuthScreen({
+  onSignedIn,
+  onGuest,
+  startSignup = false,
+}: {
+  onSignedIn: () => void;
+  onGuest?: () => void;
+  startSignup?: boolean;
+}) {
+  const [guestAllowed, setGuestAllowed] = useState(false);
+  const [signup, setSignup] = useState(startSignup),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [signupMode, setSignupMode] = useState<'open' | 'invite' | 'closed'>('closed');
   useEffect(() => {
     void client
+      .entryPolicy()
+      .then((policy) => setGuestAllowed(policy.guest))
+      .catch(() => {});
+    void client
       .signupPolicy()
-      .then((policy) => setSignupMode(policy.mode))
+      .then((policy) => {
+        setSignupMode(policy.mode);
+        if (policy.mode === 'closed') setSignup(false);
+      })
       .catch(() => {});
   }, []);
   return (
@@ -127,6 +145,11 @@ function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
         <button disabled={busy} className="primary">
           {busy ? 'One moment…' : signup ? 'Create your space ↗' : 'Open your space ↗'}
         </button>
+        {onGuest && guestAllowed && (
+          <button type="button" className="text-button" disabled={busy} onClick={onGuest}>
+            Continue as guest
+          </button>
+        )}
         {signupMode !== 'closed' && (
           <button type="button" className="text-button" onClick={() => setSignup(!signup)}>
             {signup ? 'Already have an account? Sign in' : 'New here? Create an account'}
@@ -138,6 +161,7 @@ function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
 }
 function Shell() {
   const navigation = useRef<HTMLDetailsElement>(null);
+  const [authOpen, setAuthOpen] = useState<'signin' | 'signup' | null>(null);
   const closeMobileNavigation = () => {
     if (window.matchMedia('(max-width: 760px)').matches) {
       navigation.current?.removeAttribute('open');
@@ -148,26 +172,46 @@ function Shell() {
     [branes, setBranes] = useState<Brane[]>([]),
     [error, setError] = useState('');
   const navigate = useNavigate();
+  const applySession = async (value: Session) => {
+    if (value?.user && useInteraction.getState().actor !== value.libraryId)
+      await useInteraction.getState().initialize(value.libraryId);
+    await imports.activate(value?.libraryId);
+    setSession(value);
+    setError('');
+  };
   const refreshSession = () =>
     void client
       .session()
-      .then(async (value) => {
-        if (value?.user && useInteraction.getState().actor !== value.libraryId)
-          await useInteraction.getState().initialize(value.libraryId);
-        await imports.activate(value?.libraryId);
-        setSession(value);
-        setError('');
+      .then(applySession)
+      .catch((e) => setError(e.message || 'Reconnect to open your workspace.'));
+  const startGuest = () =>
+    void enterGuest()
+      .then(async (entry) => {
+        await applySession(entry.session);
+        await navigate({ to: '/b/$braneId', params: { braneId: entry.braneId } });
       })
-      .catch(() => setError('The server is unavailable. Reconnect to open your workspace.'));
+      .catch((e) => setError(e.message));
   const refreshBranes = () =>
     void client
       .branes()
       .then(setBranes)
       .catch((e) => setError(e.message));
   useEffect(() => {
-    refreshSession();
+    const braneId = /^\/b\/([^/]+)/.exec(window.location.pathname)?.[1];
+    void openEntry(braneId)
+      .then(async (entry) => {
+        await applySession(entry.session);
+        if (entry.braneId)
+          await navigate({ to: '/b/$braneId', params: { braneId: entry.braneId } });
+      })
+      .catch((e) => setError(e.message));
+    const signIn = () => setAuthOpen('signin');
     window.addEventListener('brane:session-expired', refreshSession);
-    return () => window.removeEventListener('brane:session-expired', refreshSession);
+    window.addEventListener('brane:sign-in', signIn);
+    return () => {
+      window.removeEventListener('brane:session-expired', refreshSession);
+      window.removeEventListener('brane:sign-in', signIn);
+    };
   }, []);
   useEffect(() => {
     if (!session) return;
@@ -200,7 +244,17 @@ function Shell() {
         {error && <button onClick={refreshSession}>Reconnect</button>}
       </div>
     );
-  if (!session) return <AuthScreen onSignedIn={refreshSession} />;
+  if (!session)
+    return (
+      <>
+        <AuthScreen onSignedIn={refreshSession} onGuest={startGuest} />
+        {error && (
+          <p role="alert" className="error">
+            {error}
+          </p>
+        )}
+      </>
+    );
   return (
     <div className="app-shell">
       <details ref={navigation} className="navigation-drawer">
@@ -227,6 +281,30 @@ function Shell() {
           >
             ＋ New brane
           </button>
+          {session.libraries.length > 1 && (
+            <label className="library-picker">
+              Library
+              <select
+                aria-label="Library"
+                value={session.libraryId}
+                onChange={async (event) => {
+                  try {
+                    await useInteraction.getState().flushRecovery();
+                    await applySession(await client.session(event.target.value));
+                    await navigate({ to: '/' });
+                  } catch (e) {
+                    setError((e as Error).message);
+                  }
+                }}
+              >
+                {session.libraries.map((id, i) => (
+                  <option key={id} value={id}>
+                    {id === session.user.id ? 'Personal library' : `Saved workspace ${i + 1}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="section-label">
             YOUR BRANES <span>{branes.length.toString().padStart(2, '0')}</span>
           </div>
@@ -252,27 +330,57 @@ function Shell() {
           <div className="user-menu">
             <span className="avatar">{session.user.name.slice(0, 1).toUpperCase()}</span>
             <span>{session.user.name}</span>
-            <button
-              className="icon-button"
-              title="Sign out"
-              onClick={async () => {
-                try {
-                  await client.signOut();
-                  await imports.activate(undefined);
-                  setSession(null);
-                } catch (e) {
-                  setError((e as Error).message);
-                }
-              }}
-            >
-              ↪
-            </button>
+            {!session.user.isAnonymous && (
+              <button
+                className="icon-button"
+                title="Sign out"
+                onClick={async () => {
+                  try {
+                    await client.signOut();
+                    await imports.activate(undefined);
+                    setSession(null);
+                  } catch (e) {
+                    setError((e as Error).message);
+                  }
+                }}
+              >
+                ↪
+              </button>
+            )}
           </div>
         </aside>
       </details>
       <main className="main-content">
         <AppStatus />
+        {session.user.isAnonymous && (
+          <aside className="guest-notice" aria-label="Guest workspace">
+            <span>
+              Guest workspace · Saved on this server. Sign in to keep it and open it on other
+              devices.
+              {session.guestExpiresAt && (
+                <> Available until {new Date(session.guestExpiresAt).toLocaleDateString()}.</>
+              )}
+            </span>
+            <button onClick={() => setAuthOpen('signup')}>Keep your workspace</button>
+            <button onClick={() => setAuthOpen('signin')}>Sign in</button>
+          </aside>
+        )}
         <Outlet />
+        {authOpen && (
+          <Dialog
+            title="Keep your workspace"
+            className="account-dialog"
+            onClose={() => setAuthOpen(null)}
+          >
+            <AuthScreen
+              startSignup={authOpen === 'signup'}
+              onSignedIn={() => {
+                setAuthOpen(null);
+                refreshSession();
+              }}
+            />
+          </Dialog>
+        )}
       </main>
     </div>
   );

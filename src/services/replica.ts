@@ -31,6 +31,7 @@ export class WorkspaceReplica {
   // Replica identity is a content library, independent of the login principal.
   actor?: string;
   principal?: string;
+  guest = false;
   private listeners = new Set<() => void>();
   private checking?: { actor: string; generation: number; result: Promise<boolean> };
   private scheduler: ReplicaScheduler;
@@ -50,7 +51,9 @@ export class WorkspaceReplica {
       body,
       method,
       path.startsWith('/auth/') ? undefined : expectedActor,
-      path.startsWith('/auth/') || path.startsWith('/session') ? undefined : this.principal,
+      path.startsWith('/auth/') || path.startsWith('/guest/') || path.startsWith('/session')
+        ? undefined
+        : this.principal,
     );
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -85,6 +88,7 @@ export class WorkspaceReplica {
     if ('BroadcastChannel' in globalThis) {
       this.channel = new BroadcastChannel('mem-brane-replica');
       this.channel.onmessage = (event) => {
+        if (event.data.type === 'session') window.dispatchEvent(new Event('brane:session-expired'));
         if (event.data.actor === this.actor && this.actor) void this.changed(this.actor, false);
       };
     }
@@ -102,7 +106,6 @@ export class WorkspaceReplica {
     let session;
     try {
       session = sessionResponse.parse(await this.remote(path));
-      await this.storage.session(session);
       this.setStatus({ connected: true, error: '' });
     } catch (error) {
       if (!unavailable(error)) throw error;
@@ -110,9 +113,15 @@ export class WorkspaceReplica {
       this.setStatus({ connected: false });
       if (!session) throw new Error('Connect and sign in once to open workspaces on this device.');
     }
+    if (session && !session.user.isAnonymous && session.claimPending)
+      session = sessionResponse.parse(await this.remote('/guest/claim', {}));
+    await this.storage.session(session);
+    const principalChanged = this.principal !== session?.user.id;
     if (this.actor !== session?.libraryId || this.principal !== session?.user.id) ++this.generation;
     this.actor = session?.libraryId;
     this.principal = session?.user.id;
+    this.guest = session?.user.isAnonymous ?? false;
+    if (principalChanged) this.channel?.postMessage({ type: 'session' });
     if (this.actor) {
       await this.changed(this.actor, false);
       void this.synchronize();
@@ -121,6 +130,25 @@ export class WorkspaceReplica {
   }
   request: typeof networkApi = async (path, body, method = body === undefined ? 'GET' : 'POST') => {
     if (path === '/session' || path.startsWith('/session?')) return this.authenticatedSession(path);
+    if (path === '/guest/start')
+      return replicaLock('mem-brane-entry', 'exclusive', async () => {
+        const value = await this.remote(path, body, method);
+        await this.authenticatedSession();
+        return value;
+      });
+    if (path === '/auth/sign-in/email' || path === '/auth/sign-up/email')
+      return replicaLock('mem-brane-entry', 'exclusive', async () => {
+        const current = sessionResponse.parse(await this.remote('/session'));
+        if (current && !current.user.isAnonymous && current.claimPending) {
+          await this.authenticatedSession();
+          return { ok: true };
+        }
+        if (current?.user.isAnonymous) await this.remote('/guest/prepare-claim', {});
+        const value = await this.remote(path, body, method);
+        await this.authenticatedSession();
+        this.channel?.postMessage({ type: 'session' });
+        return value;
+      });
     if (path === '/auth/sign-out') {
       if (this.actor && (await this.storage.read(this.actor)).pending.length)
         throw new Error('Synchronize your local changes before signing out.');
@@ -132,7 +160,19 @@ export class WorkspaceReplica {
       this.setStatus({ pending: 0, conflict: undefined });
       return result;
     }
-    if (!this.actor || path.startsWith('/auth/')) return this.remote(path, body, method);
+    if (!this.actor || path.startsWith('/auth/') || path.startsWith('/guest/'))
+      return this.remote(path, body, method);
+    if (
+      this.guest &&
+      method === 'POST' &&
+      (/^\/(runs|artifacts|ingest)(\/|$)/.test(path) ||
+        path.includes('/ocr') ||
+        path.endsWith('/snapshot'))
+    ) {
+      if (typeof window !== 'undefined' && path !== '/runs/estimate')
+        window.dispatchEvent(new Event('brane:sign-in'));
+      throw new ApiError(403, 'Sign in to use this feature. Your guest work will be kept.');
+    }
     const actor = this.actor;
     if (method !== 'GET' && !isLocalMutation(path, method)) {
       const resources = requestResources(path, body);
@@ -321,6 +361,13 @@ export class WorkspaceReplica {
       return false;
     }
     if (this.actor !== actor || this.generation !== generation) return false;
+    if (session?.libraryId === actor && session.user.id !== this.principal) {
+      // A claim changes the principal while preserving this library and its outbox.
+      // Refresh the shell without dropping the library hint or any local drafts.
+      await this.authenticatedSession();
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('brane:session-expired'));
+      return false;
+    }
     if (session?.libraryId !== actor || session?.user.id !== this.principal) {
       await this.storage.session(null);
       this.actor = undefined;

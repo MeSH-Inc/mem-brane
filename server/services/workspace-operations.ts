@@ -1,3 +1,4 @@
+import { guestCapacity } from './guest-limits.js';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '../domain/canonical.js';
 import { canEditBrane, DomainError } from '../domain/access.js';
@@ -29,6 +30,7 @@ export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceO
           throw new DomainError(409, 'Operation key was already used with different content.');
         return { key: operation.key };
       }
+      guestCapacity(db, actor, 'operation');
       const command = operation.command;
       switch (command.type) {
         case 'brane.create':

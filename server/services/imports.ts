@@ -1,3 +1,4 @@
+import { isGuestLibrary } from './guest-limits.js';
 import { extractionPolicies, policyIdentity } from '../ingestion/policy.js';
 import { decodeContent } from './representations.js';
 import type { ImportReceipt } from '../../shared/types/imports.js';
@@ -22,6 +23,9 @@ interface Operation {
   placement_id: string | null;
 }
 const hash = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
+export function hasActiveImports(db: DB, libraryId: string) {
+  return [...(workByDatabase.get(db)?.keys() ?? [])].some((key) => key.startsWith(`${libraryId}:`));
+}
 const workByDatabase = new WeakMap<DB, Map<string, Promise<unknown>>>();
 export function createImports(
   db: DB,
@@ -51,11 +55,15 @@ export function createImports(
       canEditBrane(db, actor, op.brane_id);
       return op.state === 'ready' ? { state: 'ready', result: receipt(op) } : { state: 'pending' };
     },
-    async import(actor: string, rawIntent: unknown, file: File) {
+    async import(actor: string, rawIntent: unknown, file: File, authorize: () => void = () => {}) {
+      authorize();
       const intent = importIntent.parse(rawIntent);
       canEditBrane(db, actor, intent.braneId);
-      if (!(file instanceof File) || !file.size || file.size > config.MAX_UPLOAD_BYTES)
-        throw new DomainError(400, `Choose a nonempty file up to ${config.MAX_UPLOAD_BYTES} bytes`);
+      const maxBytes = isGuestLibrary(db, actor)
+        ? Math.min(config.MAX_UPLOAD_BYTES, 2 * 1048576)
+        : config.MAX_UPLOAD_BYTES;
+      if (!(file instanceof File) || !file.size || file.size > maxBytes)
+        throw new DomainError(400, `Choose a nonempty file up to ${maxBytes} bytes`);
       const bytes = new Uint8Array(await file.arrayBuffer());
       const assetHash = hash(bytes);
       const filename = file.name.slice(0, 200) || 'Pasted image';
@@ -108,6 +116,7 @@ export function createImports(
                 extractionPolicy: policy.id,
               };
         db.transaction(() => {
+          authorize();
           const current = read(actor, intent.key);
           if (current && current.request_hash !== requestHash)
             throw new DomainError(409, 'This import key belongs to different content or placement');
@@ -176,6 +185,7 @@ export function createImports(
           }
         }
         return db.transaction(() => {
+          authorize();
           canEditBrane(db, actor, intent.braneId);
           const finished = read(actor, intent.key);
           if (finished?.state === 'ready') return receipt(finished);

@@ -1,4 +1,5 @@
-import { currentLibrary, librariesFor } from '../domain/libraries.js';
+import { entryApi } from './entry.js';
+import { currentLibrary, authorizeLibrary } from '../domain/libraries.js';
 import { applyWorkspaceOperation } from '../services/workspace-operations.js';
 import { workspaceOperation } from '../../shared/workspace-commands.js';
 import { OcrService, ocrCredits, defaultOcrLimits } from '../services/ocr.js';
@@ -9,7 +10,7 @@ import { readPdfPages } from '../services/representations.js';
 import { MAX_BLOCK_TEXT_CHARACTERS } from '../../shared/limits.js';
 import { admitImport } from '../services/capacity.js';
 import { readRunPage, readRunDetail } from '../services/run-reads.js';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { createRateLimit } from './rate-limit.js';
 import { streamSSE } from 'hono/streaming';
 import { bodyLimit } from 'hono/body-limit';
@@ -49,6 +50,12 @@ import {
   spawnArtifact as spawnSchema,
   submitRun as runSchema,
 } from '../../shared/schemas/index.js';
+type ApiEnvironment = { Variables: { actor: string; authorize: () => void; guest: boolean } };
+async function authorizedBody(c: Context<ApiEnvironment>) {
+  const body: unknown = await c.req.json();
+  c.get('authorize')();
+  return body;
+}
 export function createApi(
   db: DB,
   auth: ReturnType<typeof createAuth>,
@@ -63,7 +70,7 @@ export function createApi(
     categoryMonthlyLimitUsd: config.OCR_MONTHLY_SPEND_LIMIT,
   }),
 ) {
-  const app = new Hono<{ Variables: { actor: string } }>();
+  const app = new Hono<ApiEnvironment>();
   const allowRequest = createRateLimit();
   const imports = createImports(db, store);
   app.use('*', async (c, next) => {
@@ -82,20 +89,20 @@ export function createApi(
     }),
   );
   app.get('/signup-policy', (c) => c.json({ mode: config.SIGNUP_MODE }));
-  app.on(['GET', 'POST'], '/auth/*', (c) => auth.handler(c.req.raw));
-  app.get('/session', async (c) => {
-    const session = await auth.api.getSession({ headers: c.req.raw.headers });
-    if (!session) return c.json(null);
-    const libraries = librariesFor(db, session.user.id);
-    const requested = c.req.query('library') ?? c.req.header('X-Mem-Brane-Library');
-    const library = libraries.find((item) => item.id === requested) ?? libraries[0];
-    if (!library) throw new DomainError(403, 'No library is available for this account.');
-    return c.json({
-      user: session.user,
-      libraryId: library.id,
-      libraries: libraries.map((item) => item.id),
-    });
+  app.on(['GET', 'POST'], '/auth/*', async (c) => {
+    // An expired anonymous cookie must not make the plugin clear the newly issued
+    // account cookie while it tries to resolve the previous session after login.
+    if (
+      /\/auth\/(sign-in|sign-up)\/email$/.test(c.req.path) &&
+      !(await auth.api.getSession({ headers: c.req.raw.headers }))
+    ) {
+      const headers = new Headers(c.req.raw.headers);
+      headers.delete('cookie');
+      return auth.handler(new Request(c.req.raw, { headers }));
+    }
+    return auth.handler(c.req.raw);
   });
+  app.route('/', entryApi(db, auth));
   app.use('*', async (c, next) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) return c.json({ error: 'Sign in required' }, 401);
@@ -107,6 +114,34 @@ export function createApi(
       c.req.header('X-Mem-Brane-Library') ?? c.req.query('library'),
     );
     c.set('actor', library.id);
+    c.set('guest', Boolean(session.user.isAnonymous));
+    c.set('authorize', () => {
+      try {
+        authorizeLibrary(db, session.user.id, library.id);
+      } catch {
+        throw new DomainError(401, 'Workspace access changed. Refresh your session.');
+      }
+      if (
+        session.session &&
+        !db
+          .prepare(
+            "SELECT 1 FROM session WHERE id=? AND (CASE WHEN typeof(expiresAt)='text' THEN unixepoch(expiresAt,'subsec')*1000 ELSE expiresAt END)>?",
+          )
+          .get(session.session.id, Date.now())
+      )
+        throw new DomainError(401, 'Session expired. Sign in again.');
+    });
+    if (
+      session.user.isAnonymous &&
+      c.req.method === 'POST' &&
+      (/^\/(runs|artifacts|ingest)(\/|$)/.test(c.req.path.replace(/^\/api/, '')) ||
+        c.req.path.includes('/ocr') ||
+        c.req.path.endsWith('/snapshot'))
+    )
+      throw new DomainError(
+        403,
+        'Sign in to use AI, webpage imports, and snapshots. Your guest work will be kept.',
+      );
     if (!allowRequest(session.user.id))
       return c.json({ error: 'Too many requests; try again shortly' }, 429);
     await next();
@@ -132,7 +167,7 @@ export function createApi(
     const body = z
       .object({ key: z.string().min(1).max(200), policyId: z.string().regex(/^[a-f0-9]{64}$/) })
       .strict()
-      .parse(await c.req.json());
+      .parse(await authorizedBody(c));
     return c.json(
       await ocr.submit(c.get('actor'), id.parse(c.req.param('id')), body.key, body.policyId),
       202,
@@ -150,14 +185,18 @@ export function createApi(
     const body = z
       .object({ blockId: id, version: z.number().int().nonnegative().safe() })
       .strict()
-      .parse(await c.req.json());
+      .parse(await authorizedBody(c));
     return c.json(
       ocr.apply(c.get('actor'), id.parse(c.req.param('id')), body.blockId, body.version),
     );
   });
   app.post('/sync/commands', async (c) =>
     c.json(
-      applyWorkspaceOperation(db, c.get('actor'), workspaceOperation.parse(await c.req.json())),
+      applyWorkspaceOperation(
+        db,
+        c.get('actor'),
+        workspaceOperation.parse(await authorizedBody(c)),
+      ),
     ),
   );
   app.get('/config', (c) => c.json(readConfiguration(db, c.get('actor'))));
@@ -173,7 +212,7 @@ export function createApi(
   app.post('/branes', async (c) => {
     const { title } = z
       .object({ title: z.string().trim().min(1).max(200).default('Untitled brane') })
-      .parse(await c.req.json());
+      .parse(await authorizedBody(c));
     return c.json(createBrane(db, c.get('actor'), title), 201);
   });
   app.get('/branes/:id', (c) => c.json(readBrane(db, c.get('actor'), id.parse(c.req.param('id')))));
@@ -188,16 +227,20 @@ export function createApi(
   app.patch('/branes/:id', async (c) => {
     const braneId = id.parse(c.req.param('id'));
     canEditBrane(db, c.get('actor'), braneId);
-    const body = z.object({ title: z.string().trim().min(1).max(200) }).parse(await c.req.json());
+    const body = z
+      .object({ title: z.string().trim().min(1).max(200) })
+      .parse(await authorizedBody(c));
     db.prepare('UPDATE branes SET title=?,updated_at=? WHERE id=?').run(body.title, now(), braneId);
     return c.json({ ok: true });
   });
   app.post('/blocks/text', async (c) => {
-    const body = z.object({ braneId: id, geometry: geometry.optional() }).parse(await c.req.json());
+    const body = z
+      .object({ braneId: id, geometry: geometry.optional() })
+      .parse(await authorizedBody(c));
     return c.json(createTextBlock(db, c.get('actor'), body.braneId, body.geometry), 201);
   });
   app.patch('/blocks/live', async (c) =>
-    c.json(updateBlockLiveState(db, c.get('actor'), edit.parse(await c.req.json()))),
+    c.json(updateBlockLiveState(db, c.get('actor'), edit.parse(await authorizedBody(c)))),
   );
   app.get('/blocks/:id/revisions', (c) => {
     const query = z
@@ -225,7 +268,7 @@ export function createApi(
   app.post('/placements', async (c) => {
     const body = z
       .object({ braneId: id, blockId: id, geometry: geometry.optional() })
-      .parse(await c.req.json());
+      .parse(await authorizedBody(c));
     return c.json(
       createPlacement(db, c.get('actor'), body.braneId, body.blockId, body.geometry),
       201,
@@ -240,7 +283,7 @@ export function createApi(
         db,
         c.get('actor'),
         id.parse(c.req.param('id')),
-        placementEdit.parse(await c.req.json()),
+        placementEdit.parse(await authorizedBody(c)),
       ),
     ),
   );
@@ -252,7 +295,7 @@ export function createApi(
     c.json(readLineage(db, c.get('actor'), id.parse(c.req.param('id')))),
   );
   app.post('/runs/estimate', async (c) => {
-    const input = runSchema.parse(await c.req.json());
+    const input = runSchema.parse(await authorizedBody(c));
     return c.json(estimateRun(db, c.get('actor'), input, limits));
   });
   app.post('/artifacts/spawn', async (c) => {
@@ -260,7 +303,7 @@ export function createApi(
       db,
       revisions(db),
       c.get('actor'),
-      spawnSchema.parse(await c.req.json()),
+      spawnSchema.parse(await authorizedBody(c)),
       limits,
     );
     hub.publish(c.get('actor'), {
@@ -276,7 +319,7 @@ export function createApi(
       db,
       revisions(db),
       c.get('actor'),
-      runSchema.parse(await c.req.json()),
+      runSchema.parse(await authorizedBody(c)),
       limits,
     );
     hub.publish(c.get('actor'), {
@@ -295,7 +338,7 @@ export function createApi(
     return c.json({ ok: true });
   });
   app.post('/runs/:id/retry', async (c) => {
-    const { key } = z.object({ key: id }).parse(await c.req.json());
+    const { key } = z.object({ key: id }).parse(await authorizedBody(c));
     const run = retryRun(db, c.get('actor'), id.parse(c.req.param('id')), key, limits);
     return c.json({ runId: run.id, outputBlockId: run.output_block_id } satisfies RunIdentity, 201);
   });
@@ -310,10 +353,22 @@ export function createApi(
         sending = false;
       const pending = new Map<string, unknown>();
       const unsubscribe = hub.subscribe(c.get('actor'), (event) => {
+        try {
+          c.get('authorize')();
+        } catch {
+          resolve();
+          return;
+        }
         pending.set(event.runId, event);
       });
       const pump = async () => {
         if (closed || sending || !pending.size) return;
+        try {
+          c.get('authorize')();
+        } catch {
+          resolve();
+          return;
+        }
         sending = true;
         const batch = [...pending.values()];
         pending.clear();
@@ -328,6 +383,12 @@ export function createApi(
       };
       const updates = setInterval(() => void pump(), 100);
       const ping = setInterval(() => {
+        try {
+          c.get('authorize')();
+        } catch {
+          resolve();
+          return;
+        }
         if (!closed && !sending)
           void stream
             .writeSSE({ event: 'ping', data: JSON.stringify({ time: now() }) })
@@ -350,13 +411,17 @@ export function createApi(
   );
   app.post('/imports', async (c) => {
     const body = await c.req.parseBody();
+    c.get('authorize')();
     let intent: unknown;
     try {
       intent = JSON.parse(String(body.intent));
     } catch {
       throw new DomainError(400, 'Invalid import intent');
     }
-    return c.json(await imports.import(c.get('actor'), intent, body.file as File), 201);
+    return c.json(
+      await imports.import(c.get('actor'), intent, body.file as File, c.get('authorize')),
+      201,
+    );
   });
   app.get('/imports/:key', (c) =>
     c.json(imports.status(c.get('actor'), id.parse(c.req.param('key')))),
@@ -380,7 +445,9 @@ export function createApi(
       c.header('Content-Disposition', 'attachment; filename="document.pdf"');
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('Cache-Control', 'private, max-age=300');
-    return c.body(new Uint8Array(await store.get(asset.storage_key)));
+    const bytes = new Uint8Array(await store.get(asset.storage_key));
+    c.get('authorize')();
+    return c.body(bytes);
   });
   app.post('/ingest', async (c) => {
     const body = z
@@ -389,7 +456,7 @@ export function createApi(
         url: z.string().url().max(2048),
         text: z.string().max(MAX_BLOCK_TEXT_CHARACTERS).optional(),
       })
-      .parse(await c.req.json());
+      .parse(await authorizedBody(c));
     canEditBrane(db, c.get('actor'), body.braneId);
     const block = db.transaction(() => {
       if (!body.text)

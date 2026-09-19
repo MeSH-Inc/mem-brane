@@ -1835,3 +1835,43 @@ summary:focus-visible {
     max-width: 100%;
   }
 }
+
+.guest-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  background: #f5efdd;
+  color: #393526;
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+.guest-notice span {
+  flex: 1 1 20rem;
+}
+.guest-notice button {
+  white-space: nowrap;
+}
+.account-dialog {
+  width: min(92vw, 32rem);
+}
+.account-dialog .auth-screen {
+  display: block;
+  min-height: auto;
+}
+.account-dialog .auth-art {
+  display: none;
+}
+.account-dialog .auth-form {
+  width: 100%;
+  max-width: none;
+  padding: 1.25rem;
+}
+.library-picker {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.8rem 0;
+}
+.library-picker select {
+  max-width: 100%;
+}

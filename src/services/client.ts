@@ -80,10 +80,21 @@ export function createClient(request: typeof api) {
       read(response.createdBlockResponse, '/ingest', { braneId, url }),
     importFile: (body: FormData) => read(response.importReceiptResponse, '/imports', body),
     importStatus: (key: string) => read(response.importStatusResponse, `/imports/${key}`),
-    session: (library?: string) =>
+    session: (library?: string, brane?: string) =>
       read(
         response.sessionResponse,
-        library ? `/session?library=${encodeURIComponent(library)}` : '/session',
+        library
+          ? `/session?library=${encodeURIComponent(library)}`
+          : brane
+            ? `/session?brane=${encodeURIComponent(brane)}`
+            : '/session',
+      ),
+    entryPolicy: () => read(z.object({ guest: z.boolean() }), '/entry-policy'),
+    startGuest: () =>
+      read(
+        z.object({ session: response.sessionResponse, braneId: z.string() }),
+        '/guest/start',
+        {},
       ),
     signIn: (body: { email: string; password: string }) => request('/auth/sign-in/email', body),
     signupPolicy: () => read(signupPolicyResponse, '/signup-policy'),

@@ -192,7 +192,14 @@ export const importStatusResponse = z.discriminatedUnion('state', [
 ]);
 export const sessionResponse = z
   .object({
-    user: z.object({ id: identity, name: z.string(), email: z.string() }),
+    user: z.object({
+      id: identity,
+      name: z.string(),
+      email: z.string(),
+      isAnonymous: z.boolean().default(false),
+    }),
+    guestExpiresAt: z.number().nullable().default(null),
+    claimPending: z.boolean().default(false),
     libraryId: identity,
     libraries: z.array(identity),
   })
