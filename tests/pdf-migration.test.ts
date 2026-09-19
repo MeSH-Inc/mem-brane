@@ -4,13 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
 import { openDatabase } from '../server/db/index';
-import {
-  createBrane,
-  createBlock,
-  createTextBlock,
-  revisions,
-  uid,
-} from '../server/services/content';
+import { randomUUID as uid } from 'node:crypto';
 import { readInputs } from '../server/services/context-reader';
 it('rebuilds block formats with existing placements, revisions and runs intact', () => {
   const directory = mkdtempSync(join(tmpdir(), 'membrane-migration-'));
@@ -34,18 +28,30 @@ it('rebuilds block formats with existing placements, revisions and runs intact',
       0,
       0,
     );
-    const brane = createBrane(db, actor).id;
-    const block = createTextBlock(db, actor, brane);
-    const revision = revisions(db).snapshotBlock(actor, block.id);
-    const output = createBlock(
-      db,
-      actor,
-      'text',
-      { format: 'text', text: '' },
-      brane,
-      undefined,
-      'generated',
+    // Seed the historical schema directly. Current services require tables
+    // introduced after this fixture's migration boundary.
+    const brane = uid();
+    const block = { id: uid(), placement: { id: uid() } };
+    const output = { id: uid() };
+    const revision = { id: uid(), content: { format: 'text', text: '' } };
+    db.prepare('INSERT INTO branes VALUES (?,?,?,?,?)').run(brane, actor, 'Fixture', 0, 0);
+    for (const [id, origin] of [
+      [block.id, 'authored'],
+      [output.id, 'generated'],
+    ])
+      db.prepare(
+        "INSERT INTO blocks (id,owner_id,kind,created_at,origin) VALUES (?,?,'text',0,?)",
+      ).run(id, actor, origin);
+    db.prepare('INSERT INTO block_live_state VALUES (?,?,0,0)').run(
+      block.id,
+      JSON.stringify(revision.content),
     );
+    db.prepare(
+      'INSERT INTO block_revisions (id,block_id,content_json,created_at) VALUES (?,?,?,0)',
+    ).run(revision.id, block.id, JSON.stringify(revision.content));
+    db.prepare(
+      'INSERT INTO placements (id,brane_id,block_id,x,y,width,height,z_index,updated_at) VALUES (?,?,?,100,100,320,220,0,0)',
+    ).run(block.placement.id, brane, block.id);
     const conversation = uid(),
       runId = uid();
     db.prepare('INSERT INTO conversations VALUES (?,?,?)').run(conversation, actor, 0);
