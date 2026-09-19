@@ -138,7 +138,9 @@ export function grantOcrCredits(
       if (
         input.kind === 'trial' &&
         db
-          .prepare("SELECT 1 FROM ocr_credit_grants WHERE owner_id=? AND kind='trial'")
+          .prepare(
+            "SELECT 1 FROM ocr_credit_grants WHERE owner_id IN (SELECT id FROM libraries WHERE principal_id=(SELECT principal_id FROM libraries WHERE id=?)) AND kind='trial'",
+          )
           .get(input.actor)
       )
         throw new DomainError(409, 'This account has already received its trial');

@@ -42,9 +42,13 @@ async function fixture() {
   const sent: WorkspaceOperation[] = [];
   const transport: typeof networkApi = async (path, raw, method, expectedActor) => {
     if (!connected) throw new TypeError('Network disconnected');
-    if (path === '/auth/get-session')
+    if (path === '/session')
       return sessionActor
-        ? { user: { id: sessionActor, name: 'Local', email: `${sessionActor}@example.com` } }
+        ? {
+            user: { id: sessionActor, name: 'Local', email: `${sessionActor}@example.com` },
+            libraryId: sessionActor,
+            libraries: [sessionActor],
+          }
         : null;
     if (expectedActor !== sessionActor) throw new ApiError(401, 'Account changed');
     if (path === '/branes') return [brane];
@@ -197,7 +201,7 @@ it('serializes concurrent tabs and never replays under a different account', asy
   const f = await fixture();
   f.offline();
   const second = new WorkspaceReplica(new IndexedReplicaStorage(f.storeName), f.transport);
-  await second.request('/auth/get-session');
+  await second.request('/session');
   const results = await Promise.allSettled([
     f.client.saveText({ blockId: f.block.id, text: 'Tab one', version: 0 }),
     createClient(second.request).saveText({ blockId: f.block.id, text: 'Tab two', version: 0 }),
@@ -225,7 +229,7 @@ it('does not transmit a mutation when the local transaction fails', async () => 
     },
     f.transport,
   );
-  await replica.request('/auth/get-session');
+  await replica.request('/session');
   await replica.synchronize();
   await expect(
     createClient(replica.request).saveText({
@@ -256,7 +260,7 @@ it('an older response in another window cannot resurrect a removed placement', a
       return f.transport(path, body, method, actor);
     },
   );
-  await delayed.request('/auth/get-session');
+  await delayed.request('/session');
   await delayed.synchronize();
   const olderRead = createClient(delayed.request).workspace(f.brane.id);
   await expect.poll(() => captured).toBe(true);
@@ -287,7 +291,7 @@ it('still caches a valid overlapping response when the newer request fails', asy
       return f.transport(path, body, method, actor);
     },
   );
-  await delayed.request('/auth/get-session');
+  await delayed.request('/session');
   await delayed.synchronize();
   const older = createClient(delayed.request).workspace(brane.id);
   await expect.poll(() => captured).toBe(true);
@@ -322,7 +326,11 @@ it('upgrades local read metadata without losing an older outbox or cached accoun
       actor,
     );
     tx.objectStore('session').put(
-      { user: { id: actor, name: 'Owner', email: 'owner@example.com' } },
+      {
+        user: { id: actor, name: 'Owner', email: 'owner@example.com' },
+        libraryId: actor,
+        libraries: [actor],
+      },
       'current',
     );
     tx.oncomplete = () => resolve();
@@ -388,7 +396,7 @@ it('dispatches independent writes and Spawn while an unrelated write is still in
     if (path === '/artifacts/spawn' || path.endsWith('/cancel')) online.push(path);
     return f.transport(path, body, method, actor);
   });
-  await replica.request('/auth/get-session');
+  await replica.request('/session');
   await expect.poll(() => started).toBe(true);
   try {
     await replica.request('/artifacts/spawn', {
@@ -462,7 +470,7 @@ it('coordinates concurrent replay across clients without duplicate transmissions
   await f.client.saveText({ blockId: f.block.id, text: 'Second', version: 1 });
   await f.replica.synchronize();
   const second = new WorkspaceReplica(new IndexedReplicaStorage(f.storeName), f.transport);
-  await second.request('/auth/get-session');
+  await second.request('/session');
   await second.synchronize();
   f.online();
   await Promise.all([f.replica.synchronize(), second.synchronize()]);

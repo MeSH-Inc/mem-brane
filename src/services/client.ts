@@ -80,7 +80,11 @@ export function createClient(request: typeof api) {
       read(response.createdBlockResponse, '/ingest', { braneId, url }),
     importFile: (body: FormData) => read(response.importReceiptResponse, '/imports', body),
     importStatus: (key: string) => read(response.importStatusResponse, `/imports/${key}`),
-    session: () => read(response.sessionResponse, '/auth/get-session'),
+    session: (library?: string) =>
+      read(
+        response.sessionResponse,
+        library ? `/session?library=${encodeURIComponent(library)}` : '/session',
+      ),
     signIn: (body: { email: string; password: string }) => request('/auth/sign-in/email', body),
     signupPolicy: () => read(signupPolicyResponse, '/signup-policy'),
     signUp: (body: { name: string; email: string; password: string; inviteCode?: string }) =>

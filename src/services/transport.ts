@@ -10,14 +10,16 @@ export async function networkApi(
   path: string,
   body?: unknown,
   method = body === undefined ? 'GET' : 'POST',
-  expectedActor?: string,
+  expectedLibrary?: string,
+  expectedPrincipal?: string,
 ): Promise<unknown> {
   const response = await fetch(`/api${path}`, {
     method,
     signal: AbortSignal.timeout(30000),
     credentials: 'same-origin',
     headers: {
-      ...(expectedActor ? { 'X-Mem-Brane-Actor': expectedActor } : {}),
+      ...(expectedLibrary ? { 'X-Mem-Brane-Library': expectedLibrary } : {}),
+      ...(expectedPrincipal ? { 'X-Mem-Brane-Actor': expectedPrincipal } : {}),
       ...(body === undefined || body instanceof FormData
         ? {}
         : { 'Content-Type': 'application/json' }),

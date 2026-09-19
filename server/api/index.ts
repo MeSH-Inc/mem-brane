@@ -1,3 +1,4 @@
+import { currentLibrary, librariesFor } from '../domain/libraries.js';
 import { applyWorkspaceOperation } from '../services/workspace-operations.js';
 import { workspaceOperation } from '../../shared/workspace-commands.js';
 import { OcrService, ocrCredits, defaultOcrLimits } from '../services/ocr.js';
@@ -82,12 +83,30 @@ export function createApi(
   );
   app.get('/signup-policy', (c) => c.json({ mode: config.SIGNUP_MODE }));
   app.on(['GET', 'POST'], '/auth/*', (c) => auth.handler(c.req.raw));
+  app.get('/session', async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session) return c.json(null);
+    const libraries = librariesFor(db, session.user.id);
+    const requested = c.req.query('library') ?? c.req.header('X-Mem-Brane-Library');
+    const library = libraries.find((item) => item.id === requested) ?? libraries[0];
+    if (!library) throw new DomainError(403, 'No library is available for this account.');
+    return c.json({
+      user: session.user,
+      libraryId: library.id,
+      libraries: libraries.map((item) => item.id),
+    });
+  });
   app.use('*', async (c, next) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) return c.json({ error: 'Sign in required' }, 401);
     if (c.req.header('X-Mem-Brane-Actor') && c.req.header('X-Mem-Brane-Actor') !== session.user.id)
       return c.json({ error: 'Account changed. Sign in again before synchronizing.' }, 401);
-    c.set('actor', session.user.id);
+    const library = currentLibrary(
+      db,
+      session.user.id,
+      c.req.header('X-Mem-Brane-Library') ?? c.req.query('library'),
+    );
+    c.set('actor', library.id);
     if (!allowRequest(session.user.id))
       return c.json({ error: 'Too many requests; try again shortly' }, 429);
     await next();

@@ -21,7 +21,9 @@ export function committedSpend(
   const clauses: string[] = [];
   const args: string[] = [period + '%'];
   if (filter.actor) {
-    clauses.push('owner_id=?');
+    clauses.push(
+      'owner_id IN (SELECT id FROM libraries WHERE principal_id=(SELECT principal_id FROM libraries WHERE id=?))',
+    );
     args.push(filter.actor);
   }
   if (filter.category) {

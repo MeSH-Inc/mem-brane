@@ -191,7 +191,11 @@ export const importStatusResponse = z.discriminatedUnion('state', [
   z.object({ state: z.literal('ready'), result: importReceiptResponse }),
 ]);
 export const sessionResponse = z
-  .object({ user: z.object({ id: identity, name: z.string(), email: z.string() }) })
+  .object({
+    user: z.object({ id: identity, name: z.string(), email: z.string() }),
+    libraryId: identity,
+    libraries: z.array(identity),
+  })
   .nullable();
 export type Session = z.infer<typeof sessionResponse>;
 export const runEventResponse = z.object({

@@ -11,7 +11,7 @@ export async function localAsset(id: string): Promise<Blob> {
     if (cached) return cached;
     const response = await fetch(`/api/assets/${id}`, {
       credentials: 'same-origin',
-      headers: { 'X-Mem-Brane-Actor': actor },
+      headers: { 'X-Mem-Brane-Library': actor, 'X-Mem-Brane-Actor': replica.principal! },
     });
     if (!response.ok) throw new Error('Attachment unavailable. Reconnect and try again.');
     const blob = await response.blob();

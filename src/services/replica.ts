@@ -28,7 +28,9 @@ const unavailable = (error: unknown) =>
       (error instanceof DOMException && ['AbortError', 'TimeoutError'].includes(error.name));
 
 export class WorkspaceReplica {
+  // Replica identity is a content library, independent of the login principal.
   actor?: string;
+  principal?: string;
   private listeners = new Set<() => void>();
   private checking?: { actor: string; generation: number; result: Promise<boolean> };
   private scheduler: ReplicaScheduler;
@@ -43,7 +45,13 @@ export class WorkspaceReplica {
     this.scheduler = new ReplicaScheduler(storage, (actor, op) => this.dispatch(actor, op));
   }
   private remote: typeof networkApi = (path, body, method, expectedActor = this.actor) =>
-    this.transport(path, body, method, path.startsWith('/auth/') ? undefined : expectedActor);
+    this.transport(
+      path,
+      body,
+      method,
+      path.startsWith('/auth/') ? undefined : expectedActor,
+      path.startsWith('/auth/') || path.startsWith('/session') ? undefined : this.principal,
+    );
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -88,10 +96,12 @@ export class WorkspaceReplica {
       this.channel = undefined;
     };
   }
-  private async authenticatedSession() {
+  private async authenticatedSession(path = '/session') {
+    const saved = await this.storage.session();
+    if (!this.actor) this.actor = saved?.libraryId;
     let session;
     try {
-      session = sessionResponse.parse(await this.remote('/auth/get-session'));
+      session = sessionResponse.parse(await this.remote(path));
       await this.storage.session(session);
       this.setStatus({ connected: true, error: '' });
     } catch (error) {
@@ -100,8 +110,9 @@ export class WorkspaceReplica {
       this.setStatus({ connected: false });
       if (!session) throw new Error('Connect and sign in once to open workspaces on this device.');
     }
-    if (this.actor !== session?.user.id) ++this.generation;
-    this.actor = session?.user.id;
+    if (this.actor !== session?.libraryId || this.principal !== session?.user.id) ++this.generation;
+    this.actor = session?.libraryId;
+    this.principal = session?.user.id;
     if (this.actor) {
       await this.changed(this.actor, false);
       void this.synchronize();
@@ -109,13 +120,14 @@ export class WorkspaceReplica {
     return session;
   }
   request: typeof networkApi = async (path, body, method = body === undefined ? 'GET' : 'POST') => {
-    if (path === '/auth/get-session') return this.authenticatedSession();
+    if (path === '/session' || path.startsWith('/session?')) return this.authenticatedSession(path);
     if (path === '/auth/sign-out') {
       if (this.actor && (await this.storage.read(this.actor)).pending.length)
         throw new Error('Synchronize your local changes before signing out.');
       const result = await this.remote(path, body, method);
       await this.storage.session(null);
       this.actor = undefined;
+      this.principal = undefined;
       ++this.generation;
       this.setStatus({ pending: 0, conflict: undefined });
       return result;
@@ -303,15 +315,16 @@ export class WorkspaceReplica {
     }
     let session;
     try {
-      session = sessionResponse.parse(await this.remote('/auth/get-session'));
+      session = sessionResponse.parse(await this.remote('/session'));
     } catch {
       if (this.actor === actor) this.setStatus({ connected: false });
       return false;
     }
     if (this.actor !== actor || this.generation !== generation) return false;
-    if (session?.user.id !== actor) {
+    if (session?.libraryId !== actor || session?.user.id !== this.principal) {
       await this.storage.session(null);
       this.actor = undefined;
+      this.principal = undefined;
       ++this.generation;
       this.setStatus({
         connected: true,

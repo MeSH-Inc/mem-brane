@@ -152,9 +152,9 @@ function Shell() {
     void client
       .session()
       .then(async (value) => {
-        if (value?.user && useInteraction.getState().actor !== value.user.id)
-          await useInteraction.getState().initialize(value.user.id);
-        await imports.activate(value?.user?.id);
+        if (value?.user && useInteraction.getState().actor !== value.libraryId)
+          await useInteraction.getState().initialize(value.libraryId);
+        await imports.activate(value?.libraryId);
         setSession(value);
         setError('');
       })
@@ -172,7 +172,7 @@ function Shell() {
   useEffect(() => {
     if (!session) return;
     refreshBranes();
-    const events = new EventSource('/api/events');
+    const events = new EventSource(`/api/events?library=${encodeURIComponent(session.libraryId)}`);
     events.addEventListener('ready', () => window.dispatchEvent(new Event('brane:reconcile')));
     events.addEventListener('run', (event) => {
       try {
