@@ -1,5 +1,11 @@
 import { config, costPolicy } from '../server/app/config.js';
+import { mailSettings } from '../server/services/mail.js';
 const issues: string[] = [];
+try {
+  mailSettings();
+} catch (error) {
+  issues.push((error as Error).message);
+}
 if (process.env.NODE_ENV !== 'production') issues.push('Set NODE_ENV=production.');
 if (
   !config.APP_ORIGIN.startsWith('https://') ||

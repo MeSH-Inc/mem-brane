@@ -1,4 +1,6 @@
 import { Backups } from './backups.js';
+import { MailDelivery, mailSettings, resendSender } from '../services/mail.js';
+import { recordBackupResult } from '../services/backup-alerts.js';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DiskMonitor } from './disk.js';
@@ -138,7 +140,12 @@ if (config.READ_ONLY !== '1') {
   ingestion.start();
   ocrWorker.start();
 }
-const backups = new Backups();
+const mailConfig = mailSettings();
+const mailDelivery = mailConfig ? new MailDelivery(db, resendSender(mailConfig)) : undefined;
+if (config.READ_ONLY !== '1') mailDelivery?.start();
+const backups = new Backups((ok) => {
+  if (mailConfig?.alertTo) recordBackupResult(db, mailConfig.alertTo, ok);
+});
 if (process.env.BACKUP_BUCKET && config.READ_ONLY !== '1') backups.start();
 const server = serve({ fetch: app.fetch, port: config.PORT, hostname: config.HOST }, () =>
   console.log(`mem-brane API http://${config.HOST}:${config.PORT}`),
@@ -169,6 +176,7 @@ async function shutdown() {
       ocrWorker.stop(),
       disk.stop(),
       backups.stop(),
+      mailDelivery?.stop(),
     ]);
     db.close();
   } catch {

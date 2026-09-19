@@ -89,6 +89,9 @@ export function createApi(
     }),
   );
   app.get('/signup-policy', (c) => c.json({ mode: config.SIGNUP_MODE }));
+  app.get('/recovery-policy', (c) =>
+    c.json({ enabled: Boolean(auth.options.emailAndPassword?.sendResetPassword) }),
+  );
   app.on(['GET', 'POST'], '/auth/*', async (c) => {
     // An expired anonymous cookie must not make the plugin clear the newly issued
     // account cookie while it tries to resolve the previous session after login.

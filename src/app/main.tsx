@@ -21,6 +21,7 @@ import { BraneView } from '../routes/BraneView';
 import type { Brane } from '../../shared/types/domain';
 import './styles.css';
 import { AppStatus } from '../components/AppStatus';
+import { PasswordRecovery } from '../components/PasswordRecovery';
 function AuthScreen({
   onSignedIn,
   onGuest,
@@ -31,6 +32,8 @@ function AuthScreen({
   startSignup?: boolean;
 }) {
   const [guestAllowed, setGuestAllowed] = useState(false);
+  const [recovery, setRecovery] = useState(false);
+  const [recoveryEnabled, setRecoveryEnabled] = useState(false);
   const [signup, setSignup] = useState(startSignup),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
@@ -41,6 +44,10 @@ function AuthScreen({
       .then((policy) => setGuestAllowed(policy.guest))
       .catch(() => {});
     void client
+      .recoveryPolicy()
+      .then((policy) => setRecoveryEnabled(policy.enabled))
+      .catch(() => setRecoveryEnabled(false));
+    void client
       .signupPolicy()
       .then((policy) => {
         setSignupMode(policy.mode);
@@ -48,6 +55,7 @@ function AuthScreen({
       })
       .catch(() => {});
   }, []);
+  if (recovery) return <PasswordRecovery onBack={() => setRecovery(false)} />;
   return (
     <main className="auth-screen">
       <div className="auth-art">
@@ -145,6 +153,16 @@ function AuthScreen({
         <button disabled={busy} className="primary">
           {busy ? 'One moment…' : signup ? 'Create your space ↗' : 'Open your space ↗'}
         </button>
+        {!signup && recoveryEnabled && (
+          <button
+            type="button"
+            className="text-button"
+            disabled={busy}
+            onClick={() => setRecovery(true)}
+          >
+            Forgot password?
+          </button>
+        )}
         {onGuest && guestAllowed && (
           <button type="button" className="text-button" disabled={busy} onClick={onGuest}>
             Continue as guest
@@ -414,8 +432,18 @@ declare module '@tanstack/react-router' {
     router: typeof router;
   }
 }
+// Capture the token once, then remove it from browser history before mounting.
+const resetPage = window.location.pathname === '/reset-password';
+const resetToken = resetPage
+  ? new URLSearchParams(window.location.hash.slice(1)).get('token') || undefined
+  : undefined;
+if (resetToken) window.history.replaceState(null, '', '/reset-password');
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    {resetPage ? (
+      <PasswordRecovery token={resetToken} onBack={() => window.location.replace('/')} />
+    ) : (
+      <RouterProvider router={router} />
+    )}
   </React.StrictMode>,
 );

@@ -98,6 +98,10 @@ export function createClient(request: typeof api) {
       ),
     signIn: (body: { email: string; password: string }) => request('/auth/sign-in/email', body),
     signupPolicy: () => read(signupPolicyResponse, '/signup-policy'),
+    recoveryPolicy: () => read(z.object({ enabled: z.boolean() }), '/recovery-policy'),
+    requestPasswordReset: (email: string) => request('/auth/request-password-reset', { email }),
+    resetPassword: (token: string, newPassword: string) =>
+      request('/auth/reset-password', { token, newPassword }),
     signUp: (body: { name: string; email: string; password: string; inviteCode?: string }) =>
       request('/auth/sign-up/email', body),
     signOut: () => request('/auth/sign-out', {}),

@@ -5,7 +5,8 @@ import { createAuthMiddleware, APIError } from 'better-auth/api';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { DB } from '../db/index.js';
 import { config } from '../app/config.js';
-export function createAuth(db: DB) {
+import { enqueueMail, mailSettings } from '../services/mail.js';
+export function createAuth(db: DB, recoveryEnabled = Boolean(mailSettings())) {
   if (
     process.env.NODE_ENV === 'production' &&
     (!process.env.BETTER_AUTH_SECRET ||
@@ -58,6 +59,10 @@ export function createAuth(db: DB) {
               message: 'Guest entry is temporarily full. Please sign in or try again later.',
             });
         }
+        if (ctx.path === '/request-password-reset' && ctx.body?.redirectTo !== undefined)
+          throw new APIError('FORBIDDEN', {
+            message: 'Recovery uses the configured application origin.',
+          });
         if (ctx.path !== '/sign-up/email') return;
         if (config.SIGNUP_MODE === 'closed')
           throw new APIError('FORBIDDEN', { message: 'Account registration is closed.' });
@@ -78,8 +83,43 @@ export function createAuth(db: DB) {
       process.env.BETTER_AUTH_SECRET ??
       'local-development-only-mem-brane-secret-change-in-production',
     trustedOrigins: [config.APP_ORIGIN],
-    emailAndPassword: { enabled: true, minPasswordLength: 12 },
-    rateLimit: { enabled: true, customRules: { '/sign-in/anonymous': { window: 60, max: 5 } } },
+    emailAndPassword: {
+      enabled: true,
+      minPasswordLength: 12,
+      resetPasswordTokenExpiresIn: 900,
+      revokeSessionsOnPasswordReset: true,
+      ...(recoveryEnabled
+        ? {
+            sendResetPassword: async ({
+              user,
+              token,
+            }: {
+              user: { email: string };
+              token: string;
+            }) => {
+              // Pin the destination instead of reflecting a caller-provided redirect.
+              const url = new URL('/reset-password', config.APP_ORIGIN);
+              url.hash = new URLSearchParams({ token }).toString();
+              enqueueMail(
+                db,
+                {
+                  recipient: user.email,
+                  subject: 'Reset your mem-brane password',
+                  body: `Open this link to choose a new password. It expires in 15 minutes and can be used once.\n\n${url}\n\nIf you did not request this, ignore this email.`,
+                },
+                Date.now() + 900000,
+              );
+            },
+          }
+        : {}),
+    },
+    rateLimit: {
+      enabled: true,
+      customRules: {
+        '/request-password-reset': { window: 60, max: 3 },
+        '/sign-in/anonymous': { window: 60, max: 5 },
+      },
+    },
     advanced: { useSecureCookies: process.env.NODE_ENV === 'production' },
   });
 }
