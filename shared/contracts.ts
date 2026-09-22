@@ -72,6 +72,7 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
   derivations: z.array(
     z.object({
       runId: identity,
+      kind: z.enum(['source', 'reference']),
       sourceBlockId: identity,
       sourceRevisionId: identity,
       outputBlockId: identity,

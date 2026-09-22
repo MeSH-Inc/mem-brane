@@ -79,28 +79,14 @@ export function submitRun(
     });
     const anchor = derivation
       ? readAnchor(db, actor, input.braneId, derivation.anchorPlacementId, derivation.sources[0])
-      : undefined;
+      : contextAnchor(db, input.braneId, input.references, input.continueFrom);
     const output = createBlock(
       db,
       actor,
       'text',
       { format: 'text', text: '' },
       input.braneId,
-      anchor
-        ? childGeometry(db, anchor)
-        : {
-            x: 520,
-            y:
-              100 +
-              (
-                db.prepare('SELECT count(*) n FROM runs WHERE brane_id=?').get(input.braneId) as {
-                  n: number;
-                }
-              ).n *
-                60,
-            width: 380,
-            height: 300,
-          },
+      anchor ? childGeometry(db, anchor) : openGeometry(db, input.braneId, 520, 100),
       'generated',
     );
     const conversationId = plan.conversationId ?? uid();
@@ -175,14 +161,7 @@ export function retryRun(db: DB, actor: string, id: string, key: string, limits:
         'text',
         { format: 'text', text: '' },
         old.brane_id,
-        anchor
-          ? childGeometry(db, anchor)
-          : {
-              x: 560,
-              y: 180,
-              width: 380,
-              height: 300,
-            },
+        anchor ? childGeometry(db, anchor) : openGeometry(db, old.brane_id, 560, 180),
         'generated',
       ),
       newId = uid();
@@ -236,24 +215,40 @@ function readAnchor(db: DB, actor: string, braneId: string, placementId: string,
     throw new DomainError(400, 'Spawn anchor must place the primary source in this brane');
   return anchor;
 }
-function childGeometry(db: DB, anchor: Placement) {
-  const x = anchor.x + anchor.width + 80;
-  let y = anchor.y;
-  const occupied = db
-    .prepare<unknown[], Geometry>(
-      'SELECT x,y,width,height FROM placements WHERE brane_id=? ORDER BY y',
-    )
-    .all(anchor.brane_id);
-  for (const p of occupied) {
-    if (
-      x < p.x + p.width + 24 &&
-      x + 380 + 24 > p.x &&
-      y < p.y + p.height + 24 &&
-      y + 300 + 24 > p.y
-    )
-      y = p.y + p.height + 40;
+// Composed runs sit beside their first on-brane reference, or the message they continue.
+function contextAnchor(db: DB, braneId: string, references: string[], continueFrom?: string) {
+  const find = db.prepare<unknown[], Placement>(
+    'SELECT * FROM placements WHERE brane_id=? AND block_id=? ORDER BY rowid LIMIT 1',
+  );
+  for (const blockId of references) {
+    const placement = find.get(braneId, blockId);
+    if (placement) return placement;
   }
-  return { x, y, width: 380, height: 300 };
+  if (!continueFrom) return undefined;
+  const message = db
+    .prepare<unknown[], { block_id: string }>(
+      'SELECT v.block_id FROM conversation_messages m JOIN block_revisions v ON v.id=m.revision_id WHERE m.id=?',
+    )
+    .get(continueFrom);
+  return message ? find.get(braneId, message.block_id) : undefined;
+}
+function childGeometry(db: DB, anchor: Placement) {
+  return openGeometry(db, anchor.brane_id, anchor.x + anchor.width + 80, anchor.y);
+}
+// Slide down from the preferred point until the output overlaps no existing placement.
+function openGeometry(db: DB, braneId: string, x: number, preferredY: number): Geometry {
+  const width = 380,
+    height = 300,
+    gap = 24;
+  const occupied = db
+    .prepare<unknown[], Geometry>('SELECT x,y,width,height FROM placements WHERE brane_id=?')
+    .all(braneId)
+    .filter((p) => x < p.x + p.width + gap && x + width + gap > p.x)
+    .sort((a, b) => a.y - b.y);
+  let y = preferredY;
+  for (const p of occupied)
+    if (y < p.y + p.height + gap && y + height + gap > p.y) y = p.y + p.height + 40;
+  return { x, y, width, height };
 }
 export function spawnArtifact(
   db: DB,

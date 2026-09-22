@@ -144,6 +144,8 @@ export type ImportIntent = z.infer<typeof importIntent>;
 
 export interface Derivation {
   runId: string;
+  // Develop sources and composed-run references both project provenance.
+  kind: 'source' | 'reference';
   sourceBlockId: string;
   sourceRevisionId: string;
   outputBlockId: string;

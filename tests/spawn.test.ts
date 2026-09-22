@@ -12,7 +12,7 @@ import {
   removePlacement,
   uid,
 } from '../server/services/content';
-import { spawnArtifact, retryRun } from '../server/services/runs';
+import { spawnArtifact, retryRun, submitRun } from '../server/services/runs';
 import { readInputs } from '../server/services/context-reader';
 import { RunWorker } from '../server/jobs/worker';
 import { EventHub } from '../server/sse/hub';
@@ -214,4 +214,42 @@ it('spawns recursively from finalized output without inheriting ancestors, and p
       .map((d) => d.sourceBlockId),
   ).toEqual([child.id, block]);
   await worker.stop();
+});
+it('projects ordered reference links for composed runs and places output beside the first reference without overlap', () => {
+  const other = createTextBlock(db, actor, brane, { x: 900, y: 600, width: 320, height: 220 });
+  const compose = () =>
+    submitRun(
+      db,
+      revisions(db),
+      actor,
+      {
+        braneId: brane,
+        key: uid(),
+        model: 'mock',
+        prompt: 'Compare',
+        references: [block, other.id],
+        edits: [],
+      },
+      limits,
+    );
+  const first = compose();
+  const second = compose();
+  // Runs created in the same millisecond have no defined relative order; compare per run.
+  for (const run of [first, second])
+    expect(
+      derivationEdges(state())
+        .filter((e) => e.id.startsWith(`${run.id}:`))
+        .map((e) => [e.source, e.label]),
+    ).toEqual([
+      [placement, 'context 1'],
+      [other.placement.id, 'context 2'],
+    ]);
+  expect(state().derivations.every((d) => d.kind === 'reference')).toBe(true);
+  const anchor = state().placements.find((p) => p.id === placement)!;
+  const outputs = [first, second].map((run) =>
+    state().placements.find((p) => p.block_id === run.output_block_id)!,
+  );
+  expect(outputs[0].x).toBe(anchor.x + anchor.width + 80);
+  expect(outputs[0].y).toBe(anchor.y);
+  expect(outputs[1].y).toBeGreaterThanOrEqual(outputs[0].y + outputs[0].height);
 });
