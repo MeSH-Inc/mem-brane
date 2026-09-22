@@ -93,7 +93,7 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
     await page.evaluate(() => {
       (window as any).__blockReplicaWrites = false;
     });
-    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await page.getByRole('button', { name: 'Save my text', exact: true }).click();
     await expect
       .poll(
         async () =>
@@ -106,11 +106,15 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
       .getByRole('button', { name: 'Recover a copy' })
       .click();
     await other.getByRole('button', { name: 'Develop', exact: true }).click();
-    await expect(other.getByText('This block changed elsewhere', { exact: true })).toBeVisible();
-    await other.getByText('Compare original, my draft and server text', { exact: true }).click();
-    const comparison = other
-      .locator('.draft-recovery')
-      .filter({ has: other.getByText('This block changed elsewhere', { exact: true }) });
+    await expect(
+      other.getByText('This card changed in another tab or device', { exact: true }),
+    ).toBeVisible();
+    await other
+      .getByText('Compare original, my text and the other version', { exact: true })
+      .click();
+    const comparison = other.locator('.draft-recovery').filter({
+      has: other.getByText('This card changed in another tab or device', { exact: true }),
+    });
     await expect(comparison.locator('pre')).toHaveText([
       '',
       'Tab B: take the south route',
@@ -125,9 +129,11 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
     await other.evaluate(() => {
       (window as any).__blockReplicaWrites = false;
     });
-    await other.getByRole('button', { name: 'Overwrite with my draft', exact: true }).click();
+    await other.getByRole('button', { name: 'Keep my text', exact: true }).click();
     await expect(text(other)).toHaveValue('Tab B: take the south route');
-    await expect(other.getByText('This block changed elsewhere', { exact: true })).toHaveCount(0);
+    await expect(
+      other.getByText('This card changed in another tab or device', { exact: true }),
+    ).toHaveCount(0);
     await other.getByRole('button', { name: 'Develop', exact: true }).click();
     await expect
       .poll(

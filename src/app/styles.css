@@ -751,17 +751,38 @@ a {
   min-width: 0;
   font-size: 12px;
 }
-.error-banner {
-  padding: 10px 20px;
-  background: #f5e6d9;
-  color: #985544;
+.attention {
+  flex-shrink: 0;
+  max-height: 40vh;
+  overflow: auto;
+}
+.attention.active {
+  border-bottom: 1px solid #e3cfa0;
+  background: #fbf4e2;
+  padding: 8px 20px;
+}
+.attention:focus {
+  outline: 2px solid #c9a34a;
+  outline-offset: -2px;
+}
+.attention-heading {
+  display: block;
+  font-size: 12px;
+  color: #7a5a14;
+  margin-bottom: 6px;
+}
+.attention-item {
+  padding: 8px 0;
+  color: #6e4c2f;
   font-size: 12px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
+  border-top: 1px dashed #e3cfa0;
 }
-.error-banner button {
-  font-size: 10px;
+.attention-item button {
+  font-size: 11px;
 }
 .loading {
   padding: 50px;
@@ -1128,12 +1149,10 @@ a {
   .welcome h1 {
     font-size: 34px;
   }
-  .error-banner {
-    flex-wrap: wrap;
+  .attention-item {
     font-size: 11px;
   }
 }
-.draft-recovery,
 .artifact-actions {
   background: #f5f1df;
   border-bottom: 1px solid #d8d8c4;
@@ -1901,4 +1920,7 @@ summary:focus-visible {
   color: var(--green);
   font-size: 11px;
   padding: 3px 9px;
+}
+.draft-recovery.attention-item {
+  display: block;
 }

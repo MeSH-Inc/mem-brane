@@ -103,7 +103,7 @@ test('delayed saves retain newer moves, conflicts pause, and explicit retry uses
   await expect(card).toHaveCSS('transform', `matrix(1, 0, 0, 1, ${latestX}, 100)`);
   expect(edits).toHaveLength(1);
   releaseFirst();
-  await expect(page.getByText(/Placement changes are unsaved/)).toBeVisible();
+  await expect(page.getByText(/A card move wasn’t saved/)).toBeVisible();
   expect(edits[1]).toMatchObject({ x: latestX, version: 1 });
   await expect(card).toHaveCSS('transform', `matrix(1, 0, 0, 1, ${latestX}, 100)`);
   await card.focus();
@@ -111,10 +111,10 @@ test('delayed saves retain newer moves, conflicts pause, and explicit retry uses
   const newestX = latestX + 5;
   await expect(card).toHaveCSS('transform', `matrix(1, 0, 0, 1, ${newestX}, 100)`);
   expect(edits).toHaveLength(2);
-  await page.getByRole('button', { name: 'Save my latest placement', exact: true }).click();
+  await page.getByRole('button', { name: 'Save my move', exact: true }).click();
   await expect.poll(() => edits.length).toBe(3);
   expect(edits[2]).toMatchObject({ x: newestX, version: 2 });
-  await expect(page.getByText(/Placement changes are unsaved/)).toHaveCount(0);
+  await expect(page.getByText(/A card move wasn’t saved/)).toHaveCount(0);
   await expect(card).toHaveCSS('transform', `matrix(1, 0, 0, 1, ${newestX}, 100)`);
   // A delayed pre-save snapshot must not undo the acknowledged geometry.
   await page.route('**/api/branes/b', (route) =>

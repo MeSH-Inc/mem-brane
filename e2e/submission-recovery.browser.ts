@@ -130,7 +130,9 @@ test('uncertain compose and Spawn retry their original requests after reload wit
       ).ok(),
     ).toBe(true);
     await page.evaluate(() => window.dispatchEvent(new Event('brane:reconcile')));
-    await expect(page.getByText('This block changed elsewhere', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText('This card changed in another tab or device', { exact: true }),
+    ).toBeVisible();
     await page.route(
       '**/api/artifacts/spawn',
       async (route) => {
@@ -143,7 +145,9 @@ test('uncertain compose and Spawn retry their original requests after reload wit
     await expect(page.getByRole('button', { name: 'Develop', exact: true })).toBeEnabled();
     expect(spawns).toHaveLength(2);
     expect(spawns[1]).toEqual(spawns[0]);
-    await expect(page.getByText('This block changed elsewhere', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText('This card changed in another tab or device', { exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Block text', exact: true })).toHaveValue(
       'New local source edit',
     );

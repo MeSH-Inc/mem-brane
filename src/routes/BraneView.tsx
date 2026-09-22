@@ -255,6 +255,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     },
     [controller],
   );
+  const attentionRef = useRef<HTMLElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const insertionReady = useCallback((getPoint: () => { x: number; y: number }) => {
     canvasInsertion.current = getPoint;
@@ -276,6 +277,26 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   const availableDrafts = ui.availableDrafts.filter((d) =>
     state.blocks.some((b) => b.id === d.blockId),
   );
+  const draftAttention = state.blocks.filter(
+    (b) =>
+      ui.draftRecords[b.id] &&
+      (ui.recovered.includes(b.id) || draftDisposition(ui.draftRecords[b.id], b) === 'conflict'),
+  ).length;
+  const operationError =
+    error ||
+    workspace.error ||
+    pendingRuns.error ||
+    spawnRequests.error ||
+    submission.state.status === 'uncertain';
+  const attentionCount =
+    (ui.recoveryError ? 1 : 0) +
+    (availableDrafts.length ? 1 : 0) +
+    draftAttention +
+    placementFailures.length +
+    (operationError ? 1 : 0) +
+    (retrySpawns.length ? 1 : 0) +
+    (imports.recoveryError ? 1 : 0) +
+    (controller.titleError ? 1 : 0);
   return (
     <div
       className="brane-workspace"
@@ -372,86 +393,134 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           acceptFiles(files, pickerTarget.current);
         }}
       />
-      {ui.recoveryError && (
-        <div role="alert" className="error-banner">
-          {ui.recoveryError}
-        </div>
-      )}
-      <SavedDrafts
-        drafts={availableDrafts}
-        blocks={state.blocks}
-        onRefresh={ui.refreshDrafts}
-        onDiscard={ui.discardDraft}
-        onRecover={controller.recoverDraft}
-      />
-      {state.blocks
-        .filter(
-          (b) =>
-            ui.draftRecords[b.id] &&
-            (ui.recovered.includes(b.id) ||
-              draftDisposition(ui.draftRecords[b.id], b) === 'conflict'),
-        )
-        .map((b) => {
-          const draft = ui.draftRecords[b.id],
-            conflict = draftDisposition(draft, b) === 'conflict';
-          return (
-            <div className="draft-recovery" key={b.id}>
-              <strong>
-                {conflict ? 'This block changed elsewhere' : 'Unsaved draft recovered or pending'}
-              </strong>
-              <p>{draft.text.slice(0, 140)}</p>
-              {conflict && (
-                <details>
-                  <summary>Compare original, my draft and server text</summary>
-                  <h4>Original text (version {draft.baseVersion})</h4>
-                  <pre>{draft.baseText}</pre>
-                  <h4>My draft</h4>
-                  <pre>{draft.text}</pre>
-                  <h4>Server text (version {b.version})</h4>
-                  <pre>{b.content.text}</pre>
-                </details>
-              )}
-              <button
-                onClick={() => {
-                  controller.useServerText(b.id);
-                  setError('');
-                }}
-              >
-                Use server text
-              </button>
-              <CommandButton
-                tasks={commands}
-                taskKey={`saveDraft:${b.id}`}
-                pendingLabel="Saving…"
-                onClick={async () => {
-                  try {
-                    if (conflict) await controller.overwriteDraft(b.id);
-                    else await saveDraft(b.id);
+      {/* Everything that needs a decision lives in this one region. */}
+      <section
+        ref={attentionRef}
+        tabIndex={-1}
+        className={`attention${attentionCount ? ' active' : ''}`}
+        aria-label="Needs attention"
+      >
+        {attentionCount > 0 && (
+          <strong className="attention-heading">
+            {attentionCount === 1 ? '1 thing needs' : `${attentionCount} things need`} your
+            attention
+          </strong>
+        )}
+        {ui.recoveryError && (
+          <div role="alert" className="attention-item">
+            {ui.recoveryError}
+          </div>
+        )}
+        <SavedDrafts
+          drafts={availableDrafts}
+          blocks={state.blocks}
+          onRefresh={ui.refreshDrafts}
+          onDiscard={ui.discardDraft}
+          onRecover={controller.recoverDraft}
+        />
+        {state.blocks
+          .filter(
+            (b) =>
+              ui.draftRecords[b.id] &&
+              (ui.recovered.includes(b.id) ||
+                draftDisposition(ui.draftRecords[b.id], b) === 'conflict'),
+          )
+          .map((b) => {
+            const draft = ui.draftRecords[b.id],
+              conflict = draftDisposition(draft, b) === 'conflict';
+            return (
+              <div className="draft-recovery attention-item" key={b.id}>
+                <strong>
+                  {conflict
+                    ? 'This card changed in another tab or device'
+                    : 'Recovered unsaved text'}
+                </strong>
+                <p>{draft.text.slice(0, 140)}</p>
+                {conflict && (
+                  <details>
+                    <summary>Compare original, my text and the other version</summary>
+                    <h4>Original text (version {draft.baseVersion})</h4>
+                    <pre>{draft.baseText}</pre>
+                    <h4>My text</h4>
+                    <pre>{draft.text}</pre>
+                    <h4>Other version (version {b.version})</h4>
+                    <pre>{b.content.text}</pre>
+                  </details>
+                )}
+                <button
+                  onClick={() => {
+                    controller.useServerText(b.id);
                     setError('');
-                  } catch (e) {
-                    setError((e as Error).message);
-                    await refresh();
-                  }
-                }}
-              >
-                {conflict ? 'Overwrite with my draft' : 'Save draft'}
-              </CommandButton>
-            </div>
-          );
-        })}
-      {placementFailures.map((failure) => (
-        <div className="error-banner" role="alert" key={failure.id}>
-          <span>
-            Placement changes are unsaved. {failure.message} Your latest move is still shown.
-          </span>
-          <button disabled={failure.busy} onClick={() => void placementSaves.retry(failure.id)}>
-            Save my latest placement
-          </button>
-          <button disabled={failure.busy} onClick={() => void placementSaves.discard(failure.id)}>
-            Use saved placement
-          </button>
-        </div>
-      ))}
+                  }}
+                >
+                  Keep the other version
+                </button>
+                <CommandButton
+                  tasks={commands}
+                  taskKey={`saveDraft:${b.id}`}
+                  pendingLabel="Saving…"
+                  onClick={async () => {
+                    try {
+                      if (conflict) await controller.overwriteDraft(b.id);
+                      else await saveDraft(b.id);
+                      setError('');
+                    } catch (e) {
+                      setError((e as Error).message);
+                      await refresh();
+                    }
+                  }}
+                >
+                  {conflict ? 'Keep my text' : 'Save my text'}
+                </CommandButton>
+              </div>
+            );
+          })}
+        {placementFailures.map((failure) => (
+          <div className="attention-item" role="alert" key={failure.id}>
+            <span>A card move wasn’t saved. {failure.message} You’re seeing your latest move.</span>
+            <button disabled={failure.busy} onClick={() => void placementSaves.retry(failure.id)}>
+              Save my move
+            </button>
+            <button disabled={failure.busy} onClick={() => void placementSaves.discard(failure.id)}>
+              Put it back
+            </button>
+          </div>
+        ))}
+        {(error ||
+          workspace.error ||
+          pendingRuns.error ||
+          spawnRequests.error ||
+          submission.state.status === 'uncertain') && (
+          <div role="alert" className="attention-item">
+            {error || workspace.error || pendingRuns.error || spawnRequests.error}
+            <button
+              onClick={() => {
+                setError('');
+                void refresh();
+              }}
+            >
+              Reload
+            </button>
+            {submission.state.status === 'uncertain' && (
+              <p>
+                We couldn’t confirm your last Run reached the server. Retrying checks it without
+                running twice; later prompt edits are kept for your next Run.
+              </p>
+            )}
+          </div>
+        )}
+        {retrySpawns.length > 0 && (
+          <p className="attention-item">
+            We couldn’t confirm a Develop reached the server. Retry Develop checks it without
+            running twice, using the text it was sent with.
+          </p>
+        )}
+        {imports.recoveryError && (
+          <p role="alert" className="attention-item">
+            {imports.recoveryError}
+          </p>
+        )}
+      </section>
       {managed && state.blocks.some((b) => b.id === managed.blockId) && (
         <ArtifactActions
           key={`${managed.blockId}:${managed.view}`}
@@ -507,41 +576,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               </CommandButton>
             </form>
           )}
-          {(error ||
-            workspace.error ||
-            pendingRuns.error ||
-            spawnRequests.error ||
-            submission.state.status === 'uncertain') && (
-            <div role="alert" className="error-banner">
-              {error || workspace.error || pendingRuns.error || spawnRequests.error}
-              <button
-                onClick={() => {
-                  setError('');
-                  void refresh();
-                }}
-              >
-                Reload state
-              </button>
-              {submission.state.status === 'uncertain' && (
-                <p>
-                  Delivery is uncertain. Retry submission checks the original request; edits to the
-                  composer are kept for your next run.
-                </p>
-              )}
-            </div>
-          )}
-          {retrySpawns.length > 0 && (
-            <p>
-              Develop delivery is uncertain. Retry Develop checks the original request, including
-              its original source edits.
-            </p>
-          )}
           {importTasks.length > 0 && <ImportTray tasks={importTasks} />}
-          {imports.recoveryError && (
-            <p role="alert" className="error">
-              {imports.recoveryError}
-            </p>
-          )}
           <RunActivity controller={controller} onOpen={focusBlock} />
           {focusMode ? (
             <div className="focus-layout">
@@ -811,13 +846,8 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 </span>
               )}
               <span className="save-notice" role="status">
-                {controller.titleError ||
-                placementFailures.length ||
-                Object.keys(ui.draftRecords).some((id) => {
-                  const block = state.blocks.find((block) => block.id === id);
-                  return block && draftDisposition(ui.draftRecords[id], block) === 'conflict';
-                })
-                  ? 'Changes need attention'
+                {attentionCount
+                  ? `Needs attention (${attentionCount})`
                   : titleDraft !== undefined ||
                       Object.keys(ui.drafts).length ||
                       placementSaves.hasPending() ||
@@ -827,6 +857,17 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                       ? 'Saved on device · Syncing…'
                       : 'Saved'}
               </span>
+              {attentionCount > 0 && (
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    attentionRef.current?.scrollIntoView({ block: 'nearest' });
+                    attentionRef.current?.focus();
+                  }}
+                >
+                  Review
+                </button>
+              )}
             </div>
           </div>
         </div>

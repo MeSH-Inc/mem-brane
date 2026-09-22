@@ -172,8 +172,8 @@ for (const selectors of tracing ? ['global', 'scoped'] : ['scoped'])
       await page.evaluate((id) => window.stress.server.release(id), placement(0));
       const conflict =
         selectors === 'global'
-          ? page.getByText(/Placement changes are unsaved/)
-          : page.locator('.error-banner').filter({ hasText: 'Placement changes are unsaved' });
+          ? page.getByText(/A card move wasn’t saved/)
+          : page.locator('.attention-item').filter({ hasText: 'A card move wasn’t saved' });
       // A missing-locator expect() builds a full-page accessibility snapshot
       // on each retry. Waiting for attachment/visibility avoids that diagnostic
       // work during the deliberately delayed response; real failures still fail.
@@ -197,7 +197,7 @@ for (const selectors of tracing ? ['global', 'scoped'] : ['scoped'])
         await page.evaluate((i) => window.stress.metrics.wait(`conflict-typing:${i}`), i);
       }
       await (selectors === 'global' ? page : conflict)
-        .getByRole('button', { name: 'Save my latest placement', exact: true })
+        .getByRole('button', { name: 'Save my move', exact: true })
         .click();
       await expect(conflict).toHaveCount(0);
       await expect(card).toHaveCSS('transform', localTransform);
