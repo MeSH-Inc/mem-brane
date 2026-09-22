@@ -114,10 +114,14 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
           retry={activity.retry}
           onSpawn={() => data.onSpawn(block.id, id)}
         />
-        <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
+        {block.messageId ? (
+          <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
+        ) : (
+          <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
+        )}
         <ActionMenu label="More" align="right">
           {block.messageId && (
-            <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
+            <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
           )}
           <button onClick={() => data.onManage(block.id, id, 'place')}>
             Show on another brane…

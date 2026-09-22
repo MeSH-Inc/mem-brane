@@ -161,7 +161,11 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     selectedPlacements: useInteraction((s) => s.selectedPlacements),
     setInspector: useInteraction((s) => s.setInspector),
   };
-  const selectedBlocks = selectedBlockIds(state?.placements ?? [], ui.selectedPlacements);
+  // Selection never changes context by itself; the composer offers to add it.
+  const unreferencedSelection = selectedBlockIds(
+    state?.placements ?? [],
+    ui.selectedPlacements,
+  ).filter((id) => !references.includes(id));
   const navigate = useNavigate();
   const focusBlock = useCallback(
     (id: string) => {
@@ -240,6 +244,16 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     (blockId: string, placementId: string, view: CardAction) =>
       setManaged({ blockId, placementId, view }),
     [],
+  );
+  const continueBranch = useCallback(
+    (messageId?: string) => {
+      controller.setContinue(messageId);
+      if (messageId)
+        requestAnimationFrame(() =>
+          document.querySelector<HTMLTextAreaElement>('[aria-label="Run prompt"]')?.focus(),
+        );
+    },
+    [controller],
   );
   const fileInput = useRef<HTMLInputElement>(null);
   const insertionReady = useCallback((getPoint: () => { x: number; y: number }) => {
@@ -463,11 +477,6 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               <span className="canvas-hint">
                 Double-click to write · Drag to select · Space-drag to pan
               </span>
-              {selectedBlocks.length > 0 && (
-                <button onClick={() => ui.addReferences(selectedBlocks)}>
-                  Use {selectedBlocks.length} as context
-                </button>
-              )}
             </div>
           )}
           {webOpen && (
@@ -587,11 +596,17 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                         if (placement) spawn(focused.id, placement.id);
                       }}
                     />
-                    <button onClick={() => ui.addReferences([focused.id])}>+ Use as context</button>
+                    {focused.messageId ? (
+                      <button onClick={() => continueBranch(focused.messageId)}>⑂ Continue</button>
+                    ) : (
+                      <button onClick={() => ui.addReferences([focused.id])}>
+                        + Use as context
+                      </button>
+                    )}
                     <ActionMenu label="More" align="right">
                       {focused.messageId && (
-                        <button onClick={() => ui.setContinue(focused.messageId)}>
-                          ⑂ Continue from here
+                        <button onClick={() => ui.addReferences([focused.id])}>
+                          + Use as context
                         </button>
                       )}
                       {(['place', 'versions', 'remove'] as const).map((view) => (
@@ -650,7 +665,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               )}
               <BraneCanvas
                 onContext={controller.addReferences}
-                onContinue={controller.setContinue}
+                onContinue={continueBranch}
                 onImport={attachFiles}
                 onInsertionReady={insertionReady}
                 document={controller.document}
@@ -693,6 +708,14 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   {state.blocks.find((b) => b.id === id)?.content.text.slice(0, 23) || 'Card'} ×
                 </button>
               ))}
+              {!focusMode && unreferencedSelection.length > 0 && (
+                <button
+                  className="suggest-chip"
+                  onClick={() => ui.addReferences(unreferencedSelection)}
+                >
+                  + Add {unreferencedSelection.length} selected
+                </button>
+              )}
               {!ui.references.length && !ui.continueFrom && (
                 <span className="muted">Prompt only</span>
               )}

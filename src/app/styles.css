@@ -1894,3 +1894,11 @@ summary:focus-visible {
   color: var(--green);
   font-weight: 600;
 }
+.suggest-chip {
+  border: 1px dashed var(--green);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--green);
+  font-size: 11px;
+  padding: 3px 9px;
+}

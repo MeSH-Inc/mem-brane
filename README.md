@@ -32,7 +32,7 @@ Vite serves the browser on port 5173 and proxies `/api` to the Node server on po
 1. Open the seeded brane or choose **New brane**.
 2. In Canvas, double-click empty space to create a thought and type into its editor. In Focus, choose **Add → Text** instead.
 3. Choose **Develop** on an active artifact to create a generated child. Develop captures the source's current text and creates a new artifact with provenance; it does not read the global composer or inherit a conversation automatically.
-4. For a composed exploration, choose **Use as context**, order your references, write a prompt and submit. **More → Continue from here** explicitly selects a conversation's ancestor chain.
+4. For a composed exploration, choose **Use as context**, order your references, write a prompt and submit. **⑂ Continue** on a response explicitly selects its conversation's ancestor chain.
 5. Titles, text and placement changes save automatically. The composer shows saving status; failed title writes retain the draft and offer Retry. Background runs continue when you navigate away.
 
 The mock model exercises streaming and persistence but does not perform reasoning or image understanding.
@@ -68,7 +68,7 @@ The canvas has no tool modes:
 
 Use Fit View to find offscreen cards. Editor text gestures do not move cards. Escape, blur and pointer cancellation abort selection, movement and resizing without saving; cancellation restores the previous selection. Wheel gestures pan; Control/Command-wheel zooms around the pointer.
 
-Selection belongs to placements: two instances of the same block can be selected independently. **Use as context** resolves that selection to unique blocks. Selection, proximity, movement and resizing never invoke a model or implicitly change context.
+Selection belongs to placements: two instances of the same block can be selected independently. When cards are selected, the prompt offers **+ Add N selected**, which resolves the selection to unique blocks. Responses offer **⑂ Continue** to branch their conversation. Selection, proximity, movement and resizing never invoke a model or implicitly change context.
 
 Mobile defaults to **Focus**, with a full-width editor, horizontal block outline, tap-to-add, image picker and brane navigation. Canvas is an optional overview, with touch viewport panning. Canvas rendering is lazy. In production, PWA installation also precaches Canvas code and styles in the background so it can open offline. A focused link has the form `/b/:braneId?focus=:blockId&view=focus`.
 

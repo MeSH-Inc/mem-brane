@@ -160,8 +160,8 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
     // Branch, inspect frozen provenance, then reopen the source's older snapshot.
     const generated = (await read()).blocks.find((b: any) => b.messageId);
     await page.goto(`${origin}/b/${brane.id}?view=focus&focus=${generated.id}`);
-    await page.getByRole('button', { name: 'More', exact: true }).click();
-    await page.getByRole('button', { name: '⑂ Continue from here' }).click();
+    await page.getByRole('button', { name: '⑂ Continue', exact: true }).click();
+    await expect(prompt).toBeFocused();
     await prompt.fill('Explain the tradeoffs on this branch');
     await page.reload();
     await expect(page.getByRole('button', { name: '⑂ Continuing a branch ×' })).toBeVisible();
