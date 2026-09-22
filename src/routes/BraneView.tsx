@@ -30,6 +30,7 @@ import { useStore } from 'zustand';
 import { LiveBlockContent } from '../components/LiveBlockContent';
 import { SpawnButton } from '../components/SpawnButton';
 import { ArtifactActions, type CardAction } from '../components/ArtifactActions';
+import { ResponseSources } from '../components/ResponseSources';
 import { RunHistory } from '../components/RunHistory';
 import { draftDisposition } from '../services/drafts';
 import { useMobile } from '../lib/useMobile';
@@ -205,6 +206,38 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
       });
     },
     [controller, mobile, focusMode, focusBlock, presentation],
+  );
+  const inspectRun = useCallback(
+    (runId: string) => {
+      setInspectorTab('history');
+      useInteraction.getState().setInspector(true);
+      void controller.inspect(runId).catch((e) => controller.setError(e.message));
+    },
+    [controller],
+  );
+  const rerun = useCallback(
+    (runId: string) => {
+      const derivation = controller.state?.derivations.find((d) => d.runId === runId);
+      if (!derivation) return;
+      if (derivation.kind === 'source') {
+        const placement = controller.state?.placements.find(
+          (p) => p.block_id === derivation.sourceBlockId,
+        );
+        if (placement) spawn(derivation.sourceBlockId, placement.id);
+      } else
+        void controller
+          .reuseInputs(runId)
+          .then(() =>
+            document.querySelector<HTMLTextAreaElement>('[aria-label="Run prompt"]')?.focus(),
+          )
+          .catch((e) => controller.setError(e.message));
+    },
+    [controller, spawn],
+  );
+  const manage = useCallback(
+    (blockId: string, placementId: string, view: CardAction) =>
+      setManaged({ blockId, placementId, view }),
+    [],
   );
   const fileInput = useRef<HTMLInputElement>(null);
   const insertionReady = useCallback((getPoint: () => { x: number; y: number }) => {
@@ -529,6 +562,15 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     onFocused={presentation.getState().consume}
                     onEdit={edit}
                   />
+                  {focused.origin === 'generated' && (
+                    <ResponseSources
+                      document={controller.document}
+                      blockId={focused.id}
+                      onOpenSource={focusBlock}
+                      onInspect={inspectRun}
+                      onRerun={rerun}
+                    />
+                  )}
                   <footer>
                     <SpawnButton
                       block={focused}
@@ -562,20 +604,6 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                           {cardActionLabels[view]}
                         </button>
                       ))}
-                      {state.derivations
-                        .filter((d) => d.outputBlockId === focused.id)
-                        .map((d) => (
-                          <button
-                            key={`${d.runId}:${d.position}`}
-                            onClick={() => focusBlock(d.sourceBlockId)}
-                            disabled={!state.blocks.some((b) => b.id === d.sourceBlockId)}
-                          >
-                            Source:{' '}
-                            {state.blocks
-                              .find((b) => b.id === d.sourceBlockId)
-                              ?.content.text.slice(0, 30) || 'artifact'}
-                          </button>
-                        ))}
                     </ActionMenu>
                   </footer>
                 </article>
@@ -626,9 +654,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 onEdit={edit}
                 onGeometry={geometry}
                 onFocus={focusBlock}
-                onManage={(blockId, placementId, view) =>
-                  setManaged({ blockId, placementId, view })
-                }
+                onManage={manage}
+                onInspect={inspectRun}
+                onRerun={rerun}
               />
             </Suspense>
           )}

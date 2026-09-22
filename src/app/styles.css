@@ -1856,3 +1856,41 @@ summary:focus-visible {
   padding: 6px 10px;
   background: var(--paper);
 }
+.response-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding: 6px 14px;
+  border-top: 1px dashed var(--line);
+  font-size: 11px;
+}
+.response-sources .eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.source-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  padding: 2px 8px;
+  font-size: 11px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.source-chip.changed {
+  border-color: #c9a34a;
+  background: #faf1d9;
+}
+.source-chip em {
+  font-style: normal;
+  color: #8a6a1c;
+}
+.response-sources .rerun {
+  color: var(--green);
+  font-weight: 600;
+}

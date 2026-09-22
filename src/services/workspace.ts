@@ -774,6 +774,20 @@ export class WorkspaceController {
       this.emit();
     }
   };
+  // Load a composed run's prompt and its current reference cards into the composer.
+  // Submitting stays an explicit Run; nothing regenerates here.
+  reuseInputs = async (runId: string) => {
+    this.requireActive();
+    const epoch = this.epoch;
+    const detail = await this.client.run(runId);
+    if (!this.valid(epoch)) return;
+    const present = new Set(this.state?.blocks.map((b) => b.id));
+    const references = (this.state?.derivations ?? [])
+      .filter((d) => d.runId === runId && d.kind === 'reference' && present.has(d.sourceBlockId))
+      .map((d) => d.sourceBlockId);
+    const prompt = detail.inputs.find((input) => input.kind === 'prompt')?.content.text ?? '';
+    this.updateDraft({ prompt, references, continueFrom: undefined });
+  };
   importWebpage = (url: string) =>
     this.mutate('webpage', () => this.client.importWebpage(this.braneId, url));
   cancelRun = (id: string) => this.mutate(`cancel:${id}`, () => this.client.cancelRun(id));

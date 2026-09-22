@@ -148,6 +148,8 @@ export interface Derivation {
   kind: 'source' | 'reference';
   sourceBlockId: string;
   sourceRevisionId: string;
+  // Live version the frozen source captured; null for immutable (generated) sources.
+  sourceVersion: number | null;
   outputBlockId: string;
   position: number;
   anchorPlacementId: string | null;

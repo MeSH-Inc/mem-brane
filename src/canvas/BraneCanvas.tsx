@@ -31,6 +31,7 @@ import { derivationEdges } from './derivations';
 import { SpawnButton } from '../components/SpawnButton';
 import type { CardAction } from '../components/ArtifactActions';
 import { LiveBlockContent } from '../components/LiveBlockContent';
+import { ResponseSources } from '../components/ResponseSources';
 import { idleActivity, type WorkspaceDocument } from '../services/workspace-document';
 import { useInteraction } from '../stores/interaction';
 import { presentationFor } from '../stores/presentation';
@@ -48,6 +49,9 @@ type CardData = {
   onGeometry: (id: string, g: Geometry) => void;
   onFocus: (id: string) => void;
   onManage: (blockId: string, placementId: string, view: CardAction) => void;
+  onOpenSource: (blockId: string) => void;
+  onInspect: (runId: string) => void;
+  onRerun: (runId: string) => void;
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
 type CardNode = Node<CardData>;
@@ -100,6 +104,15 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         onFocused={data.onFocused}
         onEdit={data.onEdit}
       />
+      {block.origin === 'generated' && (
+        <ResponseSources
+          document={data.document}
+          blockId={block.id}
+          onOpenSource={data.onOpenSource}
+          onInspect={data.onInspect}
+          onRerun={data.onRerun}
+        />
+      )}
       <footer className="nodrag nopan">
         <SpawnButton
           block={block}
@@ -145,6 +158,8 @@ interface Props {
   onGeometry: CardData['onGeometry'];
   onFocus: CardData['onFocus'];
   onManage: CardData['onManage'];
+  onInspect: CardData['onInspect'];
+  onRerun: CardData['onRerun'];
 }
 function Inner(props: Props) {
   const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
@@ -161,6 +176,18 @@ function Inner(props: Props) {
   const selected = useInteraction((s) => s.selectedPlacements);
   const addContext = useCallback((id: string) => props.onContext([id]), [props.onContext]);
   const setContinue = props.onContinue;
+  // Read placements through a ref so moving cards never changes every card's callbacks.
+  const latestPlacements = useRef(scene.placements);
+  latestPlacements.current = scene.placements;
+  const openSource = useCallback(
+    (blockId: string) => {
+      const placement = latestPlacements.current.find((p) => p.block_id === blockId);
+      if (!placement) return;
+      useInteraction.getState().setSelectedPlacements([placement.id]);
+      void fitView({ nodes: [{ id: placement.id }], padding: 0.4, maxZoom: 1, duration: 200 });
+    },
+    [fitView],
+  );
   const host = useRef<HTMLDivElement>(null);
   const placements = scene.placements;
   const {
@@ -233,6 +260,9 @@ function Inner(props: Props) {
           onGeometry: props.onGeometry,
           onFocus: props.onFocus,
           onManage: props.onManage,
+          onOpenSource: openSource,
+          onInspect: props.onInspect,
+          onRerun: props.onRerun,
         },
       };
       const previous = nodeCache.current.get(p.id);
@@ -265,6 +295,9 @@ function Inner(props: Props) {
     props.onGeometry,
     props.onFocus,
     props.onManage,
+    openSource,
+    props.onInspect,
+    props.onRerun,
   ]);
   useEffect(() => {
     if (!request || request.kind !== 'reveal') return;

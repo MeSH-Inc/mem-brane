@@ -69,6 +69,8 @@ function render(s = state) {
           onGeometry={noop}
           onFocus={noop}
           onManage={noop}
+          onInspect={noop}
+          onRerun={noop}
         />
       </StrictMode>,
     ),

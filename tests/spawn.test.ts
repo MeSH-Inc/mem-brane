@@ -79,9 +79,12 @@ it('atomically freezes unsaved edits, queues a generated text child, and restore
   updateBlockLiveState(db, actor, { blockId: block, text: 'Later', version: 2 });
   expect(readInputs(db, run.id)[0].content.text).toBe('Unsaved idea');
   const restored = state();
+  // The frozen source captured live version 2; the later edit moved the block past it.
+  expect(restored.blocks.find((b) => b.id === block)?.version).toBe(3);
   expect(restored.derivations[0]).toMatchObject({
     sourceBlockId: block,
     sourceRevisionId: inputs[0].revision_id,
+    sourceVersion: 2,
     outputBlockId: run.output_block_id,
     anchorPlacementId: placement,
   });

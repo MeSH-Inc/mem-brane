@@ -75,6 +75,7 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
       kind: z.enum(['source', 'reference']),
       sourceBlockId: identity,
       sourceRevisionId: identity,
+      sourceVersion: z.number().int().nonnegative().nullable(),
       outputBlockId: identity,
       position: z.number().int(),
       anchorPlacementId: identity.nullable(),
