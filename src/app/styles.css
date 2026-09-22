@@ -1062,6 +1062,12 @@ a {
     font-size: 11px;
     padding: 7px;
   }
+  .empty-focus {
+    padding: 16px 4px;
+  }
+  .empty-focus h2 {
+    font-size: 22px;
+  }
   /* Touch has no double-click or Space; the hint bar would only take room. */
   .tools {
     display: none;
@@ -1926,4 +1932,22 @@ summary:focus-visible {
 }
 .draft-recovery.attention-item {
   display: block;
+}
+.first-steps {
+  max-width: 420px;
+  margin: 18px auto 0;
+  padding-left: 20px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #5d6353;
+}
+.first-steps li + li {
+  margin-top: 8px;
+}
+.first-steps strong {
+  color: var(--green);
+}
+.welcome .first-steps {
+  margin-left: 0;
 }

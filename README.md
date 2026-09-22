@@ -1,6 +1,6 @@
 # mem-brane
 
-A spatial workspace for thinking with artifacts and AI. Create a **brane**, arrange text, images, PDFs and imported webpages, then develop an artifact or compose an exploration with explicit context. Generated artifacts retain the exact source revisions that produced them.
+A spatial workspace for thinking with cards and AI. Create a **brane**, arrange text, images, PDFs and imported webpages, then develop a card or write a prompt with exactly the cards you choose as context. Every response shows what it was based on, keeps the exact inputs it was sent, and says when a source has changed since.
 
 This is a greenfield, single-server application under active development. The default **mock** model streams deterministic text locally without provider credentials or model spend. Live OpenAI and R2 integrations are implemented, but have not been verified against live accounts.
 
@@ -27,13 +27,13 @@ Set `SEED_EMAIL` and `SEED_PASSWORD` to override those credentials, or skip the 
 
 Vite serves the browser on port 5173 and proxies `/api` to the Node server on port 3001. Use `localhost` to match `APP_ORIGIN`. If you change the browser hostname, update that setting too. Run commands from the repository root: migrations, browser assets and default data paths resolve from the working directory.
 
-## First exploration
+## First steps
 
 1. Open the seeded brane or choose **New brane**.
 2. In Canvas, double-click empty space to create a thought and type into its editor. In Focus, choose **Add → Text** instead.
-3. Choose **Develop** on an active artifact to create a generated child. Develop captures the source's current text and creates a new artifact with provenance; it does not read the global composer or inherit a conversation automatically.
-4. For a composed exploration, choose **Use as context**, order your references, write a prompt and submit. **⑂ Continue** on a response explicitly selects its conversation's ancestor chain.
-5. Titles, text and placement changes save automatically. The composer shows saving status; failed title writes retain the draft and offer Retry. Background runs continue when you navigate away.
+3. Choose **Develop** on a card to create a response from it. Develop captures the card's current text and records provenance; it does not read the prompt or inherit a conversation automatically.
+4. To compose, choose **Use as context** on cards (or select them and choose **+ Add N selected**), order them under **Context · N**, write a prompt and Run. The response's **Based on** strip links to its sources and exact inputs, and marks sources edited since. **⑂ Continue** on a response explicitly selects its conversation's ancestor chain.
+5. An empty brane lists these steps. Titles, text and placement changes save automatically. The composer shows saving status; failed title writes retain the draft and offer Retry. Background runs continue when you navigate away.
 
 The mock model exercises streaming and persistence but does not perform reasoning or image understanding.
 

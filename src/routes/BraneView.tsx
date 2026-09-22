@@ -31,6 +31,7 @@ import { LiveBlockContent } from '../components/LiveBlockContent';
 import { SpawnButton } from '../components/SpawnButton';
 import { ArtifactActions, type CardAction } from '../components/ArtifactActions';
 import { ResponseSources } from '../components/ResponseSources';
+import { FirstSteps } from '../components/FirstSteps';
 import { RunHistory } from '../components/RunHistory';
 import { draftDisposition } from '../services/drafts';
 import { useMobile } from '../lib/useMobile';
@@ -673,6 +674,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   >
                     Add your first thought
                   </CommandButton>
+                  <FirstSteps canvas={false} />
                 </div>
               )}
             </div>
@@ -695,7 +697,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   >
                     Add your first thought
                   </CommandButton>
-                  <p>Or double-click anywhere, or drop an image or PDF here.</p>
+                  <FirstSteps canvas />
                 </div>
               )}
               <BraneCanvas

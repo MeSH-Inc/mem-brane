@@ -23,6 +23,7 @@ import './styles.css';
 import { AppStatus } from '../components/AppStatus';
 import { PasswordRecovery } from '../components/PasswordRecovery';
 import { accountPromptOf, type AccountPrompt } from '../services/account-prompt';
+import { FirstSteps } from '../components/FirstSteps';
 function AuthScreen({
   onSignedIn,
   onGuest,
@@ -430,10 +431,34 @@ function Shell() {
   );
 }
 function Welcome() {
+  const navigate = useNavigate();
+  const [error, setError] = useState('');
   return (
     <div className="welcome">
       <h1>What’s on your mind?</h1>
-      <p>Open Branes in the upper-left corner to choose a workspace or create one.</p>
+      <p>
+        A brane is a space for one line of thinking. Open Branes in the upper-left corner to pick
+        one, or start fresh.
+      </p>
+      <button
+        className="primary"
+        onClick={async () => {
+          try {
+            const brane = await client.createBrane('Untitled brane');
+            await navigate({ to: '/b/$braneId', params: { braneId: brane.id } });
+          } catch (e) {
+            setError((e as Error).message);
+          }
+        }}
+      >
+        ＋ New brane
+      </button>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      <FirstSteps canvas />
     </div>
   );
 }
