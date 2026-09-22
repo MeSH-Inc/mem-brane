@@ -992,11 +992,11 @@ a {
   }
 }
 @media (max-width: 760px) {
+  /* A fixed-height column: content scrolls inside, the prompt stays at the bottom. */
   .app-shell {
     flex-direction: column;
-    overflow: auto;
-    height: auto;
-    min-height: 100dvh;
+    overflow: hidden;
+    height: 100dvh;
   }
   .sidebar {
     width: 100%;
@@ -1048,11 +1048,11 @@ a {
     flex-wrap: wrap;
   }
   .workbench {
-    display: block;
     flex: 1;
+    min-height: 0;
   }
   .workspace {
-    min-height: calc(100dvh - 200px);
+    min-height: 0;
   }
   .tools {
     height: auto;
@@ -1062,11 +1062,13 @@ a {
     font-size: 11px;
     padding: 7px;
   }
-  .canvas-hint {
+  /* Touch has no double-click or Space; the hint bar would only take room. */
+  .tools {
     display: none;
   }
   .focus-layout {
     flex-direction: column;
+    min-height: 0;
   }
   .block-outline {
     width: 100%;
@@ -1089,14 +1091,12 @@ a {
   }
   .focus-card .block-editor {
     font-size: 16px;
-    min-height: 200px;
+    min-height: 140px;
   }
   .focus-card .response-content {
-    min-height: 200px;
+    min-height: 140px;
   }
   .composer {
-    position: sticky;
-    bottom: 0;
     border-top: 1px solid #d9dfcb;
     box-shadow: 0 -4px 20px #434c2710;
   }
@@ -1118,8 +1118,8 @@ a {
     padding: 22px;
   }
   .canvas-host {
-    height: 60dvh;
-    flex: auto;
+    flex: 1;
+    min-height: 160px;
   }
   .auth-screen {
     display: block;
@@ -1715,6 +1715,8 @@ summary:focus-visible {
   }
   .navigation-drawer[open] {
     flex-basis: auto;
+    max-height: 70dvh;
+    overflow: auto;
   }
   .navigation-drawer > summary {
     height: 44px;
@@ -1741,7 +1743,8 @@ summary:focus-visible {
     display: flex;
   }
   .main-content {
-    min-height: calc(100dvh - 44px);
+    flex: 1;
+    min-height: 0;
   }
   .brane-toolbar {
     height: auto;
