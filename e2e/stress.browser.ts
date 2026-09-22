@@ -152,10 +152,13 @@ for (const selectors of tracing ? ['global', 'scoped'] : ['scoped'])
           ),
         )
         .toBe(true);
+      // Runs are listed in the History dialog.
+      await page.getByRole('button', { name: 'History', exact: true }).click();
       await (selectors === 'global' ? page : page.locator('.run-list'))
         .getByRole('button', { name: 'Stop', exact: true })
         .first()
         .click();
+      await page.keyboard.press('Escape');
       await expect
         .poll(() =>
           page.evaluate(() =>
