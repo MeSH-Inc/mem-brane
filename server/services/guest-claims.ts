@@ -5,6 +5,20 @@ import { DomainError } from '../domain/access.js';
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 export const claimLifetime = 30 * 60 * 1000;
 export const guestRecoveryGrace = 7 * 86400000;
+export const guestStarterTitle = 'Your first brane';
+
+// An untouched guest library holds only its starter brane. Claiming it would give
+// the account an empty extra library, so sign-in leaves it to expire instead.
+export function guestHasWork(db: DB, libraryId: string) {
+  const branes = db.prepare('SELECT title FROM branes WHERE owner_id=?').all(libraryId) as {
+    title: string;
+  }[];
+  return (
+    branes.length > 1 ||
+    branes.some((b) => b.title !== guestStarterTitle) ||
+    Boolean(db.prepare('SELECT 1 FROM blocks WHERE owner_id=? LIMIT 1').get(libraryId))
+  );
+}
 
 // The proof is delivered only in an HttpOnly, same-site cookie, never a library ID
 // or a browser-provided principal. It remains usable after the login cookie changes.

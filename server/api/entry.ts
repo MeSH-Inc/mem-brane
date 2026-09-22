@@ -6,15 +6,33 @@ import { config } from '../app/config.js';
 import { currentLibrary, librariesFor } from '../domain/libraries.js';
 import { DomainError } from '../domain/access.js';
 import { createBrane } from '../services/content.js';
-import { completeGuestClaim, prepareGuestClaim, claimLifetime } from '../services/guest-claims.js';
+import {
+  completeGuestClaim,
+  prepareGuestClaim,
+  claimLifetime,
+  guestHasWork,
+  guestStarterTitle,
+} from '../services/guest-claims.js';
 
 const proofCookie = 'mem-brane-claim';
 type User = { id: string; name: string; email: string; isAnonymous?: boolean | null };
 export function entryApi(db: DB, auth: ReturnType<typeof createAuth>) {
   const app = new Hono();
   function sessionView(user: User, requested?: string, claimPending = false) {
-    const libraries = librariesFor(db, user.id);
-    const library = libraries.find((item) => item.id === requested) ?? libraries[0];
+    const libraries = librariesFor(db, user.id).map((item) => ({
+      id: item.id,
+      kind: item.id === user.id ? ('personal' as const) : ('kept' as const),
+      createdAt: item.created_at,
+      branes: (
+        db.prepare('SELECT COUNT(*) n FROM branes WHERE owner_id=?').get(item.id) as { n: number }
+      ).n,
+    }));
+    // Without an explicit choice, open the personal library unless only kept work has content.
+    const library =
+      libraries.find((item) => item.id === requested) ??
+      libraries.find((item) => item.kind === 'personal' && item.branes) ??
+      libraries.find((item) => item.branes) ??
+      libraries[0];
     if (!library) throw new DomainError(403, 'No library is available for this account.');
     const guest = db
       .prepare('SELECT expires_at FROM guest_libraries WHERE library_id=? AND claimed_by IS NULL')
@@ -22,7 +40,7 @@ export function entryApi(db: DB, auth: ReturnType<typeof createAuth>) {
     return {
       user: { ...user, isAnonymous: Boolean(user.isAnonymous) },
       libraryId: library.id,
-      libraries: libraries.map((item) => item.id),
+      libraries,
       guestExpiresAt: guest?.expires_at ?? null,
       claimPending,
     };
@@ -66,7 +84,7 @@ export function entryApi(db: DB, auth: ReturnType<typeof createAuth>) {
         const existing = db
           .prepare('SELECT id FROM branes WHERE owner_id=? ORDER BY created_at LIMIT 1')
           .get(library.id) as { id: string } | undefined;
-        return existing ?? createBrane(db, library.id, 'Your first brane');
+        return existing ?? createBrane(db, library.id, guestStarterTitle);
       })
       .immediate();
     return c.json({ session: sessionView(user, library.id), braneId: brane.id });
@@ -76,6 +94,12 @@ export function entryApi(db: DB, auth: ReturnType<typeof createAuth>) {
     if (!session?.user.isAnonymous) throw new DomainError(401, 'A guest session is required.');
     const library = librariesFor(db, session.user.id)[0];
     if (!library) throw new DomainError(403, 'No guest workspace is available.');
+    const body = (await c.req.json().catch(() => ({}))) as { pending?: unknown };
+    const pending = typeof body.pending === 'number' && body.pending > 0;
+    if (!pending && !guestHasWork(db, library.id)) {
+      deleteCookie(c, proofCookie, { path: '/api' });
+      return c.json({ ok: true, claim: false });
+    }
     const token = prepareGuestClaim(db, session.user.id, library.id, getCookie(c, proofCookie));
     setCookie(c, proofCookie, token, {
       httpOnly: true,
@@ -84,7 +108,7 @@ export function entryApi(db: DB, auth: ReturnType<typeof createAuth>) {
       path: '/api',
       maxAge: claimLifetime / 1000,
     });
-    return c.json({ ok: true });
+    return c.json({ ok: true, claim: true });
   });
   app.post('/guest/claim', async (c) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });

@@ -202,7 +202,14 @@ export const sessionResponse = z
     guestExpiresAt: z.number().nullable().default(null),
     claimPending: z.boolean().default(false),
     libraryId: identity,
-    libraries: z.array(identity),
+    libraries: z.array(
+      z.object({
+        id: identity,
+        kind: z.enum(['personal', 'kept']),
+        createdAt: z.number(),
+        branes: z.number().int().nonnegative(),
+      }),
+    ),
   })
   .nullable();
 export type Session = z.infer<typeof sessionResponse>;

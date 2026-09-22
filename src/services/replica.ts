@@ -144,7 +144,10 @@ export class WorkspaceReplica {
           await this.authenticatedSession();
           return { ok: true };
         }
-        if (current?.user.isAnonymous) await this.remote('/guest/prepare-claim', {});
+        if (current?.user.isAnonymous)
+          await this.remote('/guest/prepare-claim', {
+            pending: this.actor ? (await this.storage.read(this.actor)).pending.length : 0,
+          });
         const value = await this.remote(path, body, method);
         await this.authenticatedSession();
         this.channel?.postMessage({ type: 'session' });

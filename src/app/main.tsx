@@ -277,6 +277,10 @@ function Shell() {
         )}
       </>
     );
+  // Empty libraries, such as a new account's personal one beside kept guest work, stay out of the way.
+  const pickable = session.libraries.filter(
+    (library) => library.branes > 0 || library.id === session.libraryId,
+  );
   return (
     <div className="app-shell">
       <details ref={navigation} className="navigation-drawer">
@@ -303,7 +307,7 @@ function Shell() {
           >
             ＋ New brane
           </button>
-          {session.libraries.length > 1 && (
+          {pickable.length > 1 && (
             <label className="library-picker">
               Library
               <select
@@ -319,9 +323,11 @@ function Shell() {
                   }
                 }}
               >
-                {session.libraries.map((id, i) => (
-                  <option key={id} value={id}>
-                    {id === session.user.id ? 'Personal library' : `Saved workspace ${i + 1}`}
+                {pickable.map((library) => (
+                  <option key={library.id} value={library.id}>
+                    {library.kind === 'personal'
+                      ? 'Personal'
+                      : `Kept from guest · ${new Date(library.createdAt).toLocaleDateString()}`}
                   </option>
                 ))}
               </select>
@@ -400,7 +406,21 @@ function Shell() {
               note={authOpen.reason}
               onSignedIn={() => {
                 setAuthOpen(null);
-                refreshSession();
+                void client
+                  .session()
+                  .then(async (value) => {
+                    await applySession(value);
+                    // Unclaimed guest branes are not part of the signed-in library.
+                    const current = /^\/b\/([^/]+)/.exec(window.location.pathname)?.[1];
+                    const list = await client.branes();
+                    if (current && !list.some((b) => b.id === current))
+                      await navigate(
+                        list[0]
+                          ? { to: '/b/$braneId', params: { braneId: list[0].id } }
+                          : { to: '/' },
+                      );
+                  })
+                  .catch((e) => setError(e.message));
               }}
             />
           </Dialog>

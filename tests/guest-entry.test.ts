@@ -164,7 +164,7 @@ it('existing-account sign-in adds a library without replacing existing content o
   const account = (await (await member.request('/auth/sign-up/email', login)).json()).user.id;
   const existing = createBrane(db, account, 'Existing work');
   const guest = await start();
-  await guest.client.request('/guest/prepare-claim', {});
+  await guest.client.request('/guest/prepare-claim', { pending: 1 });
   const token = decodeURIComponent(
     guest.client.cookie
       .split('; ')
@@ -196,6 +196,28 @@ it('existing-account sign-in adds a library without replacing existing content o
   ).toBe(403);
   expect(db.pragma('foreign_key_check')).toEqual([]);
 });
+it('leaves an untouched guest workspace unclaimed so accounts gain no empty library', async () => {
+  const member = browser(),
+    login = credentials();
+  const account = (await (await member.request('/auth/sign-up/email', login)).json()).user.id;
+  createBrane(db, account, 'Existing work');
+  const guest = await start();
+  const prepared = await guest.client.request('/guest/prepare-claim', {});
+  expect(await prepared.json()).toEqual({ ok: true, claim: false });
+  expect(guest.client.cookie).not.toMatch(/mem-brane-claim=[^;]/);
+  expect((await guest.client.request('/auth/sign-in/email', login)).status).toBe(200);
+  const session = await (await guest.client.request('/guest/claim', {})).json();
+  expect(session.libraryId).toBe(account);
+  expect(session.libraries).toEqual([
+    { id: account, kind: 'personal', createdAt: expect.any(Number), branes: 1 },
+  ]);
+  const newcomer = await start();
+  await newcomer.client.request('/guest/prepare-claim', {});
+  const signup = await newcomer.client.request('/auth/sign-up/email', credentials());
+  const created = (await signup.json()).user.id;
+  expect(db.prepare('SELECT id FROM libraries WHERE principal_id=?').all(created)).toHaveLength(1);
+  expect(db.prepare('SELECT COUNT(*) n FROM library_claims').get()).toEqual({ n: 0 });
+});
 it('requires guest-session proof before issuing a claim and never trusts submitted library IDs', async () => {
   const guest = await start(),
     stranger = browser();
@@ -211,7 +233,7 @@ it('requires guest-session proof before issuing a claim and never trusts submitt
 
 it('completes a prepared claim after the guest login session disappears before authentication', async () => {
   const guest = await start();
-  await guest.client.request('/guest/prepare-claim', {});
+  await guest.client.request('/guest/prepare-claim', { pending: 1 });
   db.prepare('DELETE FROM session WHERE userId=?').run(guest.session.user.id);
   const signup = await guest.client.request('/auth/sign-up/email', credentials());
   expect(signup.status).toBe(200);
@@ -268,7 +290,7 @@ it('expires guest access but permits a proven claim during the seven-day recover
     guest.session.libraryId,
   );
   expect((await guest.client.request('/branes')).status).toBe(401);
-  expect((await guest.client.request('/guest/prepare-claim', {})).status).toBe(200);
+  expect((await guest.client.request('/guest/prepare-claim', { pending: 1 })).status).toBe(200);
   expect((await guest.client.request('/auth/sign-up/email', credentials())).status).toBe(200);
   expect((await guest.client.request('/guest/claim', {})).status).toBe(200);
   expect(

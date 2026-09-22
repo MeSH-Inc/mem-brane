@@ -54,7 +54,7 @@ async function fixture() {
         ? {
             user: { id: sessionActor, name: 'Local', email: `${sessionActor}@example.com` },
             libraryId: sessionLibrary,
-            libraries: [sessionLibrary],
+            libraries: [{ id: sessionLibrary, kind: 'personal', createdAt: 0, branes: 1 }],
           }
         : null;
     if (
@@ -344,7 +344,7 @@ it('upgrades local read metadata without losing an older outbox or cached accoun
       {
         user: { id: actor, name: 'Owner', email: 'owner@example.com' },
         libraryId: actor,
-        libraries: [actor],
+        libraries: [{ id: actor, kind: 'personal', createdAt: 0, branes: 1 }],
       },
       'current',
     );

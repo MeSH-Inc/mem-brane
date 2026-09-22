@@ -1,5 +1,5 @@
 import { anonymous } from 'better-auth/plugins';
-import { claimGuestLibrary } from '../services/guest-claims.js';
+import { claimGuestLibrary, guestHasWork } from '../services/guest-claims.js';
 import { betterAuth } from 'better-auth';
 import { createAuthMiddleware, APIError } from 'better-auth/api';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -36,7 +36,9 @@ export function createAuth(db: DB, recoveryEnabled = Boolean(mailSettings())) {
           const guest = db
             .prepare('SELECT id FROM libraries WHERE principal_id=?')
             .get(anonymousUser.user.id) as { id: string } | undefined;
-          if (guest) claimGuestLibrary(db, anonymousUser.user.id, newUser.user.id, guest.id);
+          // Unsynchronized local work is claimed later through the prepared proof.
+          if (guest && guestHasWork(db, guest.id))
+            claimGuestLibrary(db, anonymousUser.user.id, newUser.user.id, guest.id);
         },
       }),
     ],
