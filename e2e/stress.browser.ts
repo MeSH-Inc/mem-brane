@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import type { StressMeasurement } from './stress/metrics';
 import { startTrace } from './stress/trace';
+import { collectPageErrors } from './page-errors';
 const placement = (i: number) => `placement-${String(i).padStart(3, '0')}`;
 const selector = (i: number) => `.react-flow__node[data-id="${placement(i)}"]`;
 const tracing = process.env.STRESS_TRACE === '1';
@@ -12,9 +13,8 @@ for (const selectors of tracing ? ['global', 'scoped'] : ['scoped'])
     browser,
   }, info) => {
     test.skip(tracing && browserName !== 'chromium', 'Chrome tracing uses CDP.');
-    const errors: string[] = [],
+    const errors = collectPageErrors(page),
       measurements: StressMeasurement[] = [];
-    page.on('pageerror', (error) => errors.push(error.message));
     await page.goto('/e2e/stress/index.html?view=canvas');
     await expect(page.locator('.react-flow__node')).toHaveCount(500);
     const card = page.locator(selector(0));

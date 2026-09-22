@@ -1,13 +1,10 @@
 import { test, expect } from '@playwright/test';
 import type { BraneState } from '../shared/types/domain';
+import { collectPageErrors } from './page-errors';
 test('view switching, multi-selection, resize during streaming, and keyboard persistence', async ({
   page,
 }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
-  });
+  const errors = collectPageErrors(page, { console: true });
   const state: BraneState = {
     brane: { id: 'b', title: 'Canvas regression', created_at: 0, updated_at: 0 },
     blocks: [

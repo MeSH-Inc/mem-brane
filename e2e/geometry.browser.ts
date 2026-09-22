@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import type { BraneState, Placement } from '../shared/types/domain';
+import { collectPageErrors } from './page-errors';
 
 test('delayed saves retain newer moves, conflicts pause, and explicit retry uses the latest version', async ({
   page,
 }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(e.message));
+  const errors = collectPageErrors(page);
   const state: BraneState = {
     brane: { id: 'b', title: 'Geometry concurrency', created_at: 0, updated_at: 0 },
     blocks: [
