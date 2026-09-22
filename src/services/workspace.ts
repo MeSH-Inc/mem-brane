@@ -774,8 +774,8 @@ export class WorkspaceController {
       this.emit();
     }
   };
-  // Load a composed run's prompt and its current reference cards into the composer.
-  // Submitting stays an explicit Run; nothing regenerates here.
+  // Load a composed run's prompt, its current reference cards and the branch it continued
+  // into the composer. Submitting stays an explicit Run; nothing regenerates here.
   reuseInputs = async (runId: string) => {
     this.requireActive();
     const epoch = this.epoch;
@@ -786,7 +786,7 @@ export class WorkspaceController {
       .filter((d) => d.runId === runId && d.kind === 'reference' && present.has(d.sourceBlockId))
       .map((d) => d.sourceBlockId);
     const prompt = detail.inputs.find((input) => input.kind === 'prompt')?.content.text ?? '';
-    this.updateDraft({ prompt, references, continueFrom: undefined });
+    this.updateDraft({ prompt, references, continueFrom: detail.continue_from ?? undefined });
   };
   importWebpage = (url: string) =>
     this.mutate('webpage', () => this.client.importWebpage(this.braneId, url));

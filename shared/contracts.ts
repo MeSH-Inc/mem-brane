@@ -132,6 +132,7 @@ export const runInputResponse = z.object({
 export const runDetailResponse = runSummaryResponse.extend({
   started_at: z.number().nullable(),
   finished_at: z.number().nullable(),
+  continue_from: identity.nullable(),
   inputs: z.array(runInputResponse),
   output: z.object({ revision_id: identity, message_id: identity }).nullable(),
   cost: z

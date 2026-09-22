@@ -103,6 +103,12 @@ export function readRunDetail(db: DB, actor: string, id: string): RunDetail {
     ...runSummary(run),
     started_at: run.started_at,
     finished_at: run.finished_at,
+    continue_from:
+      db
+        .prepare<unknown[], { parent_message_id: string | null }>(
+          'SELECT parent_message_id FROM context_manifests WHERE id=?',
+        )
+        .get(run.context_id)?.parent_message_id ?? null,
     inputs: readInputs(db, run.id),
     output:
       db

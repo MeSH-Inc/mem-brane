@@ -14,6 +14,7 @@ import {
 } from '../server/services/content';
 import { submitRun, retryRun } from '../server/services/runs';
 import { readInputs } from '../server/services/context-reader';
+import { readRunDetail } from '../server/services/run-reads';
 import { RunWorker } from '../server/jobs/worker';
 import { claimRun, recoverStale } from '../server/services/run-lifecycle';
 import { EventHub } from '../server/sse/hub';
@@ -310,7 +311,9 @@ describe('worker, branch semantics and reconnect', () => {
     expect(
       ci.some((i) => i.kind === 'lineage_reference' && i.content.text === 'Original thought'),
     ).toBe(true);
+    expect(readRunDetail(db, actor, continuation.id).continue_from).toBe(ao.message_id);
     const synthesis = submit({ references: [a.output_block_id, b.output_block_id] });
+    expect(readRunDetail(db, actor, synthesis.id).continue_from).toBeNull();
     const si = readInputs(db, synthesis.id);
     expect(si.map((i) => i.kind)).toEqual(['reference', 'reference', 'prompt']);
     expect(si.slice(0, 2).map((i) => i.revision_id)).toEqual([ao.revision_id, bo.revision_id]);

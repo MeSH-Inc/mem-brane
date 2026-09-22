@@ -303,6 +303,80 @@ it('composer context has a single scoped owner and ignores stale lineage and est
   expect(f.make('other').draft).toEqual({});
   expect(f.make().draft).toMatchObject({ references: [], prompt: '' });
 });
+it('reusing a continued run restores its prompt, current references and branch', async () => {
+  const f = await fixture();
+  const text = (value: string) => ({ format: 'text' as const, text: value });
+  const lineage = [
+    {
+      id: 'parent',
+      conversation_id: 'conversation',
+      parent_id: null,
+      run_id: 'earlier',
+      role: 'assistant',
+      revision_id: 'parent-revision',
+      block_id: 'parent-block',
+      created_at: 0,
+      content: text('Earlier answer'),
+      references: [],
+    },
+  ];
+  f.state.derivations = [
+    {
+      runId: 'continued',
+      kind: 'reference',
+      sourceBlockId: f.block,
+      sourceRevisionId: 'revision',
+      sourceVersion: 0,
+      outputBlockId: 'output',
+      position: 0,
+      anchorPlacementId: null,
+      outputPlacementId: null,
+    },
+  ];
+  await f.c.refresh();
+  f.intercept((path) =>
+    path === '/runs/continued'
+      ? Promise.resolve({
+          id: 'continued',
+          brane_id: f.brane,
+          status: 'completed',
+          model: 'mock',
+          provider: 'mock',
+          output_block_id: 'output',
+          error: null,
+          usage_json: null,
+          retry_of: null,
+          created_at: 0,
+          started_at: 0,
+          finished_at: 0,
+          continue_from: 'parent',
+          inputs: [
+            {
+              position: 0,
+              kind: 'prompt',
+              label: 'Prompt',
+              role: 'user',
+              revision_id: 'prompt-revision',
+              content: text('Go on'),
+            },
+          ],
+          output: null,
+          cost: null,
+          checkpoint: null,
+        })
+      : path === '/context/lineage/parent'
+        ? Promise.resolve(lineage)
+        : undefined,
+  );
+  await f.c.reuseInputs('continued');
+  await settle();
+  expect(f.c.draft).toMatchObject({
+    prompt: 'Go on',
+    references: [f.block],
+    continueFrom: 'parent',
+  });
+  expect(f.c.lineage.map((message) => message.id)).toEqual(['parent']);
+});
 it.each(['run', 'spawn'] as const)(
   '%s sends edits atomically and uses actual no-op versions while preserving newer typing',
   async (kind) => {
