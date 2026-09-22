@@ -24,7 +24,7 @@ import {
 } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import type { Geometry } from '../../shared/types/domain';
-import { api, replica } from '../services/api';
+import { api, replica, needsAccount } from '../services/api';
 import { useInteraction } from '../stores/interaction';
 import { presentationFor } from '../stores/presentation';
 import { useStore } from 'zustand';
@@ -185,6 +185,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   );
   const spawn = useCallback(
     (blockId: string, placementId: string) => {
+      if (needsAccount()) return;
       const attention = presentation.getState().attention;
       const retrying = controller.retrySpawns.includes(blockId);
       void controller.spawn(blockId, placementId).then((id) => {
@@ -445,6 +446,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               className="web-form"
               onSubmit={async (e) => {
                 e.preventDefault();
+                if (needsAccount()) return;
                 try {
                   await controller.importWebpage(url);
                   setWebOpen(false);
@@ -675,7 +677,11 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 onKeyDown={(e) => {
                   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                     e.preventDefault();
-                    if (prompt.trim() || submission.state.status === 'uncertain') void run();
+                    if (
+                      (prompt.trim() || submission.state.status === 'uncertain') &&
+                      !needsAccount()
+                    )
+                      void run();
                   }
                 }}
               />
@@ -686,7 +692,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   (submission.state.status !== 'uncertain' &&
                     (pendingAttachments || !!compatibilityError || !prompt.trim()))
                 }
-                onClick={() => void run()}
+                onClick={() => {
+                  if (!needsAccount()) void run();
+                }}
               >
                 {busy
                   ? commands.store.getState().run?.phase === 'waiting'

@@ -73,6 +73,12 @@ test('guest work, an interrupted import, composer and two tabs survive existing-
     const editor = page.getByRole('textbox', { name: 'Block text', exact: true });
     await editor.fill('My guest thought');
     await expect(page.getByRole('status')).not.toContainText('Unsaved');
+    // Account-only features invite sign-up before any request, never as an error.
+    await page.getByRole('button', { name: 'Develop', exact: true }).click();
+    const invite = page.getByRole('dialog', { name: 'Keep your workspace' });
+    await expect(invite).toContainText('need a free account');
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await invite.getByRole('button', { name: /close/i }).click();
     const second = await context.newPage();
     await second.goto(page.url());
     await expect(second.getByRole('textbox', { name: 'Block text', exact: true })).toHaveValue(
@@ -110,7 +116,7 @@ test('guest work, an interrupted import, composer and two tabs survive existing-
       { times: 1 },
     );
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Keep your workspace' });
+    const dialog = page.getByRole('dialog', { name: 'Sign in' });
     await dialog.getByLabel('Email', { exact: true }).fill(credentials.email);
     await dialog.getByLabel('Password', { exact: true }).fill(credentials.password);
     await dialog.getByRole('button', { name: 'Open your space ↗' }).click();

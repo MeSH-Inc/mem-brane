@@ -16,6 +16,7 @@ import {
 } from './replica-projection';
 import type { ReplicaStorage, ReplicaState, PendingOperation } from './replica-storage';
 import { networkApi, ApiError } from './transport';
+import { requestAccount, accountFeatureReason } from './account-prompt';
 import { requestResources, requiredOperations } from './command-dependencies';
 import { ReplicaScheduler } from './replica-scheduler';
 import { replicaGate, replicaLock } from './replica-locks';
@@ -170,8 +171,8 @@ export class WorkspaceReplica {
         path.endsWith('/snapshot'))
     ) {
       if (typeof window !== 'undefined' && path !== '/runs/estimate')
-        window.dispatchEvent(new Event('brane:sign-in'));
-      throw new ApiError(403, 'Sign in to use this feature. Your guest work will be kept.');
+        requestAccount({ mode: 'signup', reason: accountFeatureReason });
+      throw new ApiError(403, accountFeatureReason);
     }
     const actor = this.actor;
     if (method !== 'GET' && !isLocalMutation(path, method)) {

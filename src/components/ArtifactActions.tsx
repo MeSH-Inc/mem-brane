@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Block, Brane, Placement, Revision, Geometry } from '../../shared/types/domain';
 import type { RevisionSummary } from '../../shared/types/history';
 import { client } from '../services/client';
+import { needsAccount } from '../services/api';
 export function ArtifactActions({
   commands,
   block,
@@ -113,6 +114,7 @@ export function ArtifactActions({
               taskKey={`snapshot:${block.id}`}
               pendingLabel="Saving snapshot…"
               onClick={() =>
+                !needsAccount() &&
                 void action(
                   `snapshot:${block.id}`,
                   async () => {

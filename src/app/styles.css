@@ -1875,3 +1875,8 @@ summary:focus-visible {
 .library-picker select {
   max-width: 100%;
 }
+.auth-note {
+  border-left: 2px solid var(--green);
+  padding: 6px 10px;
+  background: var(--paper);
+}

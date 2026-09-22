@@ -22,14 +22,17 @@ import type { Brane } from '../../shared/types/domain';
 import './styles.css';
 import { AppStatus } from '../components/AppStatus';
 import { PasswordRecovery } from '../components/PasswordRecovery';
+import { accountPromptOf, type AccountPrompt } from '../services/account-prompt';
 function AuthScreen({
   onSignedIn,
   onGuest,
   startSignup = false,
+  note,
 }: {
   onSignedIn: () => void;
   onGuest?: () => void;
   startSignup?: boolean;
+  note?: string;
 }) {
   const [guestAllowed, setGuestAllowed] = useState(false);
   const [recovery, setRecovery] = useState(false);
@@ -112,6 +115,7 @@ function AuthScreen({
         <p>
           {signup ? 'Create your own space for ideas.' : 'Sign in to your personal thinking space.'}
         </p>
+        {note && <p className="auth-note">{note}</p>}
         {signup && (
           <label>
             Name
@@ -179,7 +183,7 @@ function AuthScreen({
 }
 function Shell() {
   const navigation = useRef<HTMLDetailsElement>(null);
-  const [authOpen, setAuthOpen] = useState<'signin' | 'signup' | null>(null);
+  const [authOpen, setAuthOpen] = useState<AccountPrompt | null>(null);
   const closeMobileNavigation = () => {
     if (window.matchMedia('(max-width: 760px)').matches) {
       navigation.current?.removeAttribute('open');
@@ -223,7 +227,7 @@ function Shell() {
           await navigate({ to: '/b/$braneId', params: { braneId: entry.braneId } });
       })
       .catch((e) => setError(e.message));
-    const signIn = () => setAuthOpen('signin');
+    const signIn = (event: Event) => setAuthOpen(accountPromptOf(event));
     window.addEventListener('brane:session-expired', refreshSession);
     window.addEventListener('brane:sign-in', signIn);
     return () => {
@@ -373,25 +377,27 @@ function Shell() {
         {session.user.isAnonymous && (
           <aside className="guest-notice" aria-label="Guest workspace">
             <span>
-              Guest workspace · Saved on this server. Sign in to keep it and open it on other
-              devices.
+              Guest workspace · Saved on this server. Create a free account to use AI and open it on
+              other devices.
               {session.guestExpiresAt && (
                 <> Available until {new Date(session.guestExpiresAt).toLocaleDateString()}.</>
               )}
             </span>
-            <button onClick={() => setAuthOpen('signup')}>Keep your workspace</button>
-            <button onClick={() => setAuthOpen('signin')}>Sign in</button>
+            <button onClick={() => setAuthOpen({ mode: 'signup' })}>Keep your workspace</button>
+            <button onClick={() => setAuthOpen({ mode: 'signin' })}>Sign in</button>
           </aside>
         )}
         <Outlet />
         {authOpen && (
           <Dialog
-            title="Keep your workspace"
+            title={authOpen.mode === 'signup' ? 'Keep your workspace' : 'Sign in'}
             className="account-dialog"
             onClose={() => setAuthOpen(null)}
           >
             <AuthScreen
-              startSignup={authOpen === 'signup'}
+              key={authOpen.mode}
+              startSignup={authOpen.mode === 'signup'}
+              note={authOpen.reason}
               onSignedIn={() => {
                 setAuthOpen(null);
                 refreshSession();
