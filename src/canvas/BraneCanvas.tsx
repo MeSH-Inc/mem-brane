@@ -29,6 +29,7 @@ import '@xyflow/react/dist/style.css';
 import type { Placement } from '../../shared/types/domain';
 import { derivationEdges } from './derivations';
 import { SpawnButton } from '../components/SpawnButton';
+import type { CardAction } from '../components/ArtifactActions';
 import { LiveBlockContent } from '../components/LiveBlockContent';
 import { idleActivity, type WorkspaceDocument } from '../services/workspace-document';
 import { useInteraction } from '../stores/interaction';
@@ -46,7 +47,7 @@ type CardData = {
   onContinue: (id: string) => void;
   onGeometry: (id: string, g: Geometry) => void;
   onFocus: (id: string) => void;
-  onManage: (id: string) => void;
+  onManage: (blockId: string, placementId: string, view: CardAction) => void;
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
 type CardNode = Node<CardData>;
@@ -109,12 +110,16 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         />
         <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
         <ActionMenu label="More" align="right">
-          <button aria-label="Block actions" onClick={() => data.onManage(block.id)}>
-            Block actions
-          </button>
           {block.messageId && (
             <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
           )}
+          <button onClick={() => data.onManage(block.id, id, 'place')}>
+            Show on another brane…
+          </button>
+          <button onClick={() => data.onManage(block.id, id, 'versions')}>Version history</button>
+          <button onClick={() => data.onManage(block.id, id, 'remove')}>
+            Remove from this brane
+          </button>
         </ActionMenu>
       </footer>
     </article>

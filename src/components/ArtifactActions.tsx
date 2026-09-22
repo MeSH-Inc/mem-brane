@@ -4,25 +4,34 @@ import type { CommandTasks } from '../services/command-tasks';
 import { LocalImage } from './LocalAsset';
 import { PdfContent } from './PdfContent';
 import { useEffect, useRef, useState } from 'react';
-import type { Block, Brane, Placement, Revision, Geometry } from '../../shared/types/domain';
+import type { Block, Brane, Revision } from '../../shared/types/domain';
 import type { RevisionSummary } from '../../shared/types/history';
 import { client } from '../services/client';
 import { needsAccount } from '../services/api';
+export type CardAction = 'place' | 'remove' | 'versions';
+const titles: Record<CardAction, string> = {
+  place: 'Show on another brane',
+  remove: 'Remove from this brane',
+  versions: 'Version history',
+};
+// Card-level operations, each reached directly from a card's menu.
 export function ArtifactActions({
+  view,
   commands,
   block,
-  placements,
+  placementId,
+  braneId,
   onChange,
   onSave,
-  onGeometry,
   onClose,
 }: {
+  view: CardAction;
   commands: CommandTasks;
   block: Block;
-  placements: Placement[];
+  placementId?: string;
+  braneId: string;
   onChange: () => Promise<void>;
   onSave: () => Promise<unknown>;
-  onGeometry: (id: string, geometry: Geometry) => Promise<void>;
   onClose: () => void;
 }) {
   const [branes, setBranes] = useState<Brane[]>([]),
@@ -77,17 +86,18 @@ export function ArtifactActions({
     setSelected(undefined);
     setRevisionError('');
     setNextCursor(null);
-    void client
-      .branes()
-      .then(setBranes)
-      .catch((e) => setError(e.message));
-    void load().catch((e) => setError(e.message));
+    if (view === 'place')
+      void client
+        .branes()
+        .then((list) => setBranes(list.filter((b) => b.id !== braneId)))
+        .catch((e) => setError(e.message));
+    if (view === 'versions') void load().catch((e) => setError(e.message));
     return () => {
       activeBlock.current = '';
       historyRequest.current++;
       revisionRequest.current++;
     };
-  }, [block.id]);
+  }, [block.id, view]);
   async function action(key: string, work: () => Promise<unknown>, message: string) {
     try {
       await commands.run(key, async (progress) => {
@@ -102,201 +112,151 @@ export function ArtifactActions({
     }
   }
   return (
-    <Dialog title="Block actions" onClose={onClose}>
-      <section className="artifact-actions" aria-label="Block actions">
+    <Dialog title={titles[view]} onClose={onClose}>
+      <section className="artifact-actions" aria-label={titles[view]}>
         {error && <p role="alert">{error}</p>}
         {notice && <p role="status">{notice}</p>}
-        <details>
-          <summary>Snapshot and place elsewhere</summary>
-          <div className="artifact-row">
-            <CommandButton
-              tasks={commands}
-              taskKey={`snapshot:${block.id}`}
-              pendingLabel="Saving snapshot…"
-              onClick={() =>
-                !needsAccount() &&
-                void action(
-                  `snapshot:${block.id}`,
-                  async () => {
-                    await onSave();
-                    await client.snapshot(block.id);
-                    await load();
-                  },
-                  'Snapshot saved',
-                )
-              }
-            >
-              Save snapshot
-            </CommandButton>
-            <select
-              aria-label="Destination brane"
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-            >
-              <option value="">Choose a brane…</option>
-              {branes.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.title}
-                </option>
-              ))}
-            </select>
-            <CommandButton
-              tasks={commands}
-              taskKey={`place:${block.id}:${target}`}
-              pendingLabel="Placing…"
-              disabled={!target}
-              onClick={() =>
-                void action(
-                  `place:${block.id}:${target}`,
-                  () =>
-                    client.createPlacement(target, block.id, {
-                      x: 140,
-                      y: 140,
-                      width: 320,
-                      height: 240,
-                    }),
-                  'Same block placed in the chosen brane',
-                )
-              }
-            >
-              Place in brane
-            </CommandButton>
-          </div>
-        </details>
-        <details>
-          <summary>Placements in this brane ({placements.length})</summary>
-          {placements.map((p, i) => (
-            <div className="artifact-row" key={p.id}>
-              <span>Placement {i + 1}</span>
-              <details>
-                <summary>Size and position</summary>
-                <GeometryForm
-                  placement={p}
-                  commands={commands}
-                  onApply={(g) =>
-                    void action(
-                      `geometry:${p.id}`,
-                      () => onGeometry(p.id, g),
-                      'Placement geometry saved',
-                    )
-                  }
-                />
-              </details>
+        {view === 'place' && (
+          <>
+            <p>The same card appears in both branes, and edits show in each.</p>
+            <div className="artifact-row">
+              <select
+                aria-label="Destination brane"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+              >
+                <option value="">Choose a brane…</option>
+                {branes.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.title}
+                  </option>
+                ))}
+              </select>
               <CommandButton
                 tasks={commands}
-                taskKey={`remove:${p.id}`}
-                pendingLabel="Removing…"
+                taskKey={`place:${block.id}:${target}`}
+                pendingLabel="Adding…"
+                disabled={!target}
                 onClick={() =>
                   void action(
-                    `remove:${p.id}`,
-                    () => client.removePlacement(p.id),
-                    'Placement removed; the block and its history are retained',
+                    `place:${block.id}:${target}`,
+                    () =>
+                      client.createPlacement(target, block.id, {
+                        x: 140,
+                        y: 140,
+                        width: 320,
+                        height: 240,
+                      }),
+                    `Now also on ${branes.find((b) => b.id === target)?.title ?? 'that brane'}`,
                   )
                 }
               >
-                Remove placement {i + 1}
+                Show there
               </CommandButton>
             </div>
-          ))}
-        </details>
-        <details>
-          <summary>
-            Saved snapshots ({history.length}
-            {nextCursor ? '+' : ''})
-          </summary>
-          {history.map((r) => (
-            <div key={r.id}>
-              <button
-                type="button"
-                aria-expanded={selectedId === r.id}
-                onClick={() => void inspect(r.id)}
+          </>
+        )}
+        {view === 'remove' && (
+          <>
+            <p>The card leaves this brane. Other branes that show it, and its history, keep it.</p>
+            <div className="artifact-row">
+              <CommandButton
+                tasks={commands}
+                taskKey={`remove:${placementId}`}
+                pendingLabel="Removing…"
+                disabled={!placementId}
+                onClick={async () => {
+                  try {
+                    await commands.run(`remove:${placementId}`, async () => {
+                      await client.removePlacement(placementId!);
+                      await onChange();
+                    });
+                    onClose();
+                  } catch (e) {
+                    setError((e as Error).message);
+                  }
+                }}
               >
-                {new Date(r.created_at).toLocaleString()} · {r.preview || r.format}
-              </button>
-              {selectedId === r.id && (
-                <div>
-                  <code>{r.id}</code>
-                  {revisionError ? (
-                    <>
-                      <p role="alert">{revisionError}</p>
-                      <button onClick={() => void inspect(r.id)}>Retry snapshot</button>
-                    </>
-                  ) : !selected ? (
-                    <p role="status">Loading snapshot…</p>
-                  ) : (
-                    <>
-                      <pre>{selected.content.text}</pre>
-                      {selected.content.format === 'pdf' && (
-                        <PdfContent content={selected.content} showProvenance />
-                      )}
-                      {selected.content.format === 'image' && (
-                        <LocalImage
-                          className="context-image"
-                          assetId={selected.content.assetId!}
-                          alt="Frozen image snapshot"
-                        />
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
+                Remove
+              </CommandButton>
+              <button onClick={onClose}>Keep it</button>
             </div>
-          ))}
-          {nextCursor && (
-            <button
-              disabled={loading}
-              onClick={() => void load(nextCursor).catch((e) => setError(e.message))}
-            >
-              Load older snapshots
-            </button>
-          )}
-          {loading && <p role="status">Loading snapshots…</p>}
-        </details>
+          </>
+        )}
+        {view === 'versions' && (
+          <>
+            <div className="artifact-row">
+              <CommandButton
+                tasks={commands}
+                taskKey={`snapshot:${block.id}`}
+                pendingLabel="Saving version…"
+                onClick={() =>
+                  !needsAccount() &&
+                  void action(
+                    `snapshot:${block.id}`,
+                    async () => {
+                      await onSave();
+                      await client.snapshot(block.id);
+                      await load();
+                    },
+                    'Version saved',
+                  )
+                }
+              >
+                Save a version now
+              </CommandButton>
+            </div>
+            {!loading && !history.length && <p>No saved versions yet.</p>}
+            {history.map((r) => (
+              <div key={r.id}>
+                <button
+                  type="button"
+                  aria-expanded={selectedId === r.id}
+                  onClick={() => void inspect(r.id)}
+                >
+                  {new Date(r.created_at).toLocaleString()} · {r.preview || r.format}
+                </button>
+                {selectedId === r.id && (
+                  <div>
+                    <code>{r.id}</code>
+                    {revisionError ? (
+                      <>
+                        <p role="alert">{revisionError}</p>
+                        <button onClick={() => void inspect(r.id)}>Retry version</button>
+                      </>
+                    ) : !selected ? (
+                      <p role="status">Loading version…</p>
+                    ) : (
+                      <>
+                        <pre>{selected.content.text}</pre>
+                        {selected.content.format === 'pdf' && (
+                          <PdfContent content={selected.content} showProvenance />
+                        )}
+                        {selected.content.format === 'image' && (
+                          <LocalImage
+                            className="context-image"
+                            assetId={selected.content.assetId!}
+                            alt="Saved image version"
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+            {nextCursor && (
+              <button
+                disabled={loading}
+                onClick={() => void load(nextCursor).catch((e) => setError(e.message))}
+              >
+                Load older versions
+              </button>
+            )}
+            {loading && <p role="status">Loading versions…</p>}
+          </>
+        )}
       </section>
     </Dialog>
-  );
-}
-
-function GeometryForm({
-  commands,
-  placement,
-  onApply,
-}: {
-  commands: CommandTasks;
-  placement: Placement;
-  onApply: (geometry: { x: number; y: number; width: number; height: number }) => void;
-}) {
-  return (
-    <form
-      className="geometry-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const data = new FormData(e.currentTarget);
-        onApply({
-          x: Number(data.get('x')),
-          y: Number(data.get('y')),
-          width: Number(data.get('width')),
-          height: Number(data.get('height')),
-        });
-      }}
-    >
-      {(['x', 'y', 'width', 'height'] as const).map((field) => (
-        <label key={field}>
-          {field}
-          <input
-            type="number"
-            step="any"
-            required
-            name={field}
-            defaultValue={placement[field]}
-            min={field === 'width' ? 180 : field === 'height' ? 120 : -1000000}
-            max={field === 'width' || field === 'height' ? 4000 : 1000000}
-          />
-        </label>
-      ))}
-      <CommandButton tasks={commands} taskKey={`geometry:${placement.id}`} pendingLabel="Applying…">
-        Apply geometry
-      </CommandButton>
-    </form>
   );
 }

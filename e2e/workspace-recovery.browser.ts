@@ -183,8 +183,7 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
       .getByRole('textbox', { name: 'Block text', exact: true })
       .fill('Updated field notes: south trail selected.');
     await page.getByRole('button', { name: 'More', exact: true }).click();
-    await page.getByRole('button', { name: 'Block actions', exact: true }).click();
-    await page.getByText(/Saved snapshots \(/).click();
+    await page.getByRole('button', { name: 'Version history', exact: true }).click();
     await page
       .locator('.artifact-actions')
       .getByRole('button', { name: /Field notes: the north trail/ })

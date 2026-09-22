@@ -96,12 +96,10 @@ test('installed shell reloads offline, retains edits and creation, and reconcile
     await page.getByRole('textbox', { name: 'Block text', exact: true }).fill('Created offline');
     await expect(page.getByRole('status')).toHaveText('Saved on device · Syncing…');
     await page.getByRole('button', { name: 'More', exact: true }).click();
-    await page.getByRole('button', { name: 'Block actions', exact: true }).click();
-    await page.getByText('Placements in this brane (1)', { exact: true }).click();
-    await page.getByText('Size and position', { exact: true }).click();
-    await page.getByRole('spinbutton', { name: 'x', exact: true }).fill('850');
-    await page.getByRole('button', { name: 'Apply geometry', exact: true }).click();
-    await expect(page.getByText('Placement geometry saved', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Show on another brane…', exact: true }).click();
+    await page.getByLabel('Destination brane').selectOption({ index: 1 });
+    await page.getByRole('button', { name: 'Show there', exact: true }).click();
+    await expect(page.getByText(/^Now also on /)).toBeVisible();
     await page.reload();
     await expect(page.getByRole('textbox', { name: 'Block text', exact: true })).toHaveValue(
       'Created offline',
@@ -112,6 +110,13 @@ test('installed shell reloads offline, retains edits and creation, and reconcile
     await context.setOffline(false);
     await expect
       .poll(async () => (await (await page.request.get(`${origin}/api/branes`)).json()).length)
+      .toBe(2);
+    // The card placed offline on the first brane synchronizes there too.
+    await expect
+      .poll(
+        async () =>
+          (await (await page.request.get(`${origin}/api/branes/${brane.id}`)).json()).blocks.length,
+      )
       .toBe(2);
     // The service worker's cache contains no authenticated API responses.
     expect(

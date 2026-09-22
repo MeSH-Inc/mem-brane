@@ -1202,22 +1202,6 @@ a {
 .focus-card footer {
   flex-wrap: wrap;
 }
-.geometry-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  align-items: end;
-}
-.geometry-form label {
-  font-size: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.geometry-form input {
-  width: 80px;
-  padding: 6px;
-}
 
 .spawn-button {
   font-weight: 650;

@@ -29,13 +29,19 @@ import { presentationFor } from '../stores/presentation';
 import { useStore } from 'zustand';
 import { LiveBlockContent } from '../components/LiveBlockContent';
 import { SpawnButton } from '../components/SpawnButton';
-import { ArtifactActions } from '../components/ArtifactActions';
+import { ArtifactActions, type CardAction } from '../components/ArtifactActions';
 import { RunHistory } from '../components/RunHistory';
 import { draftDisposition } from '../services/drafts';
 import { useMobile } from '../lib/useMobile';
 const BraneCanvas = lazy(() =>
   import('../canvas/BraneCanvas').then((module) => ({ default: module.BraneCanvas })),
 );
+
+const cardActionLabels: Record<CardAction, string> = {
+  place: 'Show on another brane…',
+  versions: 'Version history',
+  remove: 'Remove from this brane',
+};
 
 type BraneViewProps = { braneId: string; focus?: string; view?: 'canvas' | 'focus' };
 
@@ -104,7 +110,6 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     commands,
     saveDraft,
     edit,
-    saveGeometry,
     geometry,
     run,
     setError,
@@ -133,7 +138,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
   const [inspectorTab, setInspectorTab] = useState<'context' | 'history'>('context');
   const [webOpen, setWebOpen] = useState(false),
     [url, setUrl] = useState(''),
-    [managed, setManaged] = useState<string>();
+    [managed, setManaged] = useState<{ blockId: string; placementId?: string; view: CardAction }>();
   const mobile = useMobile();
   const focusMode = view === 'focus' || (!view && mobile);
   const ui = {
@@ -398,14 +403,15 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           </button>
         </div>
       ))}
-      {managed && state.blocks.find((b) => b.id === managed) && (
+      {managed && state.blocks.some((b) => b.id === managed.blockId) && (
         <ArtifactActions
-          key={managed}
+          key={`${managed.blockId}:${managed.view}`}
+          view={managed.view}
           commands={commands}
-          block={state.blocks.find((b) => b.id === managed)!}
-          placements={state.placements.filter((p) => p.block_id === managed)}
-          onSave={() => saveBlock(managed)}
-          onGeometry={saveGeometry}
+          block={state.blocks.find((b) => b.id === managed.blockId)!}
+          placementId={managed.placementId}
+          braneId={braneId}
+          onSave={() => saveBlock(managed.blockId)}
           onChange={refresh}
           onClose={() => setManaged(undefined)}
         />
@@ -536,12 +542,26 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     />
                     <button onClick={() => ui.addReferences([focused.id])}>+ Use as context</button>
                     <ActionMenu label="More" align="right">
-                      <button onClick={() => setManaged(focused.id)}>Block actions</button>
                       {focused.messageId && (
                         <button onClick={() => ui.setContinue(focused.messageId)}>
                           ⑂ Continue from here
                         </button>
                       )}
+                      {(['place', 'versions', 'remove'] as const).map((view) => (
+                        <button
+                          key={view}
+                          onClick={() =>
+                            setManaged({
+                              blockId: focused.id,
+                              placementId: state.placements.find((p) => p.block_id === focused.id)
+                                ?.id,
+                              view,
+                            })
+                          }
+                        >
+                          {cardActionLabels[view]}
+                        </button>
+                      ))}
                       {state.derivations
                         .filter((d) => d.outputBlockId === focused.id)
                         .map((d) => (
@@ -606,7 +626,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 onEdit={edit}
                 onGeometry={geometry}
                 onFocus={focusBlock}
-                onManage={setManaged}
+                onManage={(blockId, placementId, view) =>
+                  setManaged({ blockId, placementId, view })
+                }
               />
             </Suspense>
           )}

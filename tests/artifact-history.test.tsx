@@ -60,17 +60,17 @@ it('appends older history and ignores an old page after switching blocks', async
           version: 0,
           content: { format: 'text', text: '' },
         }}
-        placements={[]}
+        view="versions"
+        braneId="brane"
         onChange={async () => {}}
         onSave={async () => {}}
-        onGeometry={async () => {}}
         onClose={() => {}}
       />,
     );
   await act(async () => render('a'));
   const more = () =>
     Array.from(host.querySelectorAll('button')).find(
-      (b) => b.textContent === 'Load older snapshots',
+      (b) => b.textContent === 'Load older versions',
     )!;
   expect(host.textContent).toContain('Newest');
   await act(async () => more().click());
@@ -119,10 +119,10 @@ it('fetches only the selected snapshot and fences a slower previous selection', 
           version: 0,
           content: { format: 'text', text: '' },
         }}
-        placements={[]}
+        view="versions"
+        braneId="brane"
         onChange={async () => {}}
         onSave={async () => {}}
-        onGeometry={async () => {}}
         onClose={() => {}}
       />,
     ),
@@ -148,4 +148,43 @@ it('fetches only the selected snapshot and fences a slower previous selection', 
   expect(host.querySelector('pre')?.textContent).toBe('Exact selected body');
   await act(async () => choose('two'));
   expect(host.querySelectorAll('pre')).toHaveLength(0);
+});
+
+it('removes only the chosen placement, refreshes, and closes', async () => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.mocked(api).mockResolvedValue(undefined);
+  const onChange = vi.fn(async () => {}),
+    onClose = vi.fn();
+  const host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () =>
+    root!.render(
+      <ArtifactActions
+        view="remove"
+        commands={new CommandTasks()}
+        block={{
+          id: 'a',
+          kind: 'text',
+          origin: 'authored',
+          version: 0,
+          content: { format: 'text', text: '' },
+        }}
+        placementId="pa2"
+        braneId="brane"
+        onChange={onChange}
+        onSave={async () => {}}
+        onClose={onClose}
+      />,
+    ),
+  );
+  expect(api).not.toHaveBeenCalled();
+  await act(async () =>
+    Array.from(host.querySelectorAll('button'))
+      .find((b) => b.textContent === 'Remove')!
+      .click(),
+  );
+  expect(vi.mocked(api).mock.calls).toEqual([['/placements/pa2', undefined, 'DELETE']]);
+  expect(onChange).toHaveBeenCalledOnce();
+  expect(onClose).toHaveBeenCalledOnce();
 });
