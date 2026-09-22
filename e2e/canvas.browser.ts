@@ -102,7 +102,7 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
   await expect(first).toHaveClass(/selected/);
   await page.getByRole('button', { name: 'Focus', exact: true }).click();
   await expect(first).toHaveCount(0);
-  await expect(page.getByRole('group', { name: 'Canvas tools' })).toHaveCount(0);
+  await expect(page.locator('.canvas-hint')).toHaveCount(0);
   await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   await expect(first).toHaveClass(/selected/);
   await second.locator('.card-grip').click({ modifiers: ['Shift'] });

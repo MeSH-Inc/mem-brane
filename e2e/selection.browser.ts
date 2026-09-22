@@ -57,12 +57,6 @@ test.beforeEach(async ({ page }) => {
   });
 });
 const node = (page: Page, id: string) => page.locator(`.react-flow__node[data-id="${id}"]`);
-async function selectTool(page: Page, tool = 'Select') {
-  await page
-    .getByRole('group', { name: 'Canvas tools' })
-    .getByRole('button', { name: tool })
-    .click();
-}
 async function partialDrag(page: Page, id = 'pa', finish = true) {
   const box = (await node(page, id).boundingBox())!;
   await page.mouse.move(box.x - 25, box.y - 25);
@@ -74,11 +68,6 @@ async function partialDrag(page: Page, id = 'pa', finish = true) {
 test('marquee intersects placements independently at multiple zooms and resolves unique context', async ({
   page,
 }) => {
-  await selectTool(page);
-  await expect(page.getByRole('button', { name: '▱ Select', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
   await partialDrag(page);
   await expect(node(page, 'pa')).toHaveClass(/selected/);
   await expect(node(page, 'pa2')).not.toHaveClass(/selected/);
@@ -99,22 +88,17 @@ test('marquee intersects placements independently at multiple zooms and resolves
   expect(requests).toEqual([]);
 });
 
-for (const reason of ['Escape', 'tool', 'pointercancel', 'lostcapture', 'blur'] as const) {
+for (const reason of ['Escape', 'pointercancel', 'lostcapture', 'blur'] as const) {
   test(`marquee cancellation via ${reason} restores selection and allows the next drag`, async ({
     page,
   }) => {
     await node(page, 'pb').locator('.card-grip').click();
-    await selectTool(page);
     await page.getByRole('button', { name: 'Zoom Out', exact: true }).click();
     await expect.poll(async () => (await node(page, 'pa').boundingBox())!.width).toBeLessThan(290);
     const before = (await node(page, 'pa').boundingBox())!;
     await partialDrag(page, 'pa', false);
     await expect(node(page, 'pa')).toHaveClass(/selected/);
     if (reason === 'Escape') await page.keyboard.press('Escape');
-    else if (reason === 'tool')
-      await page
-        .getByRole('button', { name: '✥ Pan', exact: true })
-        .evaluate((el: HTMLButtonElement) => el.click());
     else if (reason === 'blur') await page.evaluate(() => window.dispatchEvent(new Event('blur')));
     else
       await page.locator('.canvas-host').evaluate((el, reason) => {
@@ -137,7 +121,6 @@ for (const reason of ['Escape', 'tool', 'pointercancel', 'lostcapture', 'blur'] 
     const after = (await node(page, 'pa').boundingBox())!;
     expect(after.x).toBeCloseTo(before.x, 0);
     expect(after.width).toBeCloseTo(before.width, 0);
-    await selectTool(page);
     await partialDrag(page);
     await expect(node(page, 'pa')).toHaveClass(/selected/);
     await expect(node(page, 'pb')).not.toHaveClass(/selected/);
@@ -145,33 +128,35 @@ for (const reason of ['Escape', 'tool', 'pointercancel', 'lostcapture', 'blur'] 
   });
 }
 
-test('Write cancellation cannot create a block and a fresh Write drag creates once', async ({
+test('a background double-click creates once, while single clicks and card double-clicks do not', async ({
   page,
 }) => {
-  await selectTool(page, 'Write');
-  await partialDrag(page, 'pa', false);
-  await expect(page.locator('.draft-rectangle')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await page.mouse.up();
-  await expect(page.locator('.draft-rectangle')).toHaveCount(0);
+  const a = (await node(page, 'pa').boundingBox())!;
+  await page.mouse.click(a.x - 40, a.y - 40);
+  await page.waitForTimeout(500);
+  await page.mouse.click(a.x - 40, a.y - 40);
+  await node(page, 'pa').locator('.card-grip').dblclick();
   expect(requests).toEqual([]);
-  await partialDrag(page);
+  await page.mouse.dblclick(a.x - 40, a.y - 40);
   await expect.poll(() => requests.filter((r) => r.path === '/api/blocks/text').length).toBe(1);
 });
 
-test('Pan moves the viewport from a header, while Select moves the selected group', async ({
+test('Space-drag pans from a header, while a plain drag moves the selected group', async ({
   page,
 }) => {
-  await selectTool(page, 'Pan');
+  await page.locator('.canvas-host').focus();
+  await page.keyboard.down(' ');
+  await expect(page.locator('.canvas-host')).toHaveClass(/panning/);
   const grip = node(page, 'pa').locator('.card-grip');
   const before = (await grip.boundingBox())!;
   await page.mouse.move(before.x + 50, before.y + 15);
   await page.mouse.down();
   await page.mouse.move(before.x + 90, before.y + 55, { steps: 8 });
   await page.mouse.up();
+  await page.keyboard.up(' ');
+  await expect(page.locator('.canvas-host')).not.toHaveClass(/panning/);
   expect((await grip.boundingBox())!.x).toBeGreaterThan(before.x + 30);
   expect(requests).toEqual([]);
-  await selectTool(page);
   await grip.click();
   await node(page, 'pb')
     .locator('.card-grip')
@@ -186,8 +171,7 @@ test('Pan moves the viewport from a header, while Select moves the selected grou
     .toBe(2);
 });
 
-test('Select leaves editor text gestures alone and middle mouse pans', async ({ page }) => {
-  await selectTool(page);
+test('editor text gestures stay native and middle mouse pans', async ({ page }) => {
   const editor = node(page, 'pa').getByRole('textbox');
   const box = (await editor.boundingBox())!;
   await page.mouse.move(box.x + 10, box.y + 10);
@@ -207,7 +191,6 @@ test('Select leaves editor text gestures alone and middle mouse pans', async ({ 
 test('reverse marquee selects several cards and empty canvas click clears them', async ({
   page,
 }) => {
-  await selectTool(page);
   const a = (await node(page, 'pa').boundingBox())!;
   const b = (await node(page, 'pb').boundingBox())!;
   await page.mouse.move(b.x + b.width + 15, b.y + 25);
@@ -226,7 +209,6 @@ test('leaving the canvas cancels an unfinished marquee and retains the original 
   page,
 }) => {
   await node(page, 'pb').locator('.card-grip').click();
-  await selectTool(page);
   await partialDrag(page, 'pa', false);
   await page
     .getByRole('button', { name: 'Focus', exact: true })
@@ -240,27 +222,22 @@ test('leaving the canvas cancels an unfinished marquee and retains the original 
   expect(requests).toEqual([]);
 });
 
-for (const tool of ['Select', 'Write', 'Pan']) {
-  test(`${tool} keeps editors and actions interactive without changing selection`, async ({
-    page,
-  }) => {
-    await page.addStyleTag({
-      content: '#root { display: flex; flex-direction: column; height: 100dvh; }',
-    });
-    await node(page, 'pb').locator('.card-grip').click();
-    await selectTool(page, tool);
-    const editor = node(page, 'pa').getByRole('textbox');
-    await editor.click();
-    await expect(editor).toBeFocused();
-    await expect(node(page, 'pb')).toHaveClass(/selected/);
-    await expect(node(page, 'pa')).not.toHaveClass(/selected/);
-    await node(page, 'pa').getByRole('button', { name: '+ Use as context', exact: true }).click();
-    await expect(page.locator('.context-chips .chip')).toHaveCount(1);
-    await expect(node(page, 'pb')).toHaveClass(/selected/);
-    await expect(node(page, 'pa')).not.toHaveClass(/selected/);
-    expect(requests).toEqual([]);
+test('editors and actions stay interactive without changing selection', async ({ page }) => {
+  await page.addStyleTag({
+    content: '#root { display: flex; flex-direction: column; height: 100dvh; }',
   });
-}
+  await node(page, 'pb').locator('.card-grip').click();
+  const editor = node(page, 'pa').getByRole('textbox');
+  await editor.click();
+  await expect(editor).toBeFocused();
+  await expect(node(page, 'pb')).toHaveClass(/selected/);
+  await expect(node(page, 'pa')).not.toHaveClass(/selected/);
+  await node(page, 'pa').getByRole('button', { name: '+ Use as context', exact: true }).click();
+  await expect(page.locator('.context-chips .chip')).toHaveCount(1);
+  await expect(node(page, 'pb')).toHaveClass(/selected/);
+  await expect(node(page, 'pa')).not.toHaveClass(/selected/);
+  expect(requests).toEqual([]);
+});
 for (const delta of [1, 4, 7]) {
   test(`a header click with ${delta}px jitter selects without moving or saving`, async ({
     page,
@@ -277,7 +254,7 @@ for (const delta of [1, 4, 7]) {
   });
 }
 for (const gesture of ['move', 'resize'] as const) {
-  for (const reason of ['Escape', 'tool', 'blur', 'pointercancel'] as const) {
+  for (const reason of ['Escape', 'blur', 'pointercancel'] as const) {
     test(`${reason} cancels card ${gesture} without a remount or a save`, async ({ page }) => {
       await page.addStyleTag({
         content: '#root { display: flex; flex-direction: column; height: 100dvh; }',
@@ -298,10 +275,6 @@ for (const gesture of ['move', 'resize'] as const) {
       await page.mouse.down();
       await page.mouse.move(bounds.x + 100, bounds.y + 70, { steps: 8 });
       if (reason === 'Escape') await page.keyboard.press('Escape');
-      else if (reason === 'tool')
-        await page
-          .getByRole('button', { name: '✥ Pan', exact: true })
-          .evaluate((el: HTMLButtonElement) => el.click());
       else if (reason === 'blur')
         await page.evaluate(() => window.dispatchEvent(new Event('blur')));
       else

@@ -11,7 +11,6 @@ import { PdfContent } from '../components/PdfContent';
 import { imports } from '../services/imports';
 import { acceptedFiles, pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapters';
 import { ImportTray } from '../components/ImportTray';
-import { canvasTools } from '../canvas/tools';
 import { selectedBlockIds } from '../canvas/selection';
 import {
   useCallback,
@@ -153,8 +152,6 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     recoveryError: useInteraction((s) => s.recoveryError),
     selectedPlacements: useInteraction((s) => s.selectedPlacements),
     setInspector: useInteraction((s) => s.setInspector),
-    setTool: useInteraction((s) => s.setTool),
-    tool: useInteraction((s) => s.tool),
   };
   const selectedBlocks = selectedBlockIds(state?.placements ?? [], ui.selectedPlacements);
   const navigate = useNavigate();
@@ -422,18 +419,9 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
         >
           {!focusMode && (
             <div className="tools">
-              <div className="canvas-tools" role="group" aria-label="Canvas tools">
-                {canvasTools.map(({ id, label }) => (
-                  <button
-                    key={id}
-                    className={ui.tool === id ? 'active' : ''}
-                    aria-pressed={ui.tool === id}
-                    onClick={() => ui.setTool(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <span className="canvas-hint">
+                Double-click to write · Drag to select · Space-drag to pan
+              </span>
               {selectedBlocks.length > 0 && (
                 <button onClick={() => ui.addReferences(selectedBlocks)}>
                   Use {selectedBlocks.length} as context
@@ -604,7 +592,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   >
                     Add your first thought
                   </CommandButton>
-                  <p>Or drop an image or PDF here.</p>
+                  <p>Or double-click anywhere, or drop an image or PDF here.</p>
                 </div>
               )}
               <BraneCanvas

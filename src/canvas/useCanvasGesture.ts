@@ -16,18 +16,19 @@ import {
   type ResizeEdge,
   type Surface,
 } from './gestures';
-import type { CanvasTool } from './tools';
-// Native editors and controls retain their browser gestures in every tool.
+// Native editors and controls retain their browser gestures during every canvas gesture.
 const nativeSurface =
   'button, input, textarea, select, a, summary, [contenteditable], [data-canvas-native], .response-content, .image-content, .pdf-content, .react-flow__controls';
 export function useCanvasGesture(
-  tool: CanvasTool,
   host: RefObject<HTMLDivElement | null>,
   owner: Omit<GestureOwner, 'preview'>,
 ) {
   const callbacks = useRef(owner);
   callbacks.current = owner;
   const [preview, setPreview] = useState(idlePreview);
+  // Holding Space outside editors turns primary drags into panning.
+  const [panning, setPanning] = useState(false);
+  const panHeld = useRef(false);
   const [gestures] = useState(
     () =>
       new CanvasGestures({
@@ -47,7 +48,6 @@ export function useCanvasGesture(
     for (const id of pointers)
       if (host.current?.hasPointerCapture(id)) host.current.releasePointerCapture(id);
   };
-  useLayoutEffect(cancel, [tool]);
   useLayoutEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && gestures.active) {
@@ -56,7 +56,23 @@ export function useCanvasGesture(
         cancel();
       }
     };
-    const blur = () => cancel();
+    const pan = (event: KeyboardEvent) => {
+      if (event.key !== ' ' || event.repeat) return;
+      const held = event.type === 'keydown';
+      if (
+        held &&
+        event.target instanceof Element &&
+        (event.target.closest(nativeSurface) || !host.current?.contains(event.target))
+      )
+        return;
+      panHeld.current = held;
+      setPanning(held);
+    };
+    const blur = () => {
+      panHeld.current = false;
+      setPanning(false);
+      cancel();
+    };
     const wheel = (event: WheelEvent) => {
       if (!(event.target instanceof Element) || event.target.closest(nativeSurface)) return;
       event.preventDefault();
@@ -83,10 +99,14 @@ export function useCanvasGesture(
     };
     const element = host.current;
     window.addEventListener('keydown', escape, true);
+    window.addEventListener('keydown', pan);
+    window.addEventListener('keyup', pan);
     window.addEventListener('blur', blur);
     element?.addEventListener('wheel', wheel, { passive: false });
     return () => {
       window.removeEventListener('keydown', escape, true);
+      window.removeEventListener('keydown', pan);
+      window.removeEventListener('keyup', pan);
       window.removeEventListener('blur', blur);
       element?.removeEventListener('wheel', wheel);
       cancel();
@@ -98,6 +118,7 @@ export function useCanvasGesture(
   };
   return {
     ...preview,
+    panning,
     bindings: {
       onPointerDownCapture(event: ReactPointerEvent<HTMLDivElement>) {
         if (!(event.target instanceof Element)) return;
@@ -117,17 +138,15 @@ export function useCanvasGesture(
             : { kind: 'card', id: node.dataset.id }
           : { kind: 'background' };
         if (
-          !gestures.begin(
-            {
-              pointerId: event.pointerId,
-              point: point(event),
-              surface,
-              button: event.button,
-              touch: event.pointerType === 'touch',
-              shift: event.shiftKey,
-            },
-            tool,
-          )
+          !gestures.begin({
+            pointerId: event.pointerId,
+            point: point(event),
+            surface,
+            button: event.button,
+            touch: event.pointerType === 'touch',
+            shift: event.shiftKey,
+            pan: panHeld.current,
+          })
         )
           return;
         event.preventDefault();
@@ -173,22 +192,25 @@ export function useCanvasGesture(
                 : [...selected, id]
               : [id],
           );
-        } else if (
-          tool !== 'pan' &&
-          ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
-        ) {
+        } else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+          // Arrows nudge the selection; Alt+Arrows resize it from the bottom-right corner.
           const amount = event.shiftKey ? 20 : 5;
           const dx = event.key === 'ArrowLeft' ? -amount : event.key === 'ArrowRight' ? amount : 0;
           const dy = event.key === 'ArrowUp' ? -amount : event.key === 'ArrowDown' ? amount : 0;
           const selected = new Set(callbacks.current.selection());
           for (const p of callbacks.current.placements())
             if (selected.has(p.id))
-              callbacks.current.commit(p.id, {
-                x: p.x + dx,
-                y: p.y + dy,
-                width: p.width,
-                height: p.height,
-              });
+              callbacks.current.commit(
+                p.id,
+                event.altKey
+                  ? {
+                      x: p.x,
+                      y: p.y,
+                      width: Math.max(180, p.width + dx),
+                      height: Math.max(120, p.height + dy),
+                    }
+                  : { x: p.x + dx, y: p.y + dy, width: p.width, height: p.height },
+              );
         } else return;
         event.preventDefault();
         event.stopPropagation();

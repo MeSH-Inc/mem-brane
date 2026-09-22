@@ -38,16 +38,18 @@ for (const selectors of tracing ? ['global', 'scoped'] : ['scoped'])
         [1, 2, 4, 5].map((i) => `card:${placement(i)}`).sort(),
       );
       expect(Object.values(isolated.cardSubtreeCommits).every((count) => count >= 20)).toBe(true);
-      await page.evaluate(() => window.stress.metrics.reset('tool-switching-with-streams'));
+      // Holding and releasing the pan modifier must not re-render unrelated cards.
+      await page.evaluate(() => window.stress.metrics.reset('pan-modifier-with-streams'));
+      await page.locator('.canvas-host').focus();
       for (let i = 0; i < 24; i++) {
+        const event = i % 2 ? 'keyup' : 'keydown';
         await page.evaluate(
-          (i) => window.stress.metrics.arm(`tool:${i}`, 'pointerup', '.canvas-host', 'class'),
-          i,
+          ([i, event]) => window.stress.metrics.arm(`pan:${i}`, event, '.canvas-host', 'class'),
+          [i, event] as const,
         );
-        await (selectors === 'global' ? page : page.locator('.canvas-tools'))
-          .getByRole('button', { name: i % 2 ? '▱ Select' : '✥ Pan', exact: true })
-          .click();
-        await page.evaluate((i) => window.stress.metrics.wait(`tool:${i}`), i);
+        if (i % 2) await page.keyboard.up(' ');
+        else await page.keyboard.down(' ');
+        await page.evaluate((i) => window.stress.metrics.wait(`pan:${i}`), i);
       }
       const tools = await page.evaluate(() => window.stress.metrics.report());
       measurements.push(tools);
@@ -55,9 +57,9 @@ for (const selectors of tracing ? ['global', 'scoped'] : ['scoped'])
       expect(Object.keys(tools.cardSubtreeCommits).filter((id) => !streaming.includes(id))).toEqual(
         [],
       );
-      expect(tools.inputs.tool.count).toBe(24);
-      expect(tools.inputs.tool.p95).toBeLessThan(100);
-      expect(tools.inputs.tool.max).toBeLessThan(250);
+      expect(tools.inputs.pan.count).toBe(24);
+      expect(tools.inputs.pan.p95).toBeLessThan(100);
+      expect(tools.inputs.pan.max).toBeLessThan(250);
       await page.evaluate(() => window.stress.metrics.reset('interaction-with-streams'));
       for (let i = 0; i < 24; i++) {
         await page.evaluate(

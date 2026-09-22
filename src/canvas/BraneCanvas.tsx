@@ -1,6 +1,5 @@
 import { ActionMenu } from '../components/ActionMenu';
 import { pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapters';
-import { toolPolicy } from './toolPolicy';
 import { useCanvasGesture } from './useCanvasGesture';
 import { defaultViewport, type ResizeEdge } from './gestures';
 import {
@@ -155,17 +154,16 @@ function Inner(props: Props) {
     [presentation],
   );
   const selected = useInteraction((s) => s.selectedPlacements);
-  const tool = useInteraction((s) => s.tool);
   const addContext = useCallback((id: string) => props.onContext([id]), [props.onContext]);
   const setContinue = props.onContinue;
-  const policy = toolPolicy(tool);
   const host = useRef<HTMLDivElement>(null);
   const placements = scene.placements;
   const {
     geometry,
     rectangle: rect,
+    panning,
     bindings,
-  } = useCanvasGesture(tool, host, {
+  } = useCanvasGesture(host, {
     placements: () => placements,
     selection: () => useInteraction.getState().selectedPlacements,
     select: useInteraction.getState().setSelectedPlacements,
@@ -215,7 +213,7 @@ function Inner(props: Props) {
         data: {
           blockId: p.block_id,
           document: props.document,
-          resizable: selected.includes(p.id) && tool !== 'pan',
+          resizable: selected.includes(p.id),
           focusRequest:
             request?.kind === 'edit' &&
             request.blockId === p.block_id &&
@@ -250,7 +248,6 @@ function Inner(props: Props) {
     });
   }, [
     placements,
-    tool,
     props.document,
     geometry,
     selected,
@@ -287,7 +284,7 @@ function Inner(props: Props) {
       ref={host}
       tabIndex={0}
       aria-label="Artifact canvas"
-      className={`canvas-host tool-${tool}`}
+      className={`canvas-host${panning ? ' panning' : ''}`}
       {...bindings}
       onPaste={(event) =>
         pasteFiles(event, (files) => {
@@ -337,7 +334,7 @@ function Inner(props: Props) {
       </ReactFlow>
       {rect && (
         <div
-          className={rect.kind === 'write' ? 'draft-rectangle' : 'selection-rectangle'}
+          className="selection-rectangle"
           style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
         />
       )}

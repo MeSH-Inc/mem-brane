@@ -297,15 +297,11 @@ a {
   min-height: 180px;
   background: #f4f3ed;
 }
-.canvas-tools {
-  display: flex;
-  gap: 6px;
+.canvas-hint {
+  font-size: 10px;
+  color: var(--muted);
+  padding: 6px 10px;
 }
-.tool-select .react-flow__pane,
-.tool-write .react-flow__pane {
-  cursor: crosshair;
-}
-.draft-rectangle,
 .selection-rectangle {
   position: absolute;
   border: 1px dashed #70834f;
@@ -1045,7 +1041,7 @@ a {
     font-size: 11px;
     padding: 7px;
   }
-  .canvas-tools {
+  .canvas-hint {
     display: none;
   }
   .focus-layout {
@@ -1396,7 +1392,7 @@ a {
 .canvas-resize.se {
   cursor: nwse-resize;
 }
-.tool-pan .react-flow__pane {
+.canvas-host.panning .react-flow__pane {
   cursor: grab;
 }
 
@@ -1461,15 +1457,11 @@ a {
   padding: 6px 16px;
 }
 .tools button,
-.canvas-card footer button,
-.canvas-tools button {
+.canvas-card footer button {
   font-size: 12px;
 }
 .view-toggle button {
   font-size: 12px;
-}
-.tools .canvas-tools {
-  gap: 2px;
 }
 .action-menu {
   position: relative;

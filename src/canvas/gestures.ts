@@ -1,5 +1,4 @@
 import type { Geometry, Placement } from '../../shared/types/domain';
-import type { CanvasTool } from './tools';
 export type Point = { x: number; y: number };
 export type Viewport = Point & { zoom: number };
 export type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
@@ -14,13 +13,17 @@ export interface Press {
   button: number;
   touch: boolean;
   shift: boolean;
+  // A held pan modifier (Space) turns any primary drag into viewport movement.
+  pan?: boolean;
 }
 export interface GesturePreview {
   geometry: Record<string, Geometry>;
-  rectangle?: Geometry & { kind: 'write' | 'select' };
+  rectangle?: Geometry;
 }
 export const idlePreview: GesturePreview = { geometry: {} };
 export const CLICK_DISTANCE = 8;
+export const DOUBLE_CLICK_MS = 400;
+export const cardSize = { width: 320, height: 220 };
 export const defaultViewport: Viewport = { x: 20, y: 20, zoom: 1 };
 export const clampZoom = (zoom: number) => Math.max(0.2, Math.min(2, zoom));
 export const worldPoint = (point: Point, view: Viewport): Point => ({
@@ -46,7 +49,7 @@ export interface GestureOwner {
   commit(id: string, geometry: Geometry): void;
 }
 type Gesture = Press & {
-  kind: 'write' | 'select' | 'pan' | 'move' | 'resize';
+  kind: 'select' | 'pan' | 'move' | 'resize';
   moved: boolean;
   view: Viewport;
   selection: string[];
@@ -54,12 +57,18 @@ type Gesture = Press & {
 };
 // The application owns recognition, preview, commit and cancellation. Rendering
 // libraries never interpret a pointer or turn a preview into a durable mutation.
+// The canvas is modeless: background drags select, the pan modifier, secondary
+// buttons and touch pan, card drags move, and a background double-click writes.
 export class CanvasGestures {
   private gesture?: Gesture;
+  private lastClick?: { at: number; point: Point };
   private touches = new Map<number, Point>();
   private pinch?: { view: Viewport; anchor: Point; distance: number };
   private preview: GesturePreview = idlePreview;
-  constructor(private owner: GestureOwner) {}
+  constructor(
+    private owner: GestureOwner,
+    private now = () => performance.now(),
+  ) {}
   get active() {
     return !!this.gesture || !!this.pinch;
   }
@@ -74,7 +83,7 @@ export class CanvasGestures {
     this.preview = preview;
     this.owner.preview(preview);
   }
-  begin(press: Press, tool: CanvasTool): boolean {
+  begin(press: Press): boolean {
     if (press.button > 2 || (this.active && (!press.touch || this.gesture?.touch === false)))
       return false;
     if (press.touch) {
@@ -96,13 +105,13 @@ export class CanvasGestures {
     }
     const surface = press.surface;
     const kind =
-      press.button !== 0 || press.touch || tool === 'pan'
+      press.button !== 0 || press.touch || press.pan
         ? 'pan'
         : surface.kind === 'resize'
           ? 'resize'
           : surface.kind === 'card'
             ? 'move'
-            : tool;
+            : 'select';
     this.gesture = {
       ...press,
       kind,
@@ -138,11 +147,10 @@ export class CanvasGestures {
       this.owner.camera({ ...g.view, x: g.view.x + dx, y: g.view.y + dy });
       return;
     }
-    if (g.kind === 'select' || g.kind === 'write') {
+    if (g.kind === 'select') {
       const bounds = rectangle(worldPoint(g.point, g.view), worldPoint(point, g.view));
-      if (g.kind === 'select')
-        this.owner.select(g.placements.filter((p) => intersects(bounds, p)).map((p) => p.id));
-      this.show({ geometry: {}, rectangle: { ...rectangle(g.point, point), kind: g.kind } });
+      this.owner.select(g.placements.filter((p) => intersects(bounds, p)).map((p) => p.id));
+      this.show({ geometry: {}, rectangle: rectangle(g.point, point) });
       return;
     }
     if (g.surface.kind === 'background') return;
@@ -186,17 +194,14 @@ export class CanvasGestures {
         this.pinch = undefined;
         const remaining = this.touches.entries().next().value;
         if (remaining) {
-          this.begin(
-            {
-              pointerId: remaining[0],
-              point: remaining[1],
-              surface: { kind: 'background' },
-              button: 0,
-              touch: true,
-              shift: false,
-            },
-            'pan',
-          );
+          this.begin({
+            pointerId: remaining[0],
+            point: remaining[1],
+            surface: { kind: 'background' },
+            button: 0,
+            touch: true,
+            shift: false,
+          });
           this.gesture!.moved = true;
         }
       }
@@ -207,14 +212,7 @@ export class CanvasGestures {
     this.gesture = undefined;
     const preview = this.preview;
     this.show(idlePreview);
-    if (g.kind === 'write') {
-      const bounds = rectangle(worldPoint(g.point, g.view), worldPoint(point, g.view));
-      this.owner.create(
-        g.moved
-          ? { ...bounds, width: Math.max(220, bounds.width), height: Math.max(160, bounds.height) }
-          : { ...worldPoint(g.point, g.view), width: 320, height: 220 },
-      );
-    } else if (g.moved && (g.kind === 'move' || g.kind === 'resize')) {
+    if (g.moved && (g.kind === 'move' || g.kind === 'resize')) {
       const existing = new Set(this.owner.placements().map((p) => p.id));
       for (const [id, geometry] of Object.entries(preview.geometry)) {
         const before = g.placements.find((p) => p.id === id)!;
@@ -225,8 +223,20 @@ export class CanvasGestures {
           this.owner.commit(id, geometry);
       }
     } else if (!g.moved && !g.touch && g.button === 0) {
-      if (g.surface.kind === 'background') this.owner.select([]);
-      else if (g.kind === 'move') {
+      if (g.surface.kind === 'background') {
+        const at = this.now(),
+          last = this.lastClick;
+        this.lastClick = { at, point: g.point };
+        if (
+          last &&
+          at - last.at <= DOUBLE_CLICK_MS &&
+          Math.hypot(g.point.x - last.point.x, g.point.y - last.point.y) < CLICK_DISTANCE
+        ) {
+          this.lastClick = undefined;
+          this.owner.create({ ...worldPoint(g.point, g.view), ...cardSize });
+        } else this.owner.select([]);
+        return;
+      } else if (g.kind === 'move') {
         const id = g.surface.id;
         this.owner.select(
           g.shift

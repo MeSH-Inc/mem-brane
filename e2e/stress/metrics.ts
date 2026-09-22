@@ -29,7 +29,7 @@ export class StressMetrics {
   };
   readonly eventTimingSupported = PerformanceObserver.supportedEntryTypes.includes('event');
   constructor() {
-    for (const name of ['pointerup', 'pointermove', 'input', 'wheel'])
+    for (const name of ['pointerup', 'pointermove', 'input', 'wheel', 'keydown', 'keyup'])
       window.addEventListener(name, this.capture, { capture: true, passive: true });
     const frame = (now: number) => {
       if (this.recording && this.lastFrame !== undefined) {

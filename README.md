@@ -30,7 +30,7 @@ Vite serves the browser on port 5173 and proxies `/api` to the Node server on po
 ## First exploration
 
 1. Open the seeded brane or choose **New brane**.
-2. In Canvas, choose **Write** and click or drag empty space to create a thought. Type into its editor. In Focus, choose **Add → Text** instead.
+2. In Canvas, double-click empty space to create a thought and type into its editor. In Focus, choose **Add → Text** instead.
 3. Choose **Develop** on an active artifact to create a generated child. Develop captures the source's current text and creates a new artifact with provenance; it does not read the global composer or inherit a conversation automatically.
 4. For a composed exploration, choose **Use as context**, order your references, write a prompt and submit. **More → Continue from here** explicitly selects a conversation's ancestor chain.
 5. Titles, text and placement changes save automatically. The composer shows saving status; failed title writes retain the draft and offer Retry. Background runs continue when you navigate away.
@@ -55,13 +55,18 @@ for limits, API contracts, and operator commands.
 
 Brane navigation collapses from the upper-left menu. **Context · N** beside the prompt opens reference ordering; **History** opens previous runs and exact submitted inputs. Both open as dialogs without resizing the workspace. Running and failed generations remain accessible from the activity row. Card actions appear on selection, hover or keyboard focus, and stay visible on touch screens. **More → Block actions** opens snapshots and placement management, with numerical geometry under **Size and position**.
 
-| Tool   | Primary drag                                    | Other behavior                                                                      |
-| ------ | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Write  | Size a thought on empty canvas                  | Click empty canvas to create; drag headers to move cards; resize selected cards     |
-| Pan    | Move the viewport, including from a card header | Editors and block actions remain interactive; card movement and resize are disabled |
-| Select | Select cards intersecting a marquee             | Shift-click toggles individual placements; drag a selected header to move the group |
+The canvas has no tool modes:
 
-Middle/right mouse panning remains available across tools. Use Fit View to find offscreen cards. Editor text gestures do not move cards. Select is the default tool. Escape, tool changes, blur and pointer cancellation abort creation, selection, movement and resizing without saving; cancellation restores the previous selection. Wheel gestures pan; Control/Command-wheel zooms around the pointer.
+| Gesture                                         | Effect                                                     |
+| ----------------------------------------------- | ---------------------------------------------------------- |
+| Drag empty canvas                               | Select cards intersecting the marquee                      |
+| Double-click empty canvas                       | Create a thought                                           |
+| Drag a card header                              | Move the card, or the selected group if it is selected     |
+| Shift-click a header                            | Toggle that placement in the selection                     |
+| Space-drag, middle/right drag, one-finger touch | Pan the viewport, including from a card header             |
+| Arrow keys / Alt+Arrow keys                     | Nudge / resize the selected cards (Shift for larger steps) |
+
+Use Fit View to find offscreen cards. Editor text gestures do not move cards. Escape, blur and pointer cancellation abort selection, movement and resizing without saving; cancellation restores the previous selection. Wheel gestures pan; Control/Command-wheel zooms around the pointer.
 
 Selection belongs to placements: two instances of the same block can be selected independently. **Use as context** resolves that selection to unique blocks. Selection, proximity, movement and resizing never invoke a model or implicitly change context.
 

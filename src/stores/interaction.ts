@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import type { CanvasTool } from '../canvas/tools';
 import {
   DraftRecovery,
   indexedDraftStorage,
@@ -22,12 +21,10 @@ export interface Interaction {
   rebase: (id: string, version: number, text: string) => void;
   selectedPlacements: string[];
   drafts: Record<string, string>;
-  tool: CanvasTool;
   inspector: boolean;
   setSelectedPlacements: (ids: string[]) => void;
   draft: (id: string, text: string, version: number, baseText: string) => void;
   clearDraft: (id: string, text: string) => void;
-  setTool: (tool: CanvasTool) => void;
   setInspector: (open: boolean) => void;
 }
 export const useInteraction = create<Interaction>((set, get) => ({
@@ -101,7 +98,6 @@ export const useInteraction = create<Interaction>((set, get) => ({
   },
   selectedPlacements: [],
   drafts: {},
-  tool: 'select',
   inspector: false,
   setSelectedPlacements: (ids) =>
     set((state) => {
@@ -147,6 +143,5 @@ export const useInteraction = create<Interaction>((set, get) => ({
           .catch(() => set({ recoveryError: 'Could not clear the saved local draft.' }));
       return { drafts, draftRecords, recovered: s.recovered.filter((blockId) => blockId !== id) };
     }),
-  setTool: (tool) => set({ tool }),
   setInspector: (inspector) => set({ inspector }),
 }));

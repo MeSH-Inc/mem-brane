@@ -7,7 +7,7 @@ import {
   type Viewport,
 } from '../src/canvas/gestures';
 import type { Placement } from '../shared/types/domain';
-function fixture() {
+function fixture(clock = { now: 0 }) {
   let placements: Placement[] = ['a', 'b'].map((id, i) => ({
     id,
     block_id: id,
@@ -24,22 +24,25 @@ function fixture() {
     preview: GesturePreview = idlePreview;
   const create = vi.fn(),
     commit = vi.fn();
-  const gestures = new CanvasGestures({
-    placements: () => placements,
-    selection: () => selection,
-    select: (ids) => {
-      selection = ids;
+  const gestures = new CanvasGestures(
+    {
+      placements: () => placements,
+      selection: () => selection,
+      select: (ids) => {
+        selection = ids;
+      },
+      viewport: () => view,
+      camera: (next) => {
+        view = next;
+      },
+      preview: (next) => {
+        preview = next;
+      },
+      create,
+      commit,
     },
-    viewport: () => view,
-    camera: (next) => {
-      view = next;
-    },
-    preview: (next) => {
-      preview = next;
-    },
-    create,
-    commit,
-  });
+    () => clock.now,
+  );
   return {
     gestures,
     create,
@@ -73,7 +76,7 @@ it.each([0, 1, 4, 7])(
   'treats %i pixels of header movement as a click without persisting geometry',
   (delta) => {
     const f = fixture();
-    f.gestures.begin(press({ kind: 'card', id: 'a' }), 'select');
+    f.gestures.begin(press({ kind: 'card', id: 'a' }));
     f.gestures.end(1, { x: 100 + delta, y: 100 });
     expect(f.selection).toEqual(['a']);
     expect(f.commit).not.toHaveBeenCalled();
@@ -81,9 +84,9 @@ it.each([0, 1, 4, 7])(
 );
 it('moves a selected group using the full delta and commits each member once', () => {
   const f = fixture();
-  f.gestures.begin({ ...press({ kind: 'card', id: 'a' }), shift: true }, 'select');
+  f.gestures.begin({ ...press({ kind: 'card', id: 'a' }), shift: true });
   f.gestures.end(1, { x: 100, y: 100 });
-  f.gestures.begin(press({ kind: 'card', id: 'a' }), 'select');
+  f.gestures.begin(press({ kind: 'card', id: 'a' }));
   f.gestures.move(1, { x: 150, y: 125 });
   expect(f.commit).not.toHaveBeenCalled();
   expect(f.preview.geometry.b.x).toBe(550);
@@ -91,7 +94,7 @@ it('moves a selected group using the full delta and commits each member once', (
   expect(f.commit).toHaveBeenCalledTimes(2);
   expect(f.commit).toHaveBeenCalledWith('a', { x: 160, y: 130, width: 300, height: 220 });
 });
-for (const kind of ['select', 'write', 'pan', 'move', 'resize'] as const) {
+for (const kind of ['select', 'pan', 'move', 'resize'] as const) {
   it(`cancels ${kind} without committing and accepts a fresh gesture`, () => {
     const f = fixture();
     const surface: Press['surface'] =
@@ -100,10 +103,7 @@ for (const kind of ['select', 'write', 'pan', 'move', 'resize'] as const) {
         : kind === 'resize'
           ? { kind: 'resize', id: 'a', edge: 'se' }
           : { kind: 'background' };
-    f.gestures.begin(
-      press(surface, { x: 80, y: 80 }),
-      kind === 'move' || kind === 'resize' ? 'select' : kind,
-    );
+    f.gestures.begin({ ...press(surface, { x: 80, y: 80 }), pan: kind === 'pan' });
     f.gestures.move(1, { x: 150, y: 150 });
     f.gestures.cancel();
     f.gestures.end(1, { x: 150, y: 150 });
@@ -112,23 +112,52 @@ for (const kind of ['select', 'write', 'pan', 'move', 'resize'] as const) {
     expect(f.view).toEqual({ x: 0, y: 0, zoom: 1 });
     expect(f.create).not.toHaveBeenCalled();
     expect(f.commit).not.toHaveBeenCalled();
-    f.gestures.begin(press({ kind: 'card', id: 'a' }), 'select');
+    f.gestures.begin(press({ kind: 'card', id: 'a' }));
     f.gestures.end(1, { x: 100, y: 100 });
     expect(f.selection).toEqual(['a']);
   });
 }
-it('creates on a Write click and on a reverse drag with minimum dimensions', () => {
+it('creates on a background double-click but not on slow, distant or dragged clicks', () => {
+  const clock = { now: 0 };
+  const f = fixture(clock);
+  const click = (point = { x: 100, y: 100 }, end = point) => {
+    f.gestures.begin(press({ kind: 'background' }, point));
+    f.gestures.end(1, end);
+  };
+  click();
+  clock.now = 500;
+  click();
+  expect(f.create).not.toHaveBeenCalled();
+  clock.now = 600;
+  click({ x: 140, y: 100 });
+  expect(f.create).not.toHaveBeenCalled();
+  clock.now = 700;
+  click({ x: 140, y: 100 }, { x: 180, y: 140 });
+  expect(f.create).not.toHaveBeenCalled();
+  // The drag became a marquee over card a rather than a click.
+  expect(f.selection).toEqual(['a']);
+  clock.now = 800;
+  click();
+  clock.now = 1000;
+  click({ x: 102, y: 101 });
+  expect(f.create).toHaveBeenCalledOnce();
+  expect(f.create).toHaveBeenLastCalledWith({ x: 102, y: 101, width: 320, height: 220 });
+  clock.now = 1100;
+  click({ x: 102, y: 101 });
+  expect(f.create).toHaveBeenCalledOnce();
+});
+it('pans from a card or background while the pan modifier is held, without moving cards', () => {
   const f = fixture();
-  f.gestures.begin(press({ kind: 'background' }), 'write');
-  f.gestures.end(1, { x: 101, y: 100 });
-  expect(f.create).toHaveBeenLastCalledWith({ x: 100, y: 100, width: 320, height: 220 });
-  f.gestures.begin(press({ kind: 'background' }), 'write');
-  f.gestures.end(1, { x: 80, y: 60 });
-  expect(f.create).toHaveBeenLastCalledWith({ x: 80, y: 60, width: 220, height: 160 });
+  f.gestures.begin({ ...press({ kind: 'card', id: 'a' }), pan: true });
+  f.gestures.move(1, { x: 160, y: 130 });
+  f.gestures.end(1, { x: 160, y: 130 });
+  expect(f.view).toEqual({ x: 60, y: 30, zoom: 1 });
+  expect(f.commit).not.toHaveBeenCalled();
+  expect(f.selection).toEqual(['b']);
 });
 it('keeps a resize preview through incoming content/geometry and skips removed placements', () => {
   const f = fixture();
-  f.gestures.begin(press({ kind: 'resize', id: 'a', edge: 'nw' }), 'select');
+  f.gestures.begin(press({ kind: 'resize', id: 'a', edge: 'nw' }));
   f.gestures.move(1, { x: 140, y: 130 });
   const before = f.preview.geometry.a;
   f.update(f.placements.map((p) => ({ ...p, x: 999, version: 1 })));
@@ -139,11 +168,12 @@ it('keeps a resize preview through incoming content/geometry and skips removed p
 });
 it('transitions from touch pan to pinch and back without creating, selecting or moving cards', () => {
   const f = fixture();
-  f.gestures.begin({ ...press({ kind: 'background' }), touch: true }, 'write');
-  f.gestures.begin(
-    { ...press({ kind: 'background' }, { x: 200, y: 100 }), pointerId: 2, touch: true },
-    'write',
-  );
+  f.gestures.begin({ ...press({ kind: 'background' }), touch: true });
+  f.gestures.begin({
+    ...press({ kind: 'background' }, { x: 200, y: 100 }),
+    pointerId: 2,
+    touch: true,
+  });
   f.gestures.move(2, { x: 250, y: 100 });
   expect(f.view.zoom).toBe(1.5);
   f.gestures.end(2, { x: 250, y: 100 });
@@ -157,11 +187,11 @@ it('transitions from touch pan to pinch and back without creating, selecting or 
 
 it('retains the current gesture owner when a different input device presses', () => {
   const f = fixture();
-  f.gestures.begin(press({ kind: 'card', id: 'a' }), 'select');
+  f.gestures.begin(press({ kind: 'card', id: 'a' }));
   f.gestures.move(1, { x: 140, y: 120 });
-  expect(
-    f.gestures.begin({ ...press({ kind: 'background' }), pointerId: 2, touch: true }, 'pan'),
-  ).toBe(false);
+  expect(f.gestures.begin({ ...press({ kind: 'background' }), pointerId: 2, touch: true })).toBe(
+    false,
+  );
   f.gestures.end(1, { x: 150, y: 120 });
   expect(f.commit).toHaveBeenCalledOnce();
   expect(f.commit).toHaveBeenCalledWith('a', { x: 150, y: 120, width: 300, height: 220 });

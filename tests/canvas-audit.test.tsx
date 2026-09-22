@@ -17,7 +17,7 @@ beforeEach(() => {
       disconnect() {}
     },
   );
-  useInteraction.setState({ selectedPlacements: [], tool: 'select' });
+  useInteraction.setState({ selectedPlacements: [] });
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -99,10 +99,11 @@ it('does not notify subscribers for equivalent selection sets', () => {
   expect(useInteraction.getState()).toBe(before);
   expect(listener).not.toHaveBeenCalled();
 });
-it('keeps cards pointer-interactive in Pan with movement and resize disabled', () => {
-  useInteraction.setState({ tool: 'pan', selectedPlacements: ['pa'] });
+it('keeps cards pointer-interactive and offers resize handles only on the selection', () => {
+  useInteraction.setState({ selectedPlacements: ['pa'] });
   render();
   const node = document.querySelector<HTMLElement>('.react-flow__node')!;
   expect(node.style.pointerEvents).toBe('all');
-  expect(document.querySelector('[data-resize]')).toBeNull();
+  expect(node.querySelectorAll('[data-resize]')).toHaveLength(8);
+  expect(document.querySelectorAll('[data-resize]')).toHaveLength(8);
 });

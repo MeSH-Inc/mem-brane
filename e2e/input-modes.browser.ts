@@ -101,7 +101,6 @@ test('Tab reaches cards and native controls; keyboard selection toggles and edit
 test('wheel scrolls native content, pans the overview, and modified wheel zooms around the pointer', async ({
   page,
 }) => {
-  await page.getByRole('button', { name: '✥ Pan', exact: true }).click();
   const camera = await viewport(page).getAttribute('style');
   for (const selector of ['[data-id="pa"] textarea', '[data-id="pb"] .response-content']) {
     const content = page.locator(selector);
@@ -129,26 +128,20 @@ test('wheel scrolls native content, pans the overview, and modified wheel zooms 
 });
 test.describe('emulated touch input', () => {
   test.use({ hasTouch: true });
-  for (const tool of ['Select', 'Write', 'Pan']) {
-    test(`${tool} allows native taps without replacing placement selection`, async ({ page }) => {
-      await page.locator('[data-id="pb"] .card-grip').click();
-      await page
-        .getByRole('group', { name: 'Canvas tools' })
-        .getByRole('button', { name: tool })
-        .click();
-      const editor = page.locator('[data-id="pa"] textarea');
-      await editor.tap();
-      await expect(editor).toBeFocused();
-      await page
-        .locator('[data-id="pa"]')
-        .getByRole('button', { name: '+ Use as context', exact: true })
-        .tap();
-      await expect(page.locator('.context-chips .chip')).toHaveCount(1);
-      await expect(page.locator('[data-id="pb"]')).toHaveClass(/selected/);
-      await expect(page.locator('[data-id="pa"]')).not.toHaveClass(/selected/);
-      expect(writes).toEqual([]);
-    });
-  }
+  test('native taps work without replacing placement selection', async ({ page }) => {
+    await page.locator('[data-id="pb"] .card-grip').click();
+    const editor = page.locator('[data-id="pa"] textarea');
+    await editor.tap();
+    await expect(editor).toBeFocused();
+    await page
+      .locator('[data-id="pa"]')
+      .getByRole('button', { name: '+ Use as context', exact: true })
+      .tap();
+    await expect(page.locator('.context-chips .chip')).toHaveCount(1);
+    await expect(page.locator('[data-id="pb"]')).toHaveClass(/selected/);
+    await expect(page.locator('[data-id="pa"]')).not.toHaveClass(/selected/);
+    expect(writes).toEqual([]);
+  });
   test('trusted touch scrolls the editor, pans the canvas and pinches across native content', async ({
     page,
     context,

@@ -38,7 +38,7 @@ The added tests exposed and fixed three behaviors: Shift+Enter only added select
 
 ## What the measurements mean
 
-Input timing starts when the browser delivers the captured `pointerup`, pressed `pointermove`, `input` or `wheel` event. The probe waits for the selected/tool class, textarea value or transform to change, then records the following animation frame. This provides an upper bound on a paint opportunity and includes one frame of measurement overhead. It excludes physical-device delivery latency and does not prove when pixels reached a display. In particular, the `input` event follows the browser's native text insertion. These measurements are not INP.
+Input timing starts when the browser delivers the captured `pointerup`, pressed `pointermove`, `input` or `wheel` event. The probe waits for the selected/panning class, textarea value or transform to change, then records the following animation frame. This provides an upper bound on a paint opportunity and includes one frame of measurement overhead. It excludes physical-device delivery latency and does not prove when pixels reached a display. In particular, the `input` event follows the browser's native text insertion. These measurements are not INP.
 
 Card counts are React **subtree commits**, including descendant updates; they are not component function-call counts. Workspace render durations are the Profiler's `actualDuration` for committed updates; they exclude browser layout, paint and display time. Frame-interval summaries help reveal stalls that fall outside sampled input. Event Timing entries, where supported, are supplementary and filtered at 16 ms; absence of entries is not zero latency. The test fails if profiling is disabled rather than accepting zero commits as proof of isolation.
 
@@ -105,7 +105,7 @@ Localhost is a secure context on the phone. If Chrome uses a process-specific de
 
 ## Human input record — pending
 
-Record device model, OS, browser/version, input hardware, display refresh rate, device pixel ratio, viewport, source revision and fixture delay. Repeat each applicable row in Select, Write and Pan with four streams active, first at 350 ms and then at 1500 ms save delay. Record pass/fail and the exact reproduction for any failure; attach an exported interval and a browser performance trace where available.
+Record device model, OS, browser/version, input hardware, display refresh rate, device pixel ratio, viewport, source revision and fixture delay. Repeat each applicable row with and without the Space pan modifier held, with four streams active, first at 350 ms and then at 1500 ms save delay. Record pass/fail and the exact reproduction for any failure; attach an exported interval and a browser performance trace where available.
 
 | Hardware / scenario                                                                               | Expected behavior                                                                        | Status  |
 | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------- |
