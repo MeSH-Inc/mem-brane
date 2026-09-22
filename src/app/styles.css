@@ -646,9 +646,7 @@ a {
   }
 }
 .frozen-inspector {
-  margin-top: 20px;
-  border-top: 1px solid var(--line);
-  padding-top: 15px;
+  gap: 8px;
 }
 .frozen-inspector summary {
   font-size: 10px;

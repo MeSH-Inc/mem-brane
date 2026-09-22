@@ -11,7 +11,7 @@ export function RunHistory({
 }: {
   braneId: string;
   exclude: string[];
-  onInspect: (id: string) => Promise<void>;
+  onInspect: (id: string) => void;
 }) {
   const [page, setPage] = useState<RunPage>({ items: [], nextCursor: null });
   const [loaded, setLoaded] = useState(false);
@@ -57,9 +57,7 @@ export function RunHistory({
       <ol>
         {earlier.map((run) => (
           <li key={run.id}>
-            <button
-              onClick={() => void onInspect(run.id).catch((error) => setError(error.message))}
-            >
+            <button onClick={() => onInspect(run.id)}>
               {new Date(run.created_at).toLocaleString()} · {run.model} · {run.status}
             </button>
           </li>

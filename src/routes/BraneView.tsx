@@ -21,7 +21,7 @@ import {
   lazy,
   Suspense,
 } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useRouter } from '@tanstack/react-router';
 import type { Geometry } from '../../shared/types/domain';
 import { api, replica, needsAccount } from '../services/api';
 import { useInteraction } from '../stores/interaction';
@@ -33,6 +33,7 @@ import { ArtifactActions, type CardAction } from '../components/ArtifactActions'
 import { ResponseSources } from '../components/ResponseSources';
 import { FirstSteps } from '../components/FirstSteps';
 import { RunHistory } from '../components/RunHistory';
+import { RunInputs } from '../components/RunInputs';
 import { draftDisposition } from '../services/drafts';
 import { useMobile } from '../lib/useMobile';
 import { formatUsd } from '../lib/format';
@@ -47,7 +48,12 @@ const cardActionLabels: Record<CardAction, string> = {
   remove: 'Remove from this brane',
 };
 
-type BraneViewProps = { braneId: string; focus?: string; view?: 'canvas' | 'focus' };
+type BraneViewProps = {
+  braneId: string;
+  focus?: string;
+  view?: 'canvas' | 'focus';
+  inputs?: string;
+};
 
 export function BraneView(props: BraneViewProps) {
   const actor = useInteraction((s) => s.actor);
@@ -60,7 +66,7 @@ export function BraneView(props: BraneViewProps) {
   return <BraneWorkspace key={JSON.stringify([actor, props.braneId, reset])} {...props} />;
 }
 
-function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
+function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
   const actor = useInteraction((s) => s.actor);
   const presentation = presentationFor(actor, braneId);
   const retainedFocus = useStore(presentation, (s) => s.focus);
@@ -214,14 +220,40 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
     },
     [controller, mobile, focusMode, focusBlock, presentation],
   );
+  // Exact inputs live in the URL, so Back and shared links reopen the same run.
+  const router = useRouter();
+  const pushedInputs = useRef<string>(undefined);
+  const [inputsError, setInputsError] = useState('');
+  useEffect(() => {
+    let current = true;
+    if (!inputs) pushedInputs.current = undefined;
+    setInputsError('');
+    void controller.inspect(inputs).catch((e) => current && setInputsError(e.message));
+    return () => {
+      current = false;
+    };
+  }, [controller, inputs]);
   const inspectRun = useCallback(
     (runId: string) => {
-      setInspectorTab('history');
-      useInteraction.getState().setInspector(true);
-      void controller.inspect(runId).catch((e) => controller.setError(e.message));
+      pushedInputs.current = runId;
+      void navigate({
+        to: '/b/$braneId',
+        params: { braneId },
+        search: (previous) => ({ ...previous, inputs: runId }),
+      });
     },
-    [controller],
+    [braneId, navigate],
   );
+  const closeInputs = useCallback(() => {
+    if (inputs && pushedInputs.current === inputs) router.history.back();
+    else
+      void navigate({
+        to: '/b/$braneId',
+        params: { braneId },
+        search: (previous) => ({ ...previous, inputs: undefined }),
+        replace: true,
+      });
+  }, [braneId, inputs, navigate, router]);
   const rerun = useCallback(
     (runId: string) => {
       const derivation = controller.state?.derivations.find((d) => d.runId === runId);
@@ -982,50 +1014,6 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   )}
                 </>
               )}
-              {inspected && (
-                <div className="frozen-inspector">
-                  <div className="section-label">
-                    EXACT INPUTS{' '}
-                    <button
-                      aria-label="Close exact inputs"
-                      onClick={() => void controller.inspect()}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  {inspected.cost && (
-                    <p className="cost-detail">
-                      {inspected.cost.status === 'confirmed'
-                        ? `Cost: ${formatUsd(inspected.cost.confirmed_microusd ?? 0)}`
-                        : `Cost not yet confirmed · up to ${formatUsd(inspected.cost.reserved_microusd)} held`}
-                    </p>
-                  )}
-                  {inspected.inputs.map((input) => (
-                    <details key={input.position} open>
-                      <summary>
-                        {input.position + 1} · {input.label}
-                      </summary>
-                      <code>{input.revision_id}</code>
-                      <pre>{input.content.text}</pre>
-                      {input.content.format === 'pdf' && (
-                        <PdfContent content={input.content} showProvenance />
-                      )}
-                      {input.content.format === 'image' && (
-                        <>
-                          <LocalImage
-                            className="context-image"
-                            assetId={input.content.assetId!}
-                            alt="Submitted image"
-                          />
-                          <small>
-                            Frozen image · low detail · SHA-256 {input.content.assetHash}
-                          </small>
-                        </>
-                      )}
-                    </details>
-                  ))}
-                </div>
-              )}
               {inspectorTab === 'history' && (
                 <>
                   <div className="section-label">
@@ -1041,9 +1029,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                           <button
                             className="run-inspect"
                             title="Show exact inputs"
-                            onClick={() =>
-                              void controller.inspect(r.id).catch((e) => setError(e.message))
-                            }
+                            onClick={() => inspectRun(r.id)}
                           >
                             <span className={`status-dot ${r.status}`} />
                             <div>
@@ -1095,14 +1081,24 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     key={braneId}
                     braneId={braneId}
                     exclude={state.runs.map((r) => r.id)}
-                    onInspect={async (id) => {
-                      await controller.inspect(id);
-                    }}
+                    onInspect={inspectRun}
                   />
                 </>
               )}
             </aside>
           </Dialog>
+        )}
+        {inputs && (
+          <RunInputs
+            runId={inputs}
+            run={inspected}
+            error={inputsError}
+            outputPresent={
+              !!inspected && state.blocks.some((b) => b.id === inspected.output_block_id)
+            }
+            onOpenOutput={focusBlock}
+            onClose={closeInputs}
+          />
         )}
       </div>
     </div>

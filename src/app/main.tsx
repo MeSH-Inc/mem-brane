@@ -470,6 +470,7 @@ const braneRoute = createRoute({
   validateSearch: z.object({
     focus: z.string().optional(),
     view: z.enum(['canvas', 'focus']).optional(),
+    inputs: z.string().optional(),
   }),
   component: () => {
     const { braneId } = braneRoute.useParams(),

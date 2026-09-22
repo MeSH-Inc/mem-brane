@@ -172,12 +172,37 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
     await page.reload();
     await page.getByRole('button', { name: 'History', exact: true }).click();
     await page.locator('.run-inspect').first().click();
-    await expect(page.locator('.frozen-inspector')).toContainText(
-      'Explain the tradeoffs on this branch',
-    );
-    await expect(page.locator('.frozen-inspector')).toContainText(
-      'Field notes: the north trail floods after heavy rain.',
-    );
+    const inputs = page.getByRole('dialog', { name: 'Exact inputs' });
+    await expect(inputs).toContainText('Explain the tradeoffs on this branch');
+    await expect(inputs).toContainText('Field notes: the north trail floods after heavy rain.');
+    await expect(inputs).toContainText('Cost');
+    const shared = page.url();
+    expect(new URL(shared).searchParams.get('inputs')).toBeTruthy();
+    // Escape returns to History, the view it was opened from.
+    await page.keyboard.press('Escape');
+    await expect(inputs).toBeHidden();
+    await expect(page.getByRole('dialog', { name: 'History' })).toBeVisible();
+    expect(new URL(page.url()).searchParams.has('inputs')).toBe(false);
+    // Closing pops the entry it pushed, so Forward reopens it and Back closes it again.
+    await page.goForward();
+    await expect(inputs).toContainText('Explain the tradeoffs on this branch');
+    await page.goBack();
+    await expect(inputs).toBeHidden();
+    // The URL alone reopens the same inputs; Close drops it without leaving the brane.
+    await page.goto(shared);
+    await expect(inputs).toContainText('Explain the tradeoffs on this branch');
+    await inputs.getByRole('button', { name: 'Close exact inputs' }).click();
+    await expect(inputs).toBeHidden();
+    expect(new URL(page.url()).searchParams.has('inputs')).toBe(false);
+    await page.goto(shared);
+    await inputs.getByRole('button', { name: 'Open response' }).click();
+    await expect(inputs).toBeHidden();
+    expect(new URL(page.url()).searchParams.get('view')).toBe('focus');
+    await page.getByRole('button', { name: 'Exact inputs', exact: true }).click();
+    await expect(inputs).toContainText('Explain the tradeoffs on this branch');
+    await page.keyboard.press('Escape');
+    await expect(inputs).toBeHidden();
+    expect(new URL(page.url()).searchParams.get('view')).toBe('focus');
     await page.goto(`${origin}/b/${brane.id}?view=focus&focus=${block.id}`);
     await page
       .getByRole('textbox', { name: 'Block text', exact: true })
