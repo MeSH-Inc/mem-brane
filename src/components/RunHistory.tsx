@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import type { RunPage } from '../../shared/types/history';
 import { client } from '../services/client';
 
-// Mount with the brane ID as its key. History is fetched only when explicitly opened.
+// Earlier responses whose cards are no longer on this brane. Mount with the brane ID
+// as its key; the server history is fetched only when explicitly requested.
 export function RunHistory({
   braneId,
+  exclude,
   onInspect,
 }: {
   braneId: string;
+  exclude: string[];
   onInspect: (id: string) => Promise<void>;
 }) {
   const [page, setPage] = useState<RunPage>({ items: [], nextCursor: null });
@@ -39,21 +42,20 @@ export function RunHistory({
       if (generation === request.current) setLoading(false);
     }
   }
+  const shown = new Set(exclude);
+  const earlier = page.items.filter((run) => !shown.has(run.id));
   return (
-    <details
-      onToggle={(event) => {
-        if (event.currentTarget.open && !loaded && !loading) void load();
-      }}
-    >
-      <summary>Run history</summary>
+    <section className="earlier-runs" aria-label="Earlier responses">
       {error && <p role="alert">{error}</p>}
-      {loading && <p role="status">Loading run history…</p>}
-      <button disabled={loading} onClick={() => void load()}>
-        Refresh history
-      </button>
-      {loaded && !page.items.length && <p>No runs yet.</p>}
+      {!loaded && (
+        <button disabled={loading} onClick={() => void load()}>
+          Show earlier responses
+        </button>
+      )}
+      {loading && <p role="status">Loading earlier responses…</p>}
+      {loaded && !earlier.length && !page.nextCursor && <p>No earlier responses.</p>}
       <ol>
-        {page.items.map((run) => (
+        {earlier.map((run) => (
           <li key={run.id}>
             <button
               onClick={() => void onInspect(run.id).catch((error) => setError(error.message))}
@@ -65,9 +67,9 @@ export function RunHistory({
       </ol>
       {page.nextCursor && (
         <button disabled={loading} onClick={() => void load(page.nextCursor!)}>
-          Load older runs
+          Load more
         </button>
       )}
-    </details>
+    </section>
   );
 }

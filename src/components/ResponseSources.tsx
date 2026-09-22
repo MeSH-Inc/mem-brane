@@ -2,10 +2,9 @@ import { memo, useMemo } from 'react';
 import { useStore } from 'zustand';
 import type { WorkspaceDocument } from '../services/workspace-document';
 import type { Block } from '../../shared/types/domain';
+import { cardKind } from '../lib/labels';
 
-const cardLabel = (block: Block) =>
-  block.content.text.trim().slice(0, 28) ||
-  (block.origin === 'generated' ? 'Response' : block.kind === 'text' ? 'Thought' : block.kind);
+const cardLabel = (block: Block) => block.content.text.trim().slice(0, 28) || cardKind(block);
 
 // Shows what a response was built from and whether those inputs have moved on since.
 // Rerunning is always an explicit action; a changed source never regenerates anything.

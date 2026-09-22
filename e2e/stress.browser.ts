@@ -153,7 +153,7 @@ for (const selectors of tracing ? ['global', 'scoped'] : ['scoped'])
         )
         .toBe(true);
       await (selectors === 'global' ? page : page.locator('.run-list'))
-        .getByRole('button', { name: 'Cancel run', exact: true })
+        .getByRole('button', { name: 'Stop', exact: true })
         .first()
         .click();
       await expect

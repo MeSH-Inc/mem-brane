@@ -26,8 +26,8 @@ export function SpawnButton({
       disabled={busy || (!retry && !ready)}
       title={
         ready
-          ? 'Develop this artifact into a new response using the current model. Only this artifact is used as context.'
-          : (incompatibility ?? 'Wait for this artifact to finish before developing it.')
+          ? 'Develop this card into a new response with the current model. Only this card is sent.'
+          : (incompatibility ?? 'Wait for this card to finish before developing it.')
       }
       onClick={onSpawn}
     >

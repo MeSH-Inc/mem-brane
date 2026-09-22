@@ -34,6 +34,8 @@ import { ResponseSources } from '../components/ResponseSources';
 import { RunHistory } from '../components/RunHistory';
 import { draftDisposition } from '../services/drafts';
 import { useMobile } from '../lib/useMobile';
+import { formatUsd } from '../lib/format';
+import { cardKind, statusLabels } from '../lib/labels';
 const BraneCanvas = lazy(() =>
   import('../canvas/BraneCanvas').then((module) => ({ default: module.BraneCanvas })),
 );
@@ -535,7 +537,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
           {focusMode ? (
             <div className="focus-layout">
               <nav className="block-outline">
-                <span className="eyebrow">BLOCKS / {state.blocks.length}</span>
+                <span className="eyebrow">CARDS / {state.blocks.length}</span>
                 {state.blocks.map((b, i) => (
                   <button
                     key={b.id}
@@ -543,13 +545,16 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     onClick={() => focusBlock(b.id)}
                   >
                     {String(i + 1).padStart(2, '0')}{' '}
-                    <span>{b.content.text.slice(0, 38) || b.kind}</span>
+                    <span>
+                      {b.origin === 'generated' && '✳ '}
+                      {b.content.text.slice(0, 38) || cardKind(b)}
+                    </span>
                   </button>
                 ))}
               </nav>
               {focused ? (
                 <article className="focus-card">
-                  <span className="eyebrow">{focused.kind}</span>
+                  <span className="eyebrow">{cardKind(focused)}</span>
                   <LiveBlockContent
                     key={focused.id}
                     document={controller.document}
@@ -685,7 +690,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   onClick={() => ui.setReferences(ui.references.filter((x) => x !== id))}
                 >
                   {i + 1} ·{' '}
-                  {state.blocks.find((b) => b.id === id)?.content.text.slice(0, 23) || 'Artifact'} ×
+                  {state.blocks.find((b) => b.id === id)?.content.text.slice(0, 23) || 'Card'} ×
                 </button>
               ))}
               {!ui.references.length && !ui.continueFrom && (
@@ -768,7 +773,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                 <p>
                   {model === 'mock'
                     ? 'Local mock · no model spend'
-                    : `Daily budget remaining: $${((budget?.availableMicrousd ?? 0) / 1e6).toFixed(2)}`}
+                    : `Daily budget remaining: ${formatUsd(budget?.availableMicrousd ?? 0)}`}
                 </p>
                 <p>
                   {vision[model]?.vision
@@ -778,8 +783,8 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
               </ActionMenu>
               {estimate && model !== 'mock' && (
                 <span>
-                  {estimate.canAfford ? 'Up to' : 'Exceeds budget:'} $
-                  {(estimate.reservedMicrousd / 1e6).toFixed(6)} reserved
+                  {estimate.canAfford ? 'Up to' : 'Exceeds budget:'}{' '}
+                  {formatUsd(estimate.reservedMicrousd)}
                 </span>
               )}
               <span className="save-notice" role="status">
@@ -820,7 +825,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   </div>
                   {ui.continueFrom && (
                     <div className="lineage-note">
-                      ⑂ Conversation lineage ({lineage.length} messages)
+                      ⑂ Continuing a branch ({lineage.length} earlier messages)
                       <ol>
                         {lineage.map((m) => (
                           <li key={m.id}>
@@ -844,10 +849,8 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                   {controller.previewed && (
                     <section className="revision-preview">
                       <div className="section-label">
-                        Source snapshot{' '}
-                        <button onClick={() => void controller.previewRevision()}>
-                          Close snapshot
-                        </button>
+                        Earlier version{' '}
+                        <button onClick={() => void controller.previewRevision()}>Close</button>
                       </div>
                       <pre>{controller.previewed.content.text}</pre>
                       {controller.previewed.content.format === 'pdf' && (
@@ -857,7 +860,7 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                         <LocalImage
                           className="context-image"
                           assetId={controller.previewed.content.assetId!}
-                          alt="Source snapshot"
+                          alt="Earlier version"
                         />
                       )}
                     </section>
@@ -868,14 +871,17 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                         <span className="context-number">{i + 1}</span>
                         <div>
                           <strong>
-                            {state.blocks.find((b) => b.id === id)?.kind ?? 'Artifact'}
+                            {(() => {
+                              const block = state.blocks.find((b) => b.id === id);
+                              return block ? cardKind(block) : 'Card';
+                            })()}
                           </strong>
                           <p>
                             {(
                               ui.drafts[id] ??
                               state.blocks.find((b) => b.id === id)?.content.text ??
                               ''
-                            ).slice(0, 100) || 'Empty block'}
+                            ).slice(0, 100) || 'Empty card'}
                           </p>
                         </div>
                         <div className="order-actions">
@@ -903,99 +909,35 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     <div className="inspector-empty">
                       <span>◇</span>
                       <p>
-                        Choose “Use as context” on a block to bring it into your next exploration.
+                        Choose “Use as context” on a card, or select cards, to include them in your
+                        next prompt.
                       </p>
                     </div>
                   )}
                 </>
               )}
-              {inspectorTab === 'history' && (
-                <>
-                  <div className="section-label">
-                    EXPLORATIONS <span>{state.runs.length}</span>
-                  </div>
-                  <div className="run-list">
-                    {[...state.runs].reverse().map((r, i) => (
-                      <div className="run-item" key={r.id}>
-                        <button
-                          className="run-inspect"
-                          onClick={() =>
-                            void controller.inspect(r.id).catch((e) => setError(e.message))
-                          }
-                        >
-                          <span className={`status-dot ${r.status}`} />
-                          <div>
-                            <strong>Exploration {state.runs.length - i}</strong>
-                            <small>
-                              {r.model} · {r.status}
-                              {r.retry_of ? ' · retry' : ''}
-                            </small>
-                          </div>
-                          <span>↗</span>
-                        </button>
-                        {['queued', 'claimed', 'running', 'cancel_requested'].includes(
-                          r.status,
-                        ) && (
-                          <CommandButton
-                            tasks={commands}
-                            taskKey={`cancel:${r.id}`}
-                            pendingLabel="Cancelling…"
-                            disabled={r.status === 'cancel_requested'}
-                            onClick={() => void controller.cancelRun(r.id).catch(() => {})}
-                          >
-                            {r.status === 'cancel_requested'
-                              ? 'Cancellation requested'
-                              : 'Cancel run'}
-                          </CommandButton>
-                        )}
-                        {['failed', 'interrupted', 'cancelled'].includes(r.status) && (
-                          <CommandButton
-                            tasks={commands}
-                            taskKey={`retry:${r.id}`}
-                            pendingLabel="Retrying…"
-                            onClick={async () => {
-                              try {
-                                await controller.retryRun(r.id);
-                              } catch (e) {
-                                setError((e as Error).message);
-                              }
-                            }}
-                          >
-                            Retry frozen context
-                          </CommandButton>
-                        )}
-                        {r.error && <small className="error">{r.error}</small>}
-                        {r.usage_json && <small>Confirmed usage: {r.usage_json}</small>}
-                        <button onClick={() => focusBlock(r.output_block_id)}>Open response</button>
-                      </div>
-                    ))}
-                  </div>
-                  <RunHistory
-                    key={braneId}
-                    braneId={braneId}
-                    onInspect={async (id) => {
-                      await controller.inspect(id);
-                    }}
-                  />
-                </>
-              )}
               {inspected && (
                 <div className="frozen-inspector">
                   <div className="section-label">
-                    EXACT SUBMITTED INPUTS{' '}
-                    <button onClick={() => void controller.inspect()}>×</button>
+                    EXACT INPUTS{' '}
+                    <button
+                      aria-label="Close exact inputs"
+                      onClick={() => void controller.inspect()}
+                    >
+                      ×
+                    </button>
                   </div>
                   {inspected.cost && (
                     <p className="cost-detail">
                       {inspected.cost.status === 'confirmed'
-                        ? `Usage-rated: $${((inspected.cost.confirmed_microusd ?? 0) / 1e6).toFixed(6)}`
-                        : `${inspected.cost.status}: $${(inspected.cost.reserved_microusd / 1e6).toFixed(6)} reserved (upper estimate)`}
+                        ? `Cost: ${formatUsd(inspected.cost.confirmed_microusd ?? 0)}`
+                        : `Cost not yet confirmed · up to ${formatUsd(inspected.cost.reserved_microusd)} held`}
                     </p>
                   )}
                   {inspected.inputs.map((input) => (
                     <details key={input.position} open>
                       <summary>
-                        {input.position + 1}. {input.kind} · {input.label}
+                        {input.position + 1} · {input.label}
                       </summary>
                       <code>{input.revision_id}</code>
                       <pre>{input.content.text}</pre>
@@ -1017,6 +959,81 @@ function BraneWorkspace({ braneId, focus, view }: BraneViewProps) {
                     </details>
                   ))}
                 </div>
+              )}
+              {inspectorTab === 'history' && (
+                <>
+                  <div className="section-label">
+                    RESPONSES <span>{state.runs.length}</span>
+                  </div>
+                  <div className="run-list">
+                    {[...state.runs].reverse().map((r) => {
+                      const text = state.blocks
+                        .find((b) => b.id === r.output_block_id)
+                        ?.content.text.trim();
+                      return (
+                        <div className="run-item" key={r.id}>
+                          <button
+                            className="run-inspect"
+                            title="Show exact inputs"
+                            onClick={() =>
+                              void controller.inspect(r.id).catch((e) => setError(e.message))
+                            }
+                          >
+                            <span className={`status-dot ${r.status}`} />
+                            <div>
+                              <strong>{text?.slice(0, 60) || 'Response'}</strong>
+                              <small>
+                                {new Date(r.created_at).toLocaleString()} · {r.model} ·{' '}
+                                {statusLabels[r.status] ?? r.status}
+                                {r.retry_of ? ' · retry' : ''}
+                              </small>
+                            </div>
+                            <span>Inputs</span>
+                          </button>
+                          {['queued', 'claimed', 'running', 'cancel_requested'].includes(
+                            r.status,
+                          ) && (
+                            <CommandButton
+                              tasks={commands}
+                              taskKey={`cancel:${r.id}`}
+                              pendingLabel="Stopping…"
+                              disabled={r.status === 'cancel_requested'}
+                              onClick={() => void controller.cancelRun(r.id).catch(() => {})}
+                            >
+                              {r.status === 'cancel_requested' ? 'Stopping…' : 'Stop'}
+                            </CommandButton>
+                          )}
+                          {['failed', 'interrupted', 'cancelled'].includes(r.status) && (
+                            <CommandButton
+                              tasks={commands}
+                              taskKey={`retry:${r.id}`}
+                              pendingLabel="Retrying…"
+                              onClick={async () => {
+                                try {
+                                  await controller.retryRun(r.id);
+                                } catch (e) {
+                                  setError((e as Error).message);
+                                }
+                              }}
+                            >
+                              Retry with the same inputs
+                            </CommandButton>
+                          )}
+                          {r.error && <small className="error">{r.error}</small>}
+                          <button onClick={() => focusBlock(r.output_block_id)}>Open</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <RunHistory
+                    key={braneId}
+                    braneId={braneId}
+                    exclude={state.runs.map((r) => r.id)}
+                    onInspect={async (id) => {
+                      await controller.inspect(id);
+                    }}
+                  />
+                </>
               )}
             </aside>
           </Dialog>

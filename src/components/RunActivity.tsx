@@ -29,7 +29,7 @@ export function RunActivity({
             <span role="status">
               {run.status === 'cancel_requested' ? 'Stopping…' : run.status}
             </span>
-            <button onClick={() => onOpen(run.output_block_id)}>Open response</button>
+            <button onClick={() => onOpen(run.output_block_id)}>Open</button>
             {active.has(run.status) ? (
               <CommandButton
                 tasks={controller.commands}
@@ -38,7 +38,7 @@ export function RunActivity({
                 disabled={run.status === 'cancel_requested'}
                 onClick={() => void controller.cancelRun(run.id).catch(() => {})}
               >
-                Cancel run
+                Stop
               </CommandButton>
             ) : (
               <CommandButton
@@ -47,7 +47,7 @@ export function RunActivity({
                 pendingLabel="Retrying…"
                 onClick={() => void controller.retryRun(run.id).catch(() => {})}
               >
-                Retry frozen context
+                Retry with the same inputs
               </CommandButton>
             )}
             {run.error && <p className="error">{run.error}</p>}

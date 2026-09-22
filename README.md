@@ -53,7 +53,7 @@ for limits, API contracts, and operator commands.
 
 ## Canvas and Focus
 
-Brane navigation collapses from the upper-left menu. **Context · N** beside the prompt opens reference ordering; **History** opens previous runs and exact submitted inputs. Both open as dialogs without resizing the workspace. Running and failed generations remain accessible from the activity row. Card actions appear on selection, hover or keyboard focus, and stay visible on touch screens. A card's **More** menu shows it on another brane, opens its version history, or removes it from this brane while keeping its history.
+Brane navigation collapses from the upper-left menu. **Context · N** beside the prompt opens reference ordering; **History** lists this brane's responses, with exact inputs, Stop and Retry; earlier responses whose cards were removed load on request. Both open as dialogs without resizing the workspace. Running and failed generations remain accessible from the activity row. Card actions appear on selection, hover or keyboard focus, and stay visible on touch screens. A card's **More** menu shows it on another brane, opens its version history, or removes it from this brane while keeping its history.
 
 The canvas has no tool modes:
 

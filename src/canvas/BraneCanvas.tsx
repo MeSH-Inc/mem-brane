@@ -32,6 +32,7 @@ import { SpawnButton } from '../components/SpawnButton';
 import type { CardAction } from '../components/ArtifactActions';
 import { LiveBlockContent } from '../components/LiveBlockContent';
 import { ResponseSources } from '../components/ResponseSources';
+import { cardKind, statusLabels } from '../lib/labels';
 import { idleActivity, type WorkspaceDocument } from '../services/workspace-document';
 import { useInteraction } from '../stores/interaction';
 import { presentationFor } from '../stores/presentation';
@@ -77,18 +78,10 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         ))}
       <header className="card-grip">
         <span className="kind-mark">{block.origin === 'generated' ? '✳' : '◇'}</span>
-        <span>
-          {block.origin === 'generated'
-            ? 'Response'
-            : block.kind === 'webpage'
-              ? 'Web clipping'
-              : block.kind === 'pdf'
-                ? 'PDF'
-                : block.kind === 'image'
-                  ? 'Image'
-                  : 'Thought'}
+        <span>{cardKind(block)}</span>
+        <span className="card-status">
+          {status && status !== 'completed' ? statusLabels[status] : ''}
         </span>
-        <span className="card-status">{status}</span>
         <button
           className="nodrag nopan icon-button"
           title="Focus block"

@@ -145,7 +145,7 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
   await expect(page.getByText('Other saved drafts (0)', { exact: true })).toHaveCount(0);
   await expect(page.locator('.inspector')).toHaveCount(0);
   await page.locator('.run-activity summary').click();
-  await expect(page.getByRole('button', { name: 'Cancel run', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
   await page.locator('.run-activity summary').click();
   const canvasBounds = await page.locator('.canvas-host').boundingBox();
   const contextButton = page.getByRole('button', { name: 'Context · 1', exact: true });
