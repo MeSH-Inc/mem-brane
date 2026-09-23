@@ -385,13 +385,16 @@ function Shell() {
         <AppStatus />
         {session.user.isAnonymous && (
           <aside className="guest-notice" aria-label="Guest workspace">
-            <span>
-              Guest workspace · Saved on this server. Create a free account to use AI and open it on
-              other devices.
-              {session.guestExpiresAt && (
-                <> Available until {new Date(session.guestExpiresAt).toLocaleDateString()}.</>
-              )}
-            </span>
+            <details className="guest-details">
+              <summary>Guest workspace</summary>
+              <p>
+                Saved on this server. Create a free account to use AI and open this workspace on
+                other devices.
+                {session.guestExpiresAt && (
+                  <> Available until {new Date(session.guestExpiresAt).toLocaleDateString()}.</>
+                )}
+              </p>
+            </details>
             <button onClick={() => setAuthOpen({ mode: 'signup' })}>Keep your workspace</button>
             <button onClick={() => setAuthOpen({ mode: 'signin' })}>Sign in</button>
           </aside>
@@ -460,7 +463,7 @@ function Welcome() {
           {error}
         </p>
       )}
-      <FirstSteps canvas />
+      <FirstSteps />
     </div>
   );
 }

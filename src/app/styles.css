@@ -1848,8 +1848,39 @@ summary:focus-visible {
   font-size: 0.8rem;
   flex-wrap: wrap;
 }
-.guest-notice span {
-  flex: 1 1 20rem;
+.guest-details {
+  flex: 1;
+  min-width: 0;
+}
+.guest-details summary {
+  cursor: pointer;
+  white-space: nowrap;
+}
+.guest-details p {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+.first-steps-help {
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.first-steps-help summary {
+  cursor: pointer;
+}
+@media (max-width: 760px) {
+  .guest-notice {
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  .guest-notice button {
+    padding: 8px;
+    font-size: 11px;
+  }
+  .guest-details[open] {
+    flex-basis: 100%;
+  }
 }
 .guest-notice button {
   white-space: nowrap;

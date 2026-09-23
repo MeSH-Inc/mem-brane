@@ -706,7 +706,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                   >
                     Add your first thought
                   </CommandButton>
-                  <FirstSteps canvas={false} />
+                  <FirstSteps />
                 </div>
               )}
             </div>
@@ -729,7 +729,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                   >
                     Add your first thought
                   </CommandButton>
-                  <FirstSteps canvas />
+                  <FirstSteps />
                 </div>
               )}
               <BraneCanvas
