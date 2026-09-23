@@ -1856,6 +1856,8 @@ summary:focus-visible {
 }
 .account-dialog {
   width: min(92vw, 32rem);
+  margin: auto;
+  border-radius: 12px;
 }
 .account-dialog .auth-screen {
   display: block;
@@ -1865,6 +1867,7 @@ summary:focus-visible {
   display: none;
 }
 .account-dialog .auth-form {
+  margin: 0;
   width: 100%;
   max-width: none;
   padding: 1.25rem;

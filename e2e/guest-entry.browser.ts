@@ -64,6 +64,16 @@ test('guest work, an interrupted import, composer and two tabs survive existing-
     await page.goto(origin);
     await expect(page.getByLabel('Guest workspace')).toBeVisible();
     await expect(page).toHaveURL(/\/b\//);
+    // Account prompts stay centered on phones instead of inheriting the
+    // workspace sheet's left-aligned, bottom-docked margins.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    const mobileAccount = page.getByRole('dialog', { name: 'Sign in' });
+    const bounds = (await mobileAccount.boundingBox())!;
+    expect(Math.abs(bounds.x + bounds.width / 2 - 195)).toBeLessThan(1);
+    expect(Math.abs(bounds.y + bounds.height / 2 - 422)).toBeLessThan(1);
+    await mobileAccount.getByRole('button', { name: 'Close sign in' }).click();
+    await page.setViewportSize({ width: 1440, height: 1000 });
     const braneId = new URL(page.url()).pathname.split('/')[2];
     const guest = await (await page.request.get(`${origin}/api/session`)).json();
     const oldCookies = await context.cookies();
