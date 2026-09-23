@@ -182,15 +182,18 @@ try {
       [delayMs, label + '-' + delayMs],
     );
     if (!ios) {
-      step = `${delayMs} ms tool switching`;
+      step = `${delayMs} ms pan modifier`;
       console.log(label, step);
-      for (let i = 0; i < 12; i++)
-        await measured(`tool:${i}`, 'pointerup', '.canvas-host', 'class', () =>
-          activate(
-            i % 2 ? '.canvas-tools button:nth-child(3)' : '.canvas-tools button:nth-child(2)',
-          ),
+      await js('document.querySelector(".canvas-host").focus()');
+      for (let i = 0; i < 12; i++) {
+        const type = i % 2 ? 'keyUp' : 'keyDown';
+        await measured(`pan:${i}`, i % 2 ? 'keyup' : 'keydown', '.canvas-host', 'class', () =>
+          call('/actions', {
+            actions: [{ type: 'key', id: 'keyboard', actions: [{ type, value: ' ' }] }],
+          }),
         );
-      report.passed.push('12 Pan/Select switches while streaming');
+      }
+      report.passed.push('12 Space pan modifier transitions while streaming');
       await activate(card + ' .card-grip');
       assert(
         await js<boolean>(
@@ -241,10 +244,16 @@ try {
       );
       report.passed.push('another card saves while first response is held');
       await js(
-        'const button=[...document.querySelectorAll(".run-list button")].find(b=>b.textContent==="Cancel run");if(!button)throw Error("No cancellable run");button.focus()',
+        'const button=[...document.querySelectorAll("button")].find(b=>b.textContent==="History");if(!button)throw Error("No History button");button.focus()',
+      );
+      await key('\ue007');
+      await wait('return !!document.querySelector(".run-list")', 'open History');
+      await js(
+        'const button=[...document.querySelectorAll(".run-list button")].find(b=>b.textContent==="Stop");if(!button)throw Error("No cancellable run");button.focus()',
       );
       await key('\ue007');
       await wait('return window.stress.server.state.runs.some(r=>r.status==="cancelled")', step);
+      await key('\ue00c');
       assert(
         await js<boolean>(
           'return window.stress.server.writes.some(w=>w.id==="placement-000" && w.status===0)',
@@ -255,7 +264,10 @@ try {
     await js('window.stress.server.release("placement-000")');
     step = `${delayMs} ms conflict`;
     console.log(label, step);
-    await wait('return !!document.querySelector(".error-banner")', step);
+    await wait(
+      'return [...document.querySelectorAll(".attention-item")].some(el=>el.textContent.includes("A card move wasn’t saved"))',
+      step,
+    );
     assert.equal(await transform(), latest);
     report.passed.push('newer local geometry survives conflict');
     if (!ios) {
@@ -274,8 +286,14 @@ try {
     }
     step = `${delayMs} ms retry`;
     console.log(label, step);
-    await activate('.error-banner button');
-    await wait('return !document.querySelector(".error-banner")', step);
+    await js(
+      'const item=[...document.querySelectorAll(".attention-item")].find(el=>el.textContent.includes("A card move wasn’t saved"));const button=[...item.querySelectorAll("button")].find(b=>b.textContent==="Save my move");button.setAttribute("data-device-retry", "")',
+    );
+    await activate('[data-device-retry]');
+    await wait(
+      'return ![...document.querySelectorAll(".attention-item")].some(el=>el.textContent.includes("A card move wasn’t saved"))',
+      step,
+    );
     assert.equal(await transform(), latest);
     report.passed.push('retry preserves latest geometry');
     if (ios) {
