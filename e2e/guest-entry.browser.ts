@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 
+test.use({ hasTouch: true });
+
 test('guest work, an interrupted import, composer and two tabs survive existing-account claiming and a lost response', async ({
   page,
   context,
@@ -73,6 +75,38 @@ test('guest work, an interrupted import, composer and two tabs survive existing-
     expect(Math.abs(bounds.x + bounds.width / 2 - 195)).toBeLessThan(1);
     expect(Math.abs(bounds.y + bounds.height / 2 - 422)).toBeLessThan(1);
     await mobileAccount.getByRole('button', { name: 'Close sign in' }).click();
+    // Emulate both keyboard resize and Safari's visual-viewport offset. This
+    // verifies layout response; the physical-device run verifies the real IME.
+    for (const mode of ['Canvas', 'Focus']) {
+      await page.getByRole('button', { name: mode, exact: true }).click();
+      for (const offset of [0, 120]) {
+        await page.evaluate((offset) => {
+          Object.defineProperty(visualViewport, 'height', { configurable: true, value: 400 });
+          Object.defineProperty(visualViewport, 'offsetTop', { configurable: true, value: offset });
+          visualViewport!.dispatchEvent(new Event('resize'));
+          visualViewport!.dispatchEvent(new Event('scroll'));
+        }, offset);
+        await expect
+          .poll(async () => {
+            const prompt = (await page.getByRole('textbox', { name: 'Run prompt' }).boundingBox())!;
+            return prompt.y >= offset && prompt.y + prompt.height <= offset + 400;
+          })
+          .toBe(true);
+      }
+      await page.evaluate(() => {
+        Reflect.deleteProperty(visualViewport!, 'height');
+        Reflect.deleteProperty(visualViewport!, 'offsetTop');
+        visualViewport!.dispatchEvent(new Event('resize'));
+      });
+    }
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+    await expect
+      .poll(async () => {
+        const prompt = (await page.getByRole('textbox', { name: 'Run prompt' }).boundingBox())!;
+        return prompt.y >= 0 && prompt.y + prompt.height <= 390;
+      })
+      .toBe(true);
     await page.setViewportSize({ width: 1440, height: 1000 });
     const braneId = new URL(page.url()).pathname.split('/')[2];
     const guest = await (await page.request.get(`${origin}/api/session`)).json();

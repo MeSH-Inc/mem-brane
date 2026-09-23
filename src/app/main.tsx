@@ -23,6 +23,7 @@ import './styles.css';
 import { AppStatus } from '../components/AppStatus';
 import { PasswordRecovery } from '../components/PasswordRecovery';
 import { accountPromptOf, type AccountPrompt } from '../services/account-prompt';
+import { useVisualViewport } from './useVisualViewport';
 import { FirstSteps } from '../components/FirstSteps';
 function AuthScreen({
   onSignedIn,
@@ -183,6 +184,7 @@ function AuthScreen({
   );
 }
 function Shell() {
+  useVisualViewport();
   const navigation = useRef<HTMLDetailsElement>(null);
   const [authOpen, setAuthOpen] = useState<AccountPrompt | null>(null);
   const closeMobileNavigation = () => {

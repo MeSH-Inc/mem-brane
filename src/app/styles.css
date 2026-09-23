@@ -1952,3 +1952,21 @@ summary:focus-visible {
 .welcome .first-steps {
   margin-left: 0;
 }
+
+/* A keyboard reduces the visual viewport without necessarily changing dvh.
+   Fixed positioning also prevents focus scrolling the entire workspace. */
+@media (max-width: 760px), (pointer: coarse) {
+  .app-shell {
+    position: fixed;
+    inset: var(--workspace-top, 0px) 0 auto;
+    height: var(--workspace-height, 100dvh);
+  }
+  .app-shell .main-content,
+  .app-shell .workspace,
+  .app-shell .canvas-host {
+    min-height: 0;
+  }
+  .app-shell .tools {
+    display: none;
+  }
+}
