@@ -38,6 +38,7 @@ import { useInteraction } from '../stores/interaction';
 import { presentationFor } from '../stores/presentation';
 import { useStore } from 'zustand';
 type CardData = {
+  mobile: boolean;
   blockId: string;
   document: WorkspaceDocument;
   focusRequest?: string;
@@ -84,10 +85,10 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         </span>
         <button
           className="nodrag nopan icon-button"
-          title="Focus block"
+          title={data.mobile ? 'Open card in Focus' : 'Focus block'}
           onClick={() => data.onFocus(block.id)}
         >
-          ↗
+          {data.mobile ? 'Open' : '↗'}
         </button>
       </header>
       <LiveBlockContent
@@ -106,32 +107,34 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
           onRerun={data.onRerun}
         />
       )}
-      <footer className="nodrag nopan">
-        <SpawnButton
-          block={block}
-          busy={activity.busy}
-          phase={activity.phase}
-          retry={activity.retry}
-          onSpawn={() => data.onSpawn(block.id, id)}
-        />
-        {block.messageId ? (
-          <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
-        ) : (
-          <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
-        )}
-        <ActionMenu label="More" align="right">
-          {block.messageId && (
+      {!data.mobile && (
+        <footer className="nodrag nopan">
+          <SpawnButton
+            block={block}
+            busy={activity.busy}
+            phase={activity.phase}
+            retry={activity.retry}
+            onSpawn={() => data.onSpawn(block.id, id)}
+          />
+          {block.messageId ? (
+            <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
+          ) : (
             <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
           )}
-          <button onClick={() => data.onManage(block.id, id, 'place')}>
-            Show on another brane…
-          </button>
-          <button onClick={() => data.onManage(block.id, id, 'versions')}>Version history</button>
-          <button onClick={() => data.onManage(block.id, id, 'remove')}>
-            Remove from this brane
-          </button>
-        </ActionMenu>
-      </footer>
+          <ActionMenu label="More" align="right">
+            {block.messageId && (
+              <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
+            )}
+            <button onClick={() => data.onManage(block.id, id, 'place')}>
+              Show on another brane…
+            </button>
+            <button onClick={() => data.onManage(block.id, id, 'versions')}>Version history</button>
+            <button onClick={() => data.onManage(block.id, id, 'remove')}>
+              Remove from this brane
+            </button>
+          </ActionMenu>
+        </footer>
+      )}
     </article>
   );
   return observer ? (
@@ -144,6 +147,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
 });
 const nodeTypes = { card: Card };
 interface Props {
+  mobile: boolean;
   onContext: (ids: string[]) => void;
   onContinue: (id: string) => void;
   onImport?: (files: File[], point?: { x: number; y: number }) => void;
@@ -159,6 +163,7 @@ interface Props {
   onRerun: CardData['onRerun'];
 }
 function Inner(props: Props) {
+  const { mobile } = props;
   const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
   const scene = useStore(props.document.store, (s) => s.scene);
   const actor = useInteraction((s) => s.actor);
@@ -240,6 +245,7 @@ function Inner(props: Props) {
         dragHandle: '.card-grip',
         selected: selected.includes(p.id),
         data: {
+          mobile,
           blockId: p.block_id,
           document: props.document,
           resizable: selected.includes(p.id),
@@ -279,6 +285,7 @@ function Inner(props: Props) {
       return next;
     });
   }, [
+    mobile,
     placements,
     props.document,
     geometry,

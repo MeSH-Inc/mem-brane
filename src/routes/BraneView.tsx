@@ -733,6 +733,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 </div>
               )}
               <BraneCanvas
+                mobile={mobile}
                 onContext={controller.addReferences}
                 onContinue={continueBranch}
                 onImport={attachFiles}

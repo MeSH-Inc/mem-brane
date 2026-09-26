@@ -1,5 +1,28 @@
 # Canvas device checkpoint — September 11, 2026
 
+## September 26 follow-up
+
+The current mobile card simplification has passed 25 presentation/input browser
+checks across Chromium, Firefox and WebKit (two unsupported touch cases skipped),
+four canvas audit tests, typecheck, build and changed-file formatting. The
+full-application guest test also passed centered phone sign-in and simulated
+visual-viewport height/offset checks in Canvas and Focus on Node 24.21.0. The
+initial attempt under ambient Node 26 failed to load the existing Node 24 SQLite
+native module; the application assertions ran and passed under Node 24.
+
+Fresh physical-device acceptance remains incomplete. iPhone SafariDriver found
+the paired device but could not create a session. The connected Pixel on Chrome
+153.0.8010.53 loaded the secure 500-card fixture, but its first injected touch
+timed out while the OS reported a lock screen. No gesture passed in this run.
+Unlock the phones and keep the target browsers foreground before retrying. The
+raw failed-run records are in `artifacts/stress/device/weekly-20260926/`.
+
+Phone Canvas now exposes one Open action per card; full commands remain in Focus.
+The tests prove the simplified action layout and preserve desktop behavior. They
+do not prove that a focused on-canvas editor stays visible through a physical
+software-keyboard transition; native keyboard, rotation, pinch and human input
+remain required. Earlier device passes below describe their recorded builds.
+
 Installed macOS Safari and Chrome on a physical Pixel passed the bounded interaction checks at both 350 ms and 1500 ms save delays with 500 mounted cards and four active streams. Physical iPhone Safari now passes the keyboard selection, independent-save, cancellation and conflict-retry subset at both delays. These used browser-driver input injection. Native iPhone gestures and text entry, plus human trackpad and touchscreen behavior, remain unverified.
 
 | Target                                           | Input method                                                                         | 350 ms / 1500 ms result                                                                                                                                                                            |

@@ -60,6 +60,7 @@ function render(s = state) {
     root.render(
       <StrictMode>
         <BraneCanvas
+          mobile={false}
           onContext={noop}
           onContinue={noop}
           document={workspace}

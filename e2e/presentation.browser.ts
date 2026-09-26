@@ -134,3 +134,21 @@ test('creation errors restore the control and preserve the current editor', asyn
   await expect(page.getByRole('button', { name: '＋ Text', exact: true })).toBeEnabled();
   await expect(page.locator('[data-id="pa"] textarea')).toHaveValue('a');
 });
+
+test('phone canvas presents one card action and opens full commands in Focus', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const card = page.locator('[data-id="pa"]');
+  await expect(card.locator('footer')).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Open', exact: true })).toHaveCount(1);
+  await card.getByRole('button', { name: 'Open', exact: true }).click();
+  await expect(page.locator('.focus-card textarea')).toHaveValue('a');
+  await expect(
+    page.locator('.focus-card').getByRole('button', { name: 'Develop', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.focus-card').getByRole('button', { name: '+ Use as context', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.focus-card').getByRole('button', { name: 'More', exact: true }),
+  ).toBeVisible();
+});
