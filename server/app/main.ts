@@ -132,6 +132,7 @@ telemetry.start();
 const maintenance = new Maintenance(
   db,
   { completedCheckpointDays: config.COMPLETED_CHECKPOINT_RETENTION_DAYS, batchSize: 100 },
+  storage,
   fatal,
 );
 if (config.READ_ONLY !== '1') maintenance.start();
@@ -158,7 +159,7 @@ async function shutdown() {
   if (closing) return;
   closing = true;
   telemetry.stop();
-  maintenance.stop();
+  const maintenanceStopped = maintenance.stop();
   const deadline = setTimeout(() => process.exit(1), config.SHUTDOWN_MS);
   hub.close();
   // Streams can become idle after close() has swept existing keep-alive sockets.
@@ -171,6 +172,7 @@ async function shutdown() {
     );
     await Promise.all([
       drained,
+      maintenanceStopped,
       worker.stop(),
       ingestion.stop(),
       ocrWorker.stop(),

@@ -23,8 +23,10 @@ interface Operation {
   placement_id: string | null;
 }
 const hash = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
-export function hasActiveImports(db: DB, libraryId: string) {
-  return [...(workByDatabase.get(db)?.keys() ?? [])].some((key) => key.startsWith(`${libraryId}:`));
+export function activeImportLibraries(db: DB) {
+  return [
+    ...new Set([...(workByDatabase.get(db)?.keys() ?? [])].map((key) => key.split(':', 1)[0])),
+  ];
 }
 const workByDatabase = new WeakMap<DB, Map<string, Promise<unknown>>>();
 export function createImports(
@@ -117,6 +119,9 @@ export function createImports(
               };
         db.transaction(() => {
           authorize();
+          // The request body and parser may have yielded before this import was
+          // reserved. Guest reclamation can remove its destination in that gap.
+          canEditBrane(db, actor, intent.braneId);
           const current = read(actor, intent.key);
           if (current && current.request_hash !== requestHash)
             throw new DomainError(409, 'This import key belongs to different content or placement');

@@ -271,11 +271,9 @@ it('bounds guest bytes across identities and keeps failed object deletions charg
     config.GUEST_TOTAL_STORAGE_BYTES = 100;
     const a = await start(),
       b = await start();
-    db.prepare('INSERT INTO guest_object_deletions VALUES (?,?,?)').run(
-      uid(),
-      a.session.libraryId,
-      60,
-    );
+    db.prepare(
+      'INSERT INTO guest_object_deletions (storage_key,library_id,size) VALUES (?,?,?)',
+    ).run(uid(), a.session.libraryId, 60);
     expect(() =>
       reserveUpload(db, b.session.libraryId, uid(), 60, { userBytes: 1000, totalBytes: 1000 }),
     ).toThrow('Guest upload capacity');

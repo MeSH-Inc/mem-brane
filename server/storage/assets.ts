@@ -11,7 +11,7 @@ import { config } from '../app/config.js';
 export interface AssetStore {
   put(key: string, bytes: Uint8Array, mime: string): Promise<void>;
   get(key: string, signal?: AbortSignal): Promise<Uint8Array>;
-  delete(key: string): Promise<void>;
+  delete(key: string, signal?: AbortSignal): Promise<void>;
   createReadUrl(key: string): Promise<string>;
 }
 export class FileAssetStore implements AssetStore {
@@ -67,8 +67,10 @@ export class R2AssetStore implements AssetStore {
     );
     return (await response.Body?.transformToByteArray()) ?? new Uint8Array();
   }
-  async delete(key: string) {
-    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  async delete(key: string, signal?: AbortSignal) {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }), {
+      abortSignal: signal,
+    });
   }
   async createReadUrl(key: string) {
     return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
