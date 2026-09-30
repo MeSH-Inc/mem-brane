@@ -1,4 +1,5 @@
 import { entryApi } from './entry.js';
+import { readCard, readUnplacedCards } from '../services/card-library.js';
 import { currentLibrary, authorizeLibrary } from '../domain/libraries.js';
 import { applyWorkspaceOperation } from '../services/workspace-operations.js';
 import { workspaceOperation } from '../../shared/workspace-commands.js';
@@ -242,6 +243,16 @@ export function createApi(
       .parse(await authorizedBody(c));
     return c.json(createTextBlock(db, c.get('actor'), body.braneId, body.geometry), 201);
   });
+  app.get('/blocks/unplaced', (c) => {
+    const query = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(50).default(25),
+        cursor: id.optional(),
+      })
+      .parse(c.req.query());
+    return c.json(readUnplacedCards(db, c.get('actor'), query.limit, query.cursor));
+  });
+  app.get('/blocks/:id', (c) => c.json(readCard(db, c.get('actor'), id.parse(c.req.param('id')))));
   app.patch('/blocks/live', async (c) =>
     c.json(updateBlockLiveState(db, c.get('actor'), edit.parse(await authorizedBody(c)))),
   );

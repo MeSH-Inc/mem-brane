@@ -305,6 +305,13 @@ it('composer context has a single scoped owner and ignores stale lineage and est
 });
 it('reusing a continued run restores its prompt, current references and branch', async () => {
   const f = await fixture();
+  const secondBlock = crypto.randomUUID();
+  f.state.blocks.push({ ...f.state.blocks[0], id: secondBlock });
+  f.state.placements.push({
+    ...f.state.placements[0],
+    id: crypto.randomUUID(),
+    block_id: secondBlock,
+  });
   const text = (value: string) => ({ format: 'text' as const, text: value });
   const lineage = [
     {
@@ -332,6 +339,17 @@ it('reusing a continued run restores its prompt, current references and branch',
       anchorPlacementId: null,
       outputPlacementId: null,
     },
+    {
+      runId: 'continued',
+      kind: 'reference',
+      sourceBlockId: secondBlock,
+      sourceRevisionId: 'second-revision',
+      sourceVersion: 0,
+      outputBlockId: 'output',
+      position: 1,
+      anchorPlacementId: null,
+      outputPlacementId: null,
+    },
   ];
   await f.c.refresh();
   f.intercept((path) =>
@@ -353,6 +371,22 @@ it('reusing a continued run restores its prompt, current references and branch',
           inputs: [
             {
               position: 0,
+              kind: 'reference',
+              label: 'Reference 1',
+              role: 'user',
+              revision_id: 'revision',
+              content: text('Original source'),
+            },
+            {
+              position: 1,
+              kind: 'reference',
+              label: 'Reference 2',
+              role: 'user',
+              revision_id: 'second-revision',
+              content: text('Second source'),
+            },
+            {
+              position: 2,
               kind: 'prompt',
               label: 'Prompt',
               role: 'user',
@@ -372,10 +406,21 @@ it('reusing a continued run restores its prompt, current references and branch',
   await settle();
   expect(f.c.draft).toMatchObject({
     prompt: 'Go on',
-    references: [f.block],
+    references: [f.block, secondBlock],
     continueFrom: 'parent',
   });
   expect(f.c.lineage.map((message) => message.id)).toEqual(['parent']);
+  // Removing a source must not silently turn a reused request into a narrower one.
+  f.c.updateDraft({ prompt: 'Keep my unfinished prompt', references: [], continueFrom: undefined });
+  f.state.blocks = f.state.blocks.filter((block) => block.id !== secondBlock);
+  f.state.placements = f.state.placements.filter((placement) => placement.block_id !== secondBlock);
+  await f.c.refresh();
+  await expect(f.c.reuseInputs('continued')).rejects.toThrow('Source 2 is no longer');
+  expect(f.c.draft).toMatchObject({ prompt: 'Keep my unfinished prompt', references: [] });
+  expect(f.c.draft.continueFrom).toBeUndefined();
+  f.state.derivations = [];
+  await f.c.refresh();
+  await expect(f.c.reuseInputs('continued')).rejects.toThrow('Show this response');
 });
 it.each(['run', 'spawn'] as const)(
   '%s sends edits atomically and uses actual no-op versions while preserving newer typing',

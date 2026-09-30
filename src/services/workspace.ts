@@ -782,9 +782,22 @@ export class WorkspaceController {
     const detail = await this.client.run(runId);
     if (!this.valid(epoch)) return;
     const present = new Set(this.state?.blocks.map((b) => b.id));
-    const references = (this.state?.derivations ?? [])
-      .filter((d) => d.runId === runId && d.kind === 'reference' && present.has(d.sourceBlockId))
-      .map((d) => d.sourceBlockId);
+    const sources = (this.state?.derivations ?? [])
+      .filter((d) => d.runId === runId && d.kind === 'reference')
+      .sort((a, b) => a.position - b.position);
+    const inputs = detail.inputs.filter((input) => input.kind === 'reference');
+    if (sources.length !== inputs.length)
+      throw new Error(
+        'Show this response on the brane before reusing its sources. Your prompt was kept.',
+      );
+    const missing = sources.flatMap((source, index) =>
+      present.has(source.sourceBlockId) ? [] : [index + 1],
+    );
+    if (missing.length)
+      throw new Error(
+        `${missing.length === 1 ? 'Source' : 'Sources'} ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} no longer on this brane. Restore unplaced cards or show them here from their other brane, then reuse inputs. Your prompt was kept.`,
+      );
+    const references = sources.map((source) => source.sourceBlockId);
     const prompt = detail.inputs.find((input) => input.kind === 'prompt')?.content.text ?? '';
     this.updateDraft({ prompt, references, continueFrom: detail.continue_from ?? undefined });
   };

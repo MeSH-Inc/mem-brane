@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { sessionResponse, workspaceResponse, braneResponse } from '../../shared/contracts';
+import {
+  sessionResponse,
+  workspaceResponse,
+  braneResponse,
+  blockResponse,
+} from '../../shared/contracts';
 import {
   workspaceCommand,
   workspaceAcknowledgement,
@@ -12,6 +17,7 @@ import {
   projectCommand,
   visibleWorkspace,
   installWorkspace,
+  installBlock,
   overlayPending,
 } from './replica-projection';
 import type { ReplicaStorage, ReplicaState, PendingOperation } from './replica-storage';
@@ -205,6 +211,11 @@ export class WorkspaceReplica {
     ) {
       const id = String(body.braneId);
       if (!(await this.storage.read(actor)).workspaces[id]) await this.request(`/branes/${id}`);
+      if (path === '/placements' && 'blockId' in body) {
+        const blockId = String(body.blockId);
+        if (!findBlock(await this.storage.read(actor), blockId))
+          await this.request(`/blocks/${blockId}`);
+      }
     }
     if (method !== 'GET') {
       const local = await this.storage.change(actor, (state) => {
@@ -260,7 +271,9 @@ export class WorkspaceReplica {
         else if (/^\/branes\/[^/]+$/.test(path)) {
           const workspace = workspaceResponse.parse(value);
           installWorkspace(current, overlayPending(current, workspace));
-        } else current.reads[path] = value;
+        } else if (/^\/blocks\/[^/]+$/.test(path) && !path.startsWith('/blocks/unplaced'))
+          installBlock(current, blockResponse.parse(value), true);
+        else current.reads[path] = value;
         const next = readLocal(current, path) ?? value;
         return { value: next, changed: previous !== JSON.stringify(next) };
       });
@@ -488,6 +501,10 @@ export class WorkspaceReplica {
         if (!state.pending.some((op) => op.key === head.key && op.failure))
           throw new Error('Another window resolved this conflict.');
         state.workspaces = remote;
+        if (head.command.type === 'text.edit')
+          // Reset the detached projection too, so choosing server state cannot
+          // resurrect a rejected local edit through a later card restoration.
+          delete state.reads[`/blocks/${head.command.blockId}`];
         state.branes = state.branes.map((b) => remote[b.id]?.brane ?? b);
         const pending: PendingOperation[] = [];
         for (const entry of state.pending) {
@@ -569,6 +586,8 @@ function readLocal(state: ReplicaState, path: string): unknown {
     return value ? visibleWorkspace(value) : undefined;
   }
   if (/^\/placements\/[^/]+$/.test(path)) return findPlacement(state, path.split('/')[2]);
+  if (/^\/blocks\/[^/]+$/.test(path) && !path.startsWith('/blocks/unplaced'))
+    return findBlock(state, path.split('/')[2]);
   return state.reads[path];
 }
 

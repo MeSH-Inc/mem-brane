@@ -41,6 +41,9 @@ export function createClient(request: typeof api) {
       request(`/branes/${braneId}`, { title }, 'PATCH'),
     createText: (braneId: string, geometry: Geometry) =>
       read(response.createdBlockResponse, '/blocks/text', { braneId, geometry }),
+    block: (id: string) => read(response.blockResponse, `/blocks/${id}`),
+    unplacedCards: (cursor?: string) =>
+      read(response.unplacedPageResponse, page('/blocks/unplaced', cursor)),
     saveText: (edit: Edit) => read(response.savedTextResponse, '/blocks/live', edit, 'PATCH'),
     placement: (id: string) => read(response.placementResponse, `/placements/${id}`),
     savePlacement: (id: string, edit: PlacementEdit) =>

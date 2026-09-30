@@ -12,9 +12,11 @@ import {
   removePlacement,
 } from '../server/services/content';
 import { applyWorkspaceOperation } from '../server/services/workspace-operations';
+import { readCard } from '../server/services/card-library';
 import { DomainError } from '../server/domain/access';
 import { IndexedReplicaStorage } from '../src/services/replica-storage';
 import { WorkspaceReplica } from '../src/services/replica';
+import { installWorkspace, projectCommand } from '../src/services/replica-projection';
 import { ApiError, networkApi } from '../src/services/transport';
 import { createClient } from '../src/services/client';
 import type { WorkspaceOperation } from '../shared/workspace-commands';
@@ -64,6 +66,7 @@ async function fixture() {
       throw new ApiError(401, 'Account changed');
     if (path === '/branes') return [brane];
     if (path.startsWith('/branes/')) return readBrane(db, actor, path.split('/')[2]);
+    if (path.startsWith('/blocks/')) return readCard(db, actor, path.split('/')[2]);
     if (path === '/sync/commands') {
       const op = raw as WorkspaceOperation;
       sent.push(structuredClone(op));
@@ -115,6 +118,189 @@ async function fixture() {
     },
   };
 }
+it('restores an unplaced card after reload and retains one placement through a lost acknowledgement', async () => {
+  const f = await fixture();
+  updateBlockLiveState(db, f.actor, {
+    blockId: f.block.id,
+    text: 'Recovered original',
+    version: 0,
+  });
+  removePlacement(db, f.actor, f.block.placement.id);
+  await f.client.workspace(f.brane.id);
+  const reloaded = new WorkspaceReplica(new IndexedReplicaStorage(f.storeName), f.transport);
+  const client = createClient(reloaded.request);
+  await client.session();
+  expect((await client.workspace(f.brane.id)).blocks).toEqual([]);
+  f.loseReceipt();
+  const placement = await client.createPlacement(f.brane.id, f.block.id, {
+    x: 10,
+    y: 20,
+    width: 320,
+    height: 220,
+  });
+  await reloaded.synchronize();
+  await reloaded.synchronize();
+  const saved = readBrane(db, f.actor, f.brane.id);
+  expect(saved.placements.map((p) => p.id)).toEqual([placement.id]);
+  expect(saved.blocks).toMatchObject([{ id: f.block.id, content: { text: 'Recovered original' } }]);
+  expect((await f.storage.read(f.actor)).pending).toEqual([]);
+  const delivered = f.sent.filter((op) => op.command.type === 'placement.create');
+  expect(delivered).toHaveLength(2);
+  expect(delivered[0].key).toBe(delivered[1].key);
+});
+it('keeps a fresh card preview through offline restoration, reload and a lost acknowledgement', async () => {
+  const f = await fixture();
+  updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'Old text', version: 0 });
+  await f.client.workspace(f.brane.id);
+  await f.client.removePlacement(f.block.placement.id);
+  await f.replica.synchronize();
+  updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'Fresh preview', version: 1 });
+  expect(await f.client.block(f.block.id)).toMatchObject({
+    version: 2,
+    content: { text: 'Fresh preview' },
+  });
+  f.offline();
+  const placement = await f.client.createPlacement(f.brane.id, f.block.id, {
+    x: 10,
+    y: 20,
+    width: 320,
+    height: 220,
+  });
+  await f.replica.synchronize();
+  const reloaded = new WorkspaceReplica(new IndexedReplicaStorage(f.storeName), f.transport);
+  const client = createClient(reloaded.request);
+  await client.session();
+  expect((await client.workspace(f.brane.id)).blocks).toMatchObject([
+    { id: f.block.id, version: 2, content: { text: 'Fresh preview' } },
+  ]);
+  f.online();
+  f.loseReceipt();
+  await reloaded.synchronize();
+  await reloaded.synchronize();
+  expect(readBrane(db, f.actor, f.brane.id).placements.map((p) => p.id)).toEqual([placement.id]);
+  expect((await client.workspace(f.brane.id)).blocks[0].content.text).toBe('Fresh preview');
+  const sent = f.sent.filter((op) => op.command.type === 'placement.create');
+  expect(sent).toHaveLength(2);
+  expect(sent[0].key).toBe(sent[1].key);
+});
+
+it('uses the same cached card for preview and restoration when a read is superseded by a local operation', async () => {
+  const f = await fixture();
+  updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'Cached card', version: 0 });
+  await f.client.workspace(f.brane.id);
+  await f.client.removePlacement(f.block.placement.id);
+  await f.replica.synchronize();
+  updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'New server card', version: 1 });
+  let captured = false,
+    release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const delayed = new WorkspaceReplica(new IndexedReplicaStorage(f.storeName), async (...args) => {
+    const value = await f.transport(...args);
+    if (args[0] === `/blocks/${f.block.id}`) {
+      captured = true;
+      await gate;
+    }
+    return value;
+  });
+  const client = createClient(delayed.request);
+  await client.session();
+  await delayed.synchronize();
+  const preview = client.block(f.block.id);
+  await expect.poll(() => captured).toBe(true);
+  f.offline();
+  await f.client.saveTitle(f.brane.id, 'Offline title');
+  await f.replica.synchronize();
+  release();
+  const shown = await preview;
+  await client.createPlacement(f.brane.id, f.block.id, {
+    x: 10,
+    y: 20,
+    width: 320,
+    height: 220,
+  });
+  const restored = (await client.workspace(f.brane.id)).blocks[0];
+  expect(restored).toEqual(shown);
+  expect(shown).toMatchObject({ version: 1, content: { text: 'Cached card' } });
+  await delayed.synchronize();
+});
+
+it('preserves pending text against newer card reads until explicit conflict resolution', async () => {
+  const f = await fixture();
+  await f.client.block(f.block.id);
+  f.offline();
+  await f.client.saveText({ blockId: f.block.id, text: 'Keep my local intent', version: 0 });
+  await f.replica.synchronize();
+  const original = (await f.storage.read(f.actor)).pending[0];
+  updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'Remote one', version: 0 });
+  updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'Remote two', version: 1 });
+  f.online();
+  await f.replica.synchronize();
+  const path = `/blocks/${f.block.id}`;
+  await f.client.block(f.block.id);
+  await expect.poll(async () => (await f.storage.read(f.actor)).fetches[path].received).toBe(2);
+  expect((await f.storage.read(f.actor)).reads[path]).toMatchObject({
+    version: 1,
+    content: { text: 'Keep my local intent' },
+  });
+  expect((await f.storage.read(f.actor)).pending[0]).toMatchObject({
+    key: original.key,
+    command: original.command,
+    failure: { status: 409 },
+  });
+  expect((await f.client.workspace(f.brane.id)).blocks[0].content.text).toBe(
+    'Keep my local intent',
+  );
+  await f.replica.resolveConflict('server');
+  expect(await f.client.block(f.block.id)).toMatchObject({
+    version: 2,
+    content: { text: 'Remote two' },
+  });
+  f.offline();
+  await f.client.removePlacement(f.block.placement.id);
+  await f.client.createPlacement(f.brane.id, f.block.id, {
+    x: 10,
+    y: 20,
+    width: 320,
+    height: 220,
+  });
+  expect((await f.client.workspace(f.brane.id)).blocks[0].content.text).toBe('Remote two');
+  await f.replica.synchronize();
+});
+
+it('reconciles detached cards into existing placements without losing order or finalized version-zero output', async () => {
+  const f = await fixture();
+  await f.storage.change(f.actor, (state) => {
+    const workspace = state.workspaces[f.brane.id];
+    const final = {
+      ...workspace.blocks[0],
+      origin: 'generated' as const,
+      messageId: uid(),
+      content: { format: 'text' as const, text: 'Final answer' },
+    };
+    const second = { ...workspace.blocks[0], id: uid() };
+    workspace.blocks = [
+      { ...final, messageId: undefined, content: { format: 'text', text: '' } },
+      second,
+    ];
+    state.reads[`/blocks/${final.id}`] = final;
+    projectCommand(state, {
+      type: 'placement.create',
+      id: uid(),
+      braneId: f.brane.id,
+      blockId: final.id,
+      geometry: { x: 10, y: 20, width: 320, height: 220 },
+    });
+    expect(workspace.blocks.map((block) => block.id)).toEqual([final.id, second.id]);
+    expect(workspace.blocks[0]).toEqual(final);
+    const incoming = structuredClone(workspace);
+    incoming.blocks[0] = { ...final, messageId: undefined, content: { format: 'text', text: '' } };
+    installWorkspace(state, incoming);
+    expect(state.workspaces[f.brane.id].blocks[0]).toEqual(final);
+    expect(state.reads[`/blocks/${final.id}`]).toEqual(final);
+  });
+});
 it('persists offline creation, edits, movement and removal across a new client and replays exactly once', async () => {
   const f = await fixture();
   f.offline();

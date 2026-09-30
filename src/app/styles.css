@@ -1832,6 +1832,34 @@ summary:focus-visible {
   font-size: 13px;
   line-height: 1.6;
 }
+.unplaced-cards {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.unplaced-list {
+  padding: 0;
+  list-style: none;
+}
+.unplaced-card {
+  border-top: 1px solid var(--line);
+  padding: 16px 0;
+  overflow-wrap: anywhere;
+}
+.unplaced-card > small,
+.card-preview > small {
+  display: block;
+  color: var(--muted);
+}
+.card-preview {
+  border-left: 2px solid var(--line);
+  padding-left: 12px;
+}
+.card-preview pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.6;
+}
 @media (max-width: 760px) {
   .workspace-dialog {
     max-width: 100%;

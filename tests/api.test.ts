@@ -11,6 +11,7 @@ import type { AssetStore } from '../server/storage/assets';
 import {
   createBrane,
   createTextBlock,
+  removePlacement,
   revisions,
   updateBlockLiveState,
   uid,
@@ -114,6 +115,7 @@ it('checks another actor’s protected resources through HTTP', async () => {
   const b = createBrane(db, other),
     block = createTextBlock(db, other, b.id);
   expect((await app.request(`/api/branes/${b.id}`, { headers: headers() })).status).toBe(404);
+  expect((await app.request(`/api/blocks/${block.id}`, { headers: headers() })).status).toBe(404);
   expect(
     (await app.request(`/api/blocks/${block.id}/snapshot`, { method: 'POST', headers: headers() }))
       .status,
@@ -141,6 +143,25 @@ it('validates domain inputs instead of exposing arbitrary row edits', async () =
       })
     ).status,
   ).toBe(400);
+});
+it('lists and previews unplaced cards only within the authenticated library', async () => {
+  const brane = createBrane(db, actor);
+  const card = createTextBlock(db, actor, brane.id);
+  updateBlockLiveState(db, actor, { blockId: card.id, text: 'Recover me', version: 0 });
+  removePlacement(db, actor, card.placement.id);
+  expect((await app.request('/api/blocks/unplaced')).status).toBe(401);
+  const page = await app.request('/api/blocks/unplaced?limit=1', { headers: headers() });
+  expect(await page.json()).toMatchObject({
+    items: [{ id: card.id, preview: 'Recover me' }],
+    nextCursor: null,
+  });
+  expect(
+    await (await app.request(`/api/blocks/${card.id}`, { headers: headers() })).json(),
+  ).toMatchObject({ id: card.id, version: 1, content: { text: 'Recover me' } });
+  expect((await app.request('/api/blocks/unplaced?limit=51', { headers: headers() })).status).toBe(
+    400,
+  );
+  expect((await app.request(`/api/blocks/${uid()}`, { headers: headers() })).status).toBe(404);
 });
 
 it('rate-limit hook bounds bursts and expires its window', async () => {

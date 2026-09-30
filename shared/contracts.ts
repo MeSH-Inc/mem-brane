@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { content, pdfRepresentation, runStatus } from './schemas/index';
-import type { BraneState, Content, Placement, Revision } from './types/domain';
+import type { Block, BraneState, Content, Placement, Revision } from './types/domain';
 import type { ConversationMessage } from './types/conversation';
 
 // Response identities are opaque to readers; command schemas validate UUID input.
@@ -55,18 +55,30 @@ export const runSummaryResponse = z
   .strict();
 export type RunSummary = z.infer<typeof runSummaryResponse>;
 export const runResponse = runSummaryResponse.extend({ partial: z.string() });
-export const workspaceResponse: z.ZodType<BraneState> = z.object({
-  brane: braneResponse,
-  blocks: z.array(
+export const blockResponse: z.ZodType<Block> = z.object({
+  id: identity,
+  kind: z.enum(['text', 'image', 'webpage', 'pdf']),
+  origin: z.enum(['authored', 'generated']),
+  content: workspaceContent,
+  version: z.number().int().nonnegative(),
+  messageId: identity.optional(),
+});
+export const unplacedPageResponse = z.object({
+  items: z.array(
     z.object({
       id: identity,
       kind: z.enum(['text', 'image', 'webpage', 'pdf']),
       origin: z.enum(['authored', 'generated']),
-      content: workspaceContent,
-      version: z.number().int().nonnegative(),
-      messageId: identity.optional(),
+      created_at: z.number(),
+      preview: z.string(),
     }),
   ),
+  nextCursor: identity.nullable(),
+});
+export type UnplacedPage = z.infer<typeof unplacedPageResponse>;
+export const workspaceResponse: z.ZodType<BraneState> = z.object({
+  brane: braneResponse,
+  blocks: z.array(blockResponse),
   placements: z.array(placementResponse),
   runs: z.array(runResponse),
   derivations: z.array(

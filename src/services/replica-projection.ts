@@ -1,13 +1,47 @@
 import type { BraneState, Block } from '../../shared/types/domain';
 import type { WorkspaceCommand } from '../../shared/workspace-commands';
 import type { ReplicaState } from './replica-storage';
+import { blockResponse } from '../../shared/contracts';
 
 export function findBlock(state: ReplicaState, id: string) {
   let found: Block | undefined;
   for (const workspace of Object.values(state.workspaces))
-    for (const block of workspace.blocks)
-      if (block.id === id && (!found || block.version > found.version)) found = block;
-  return found;
+    for (const block of workspace.blocks) if (block.id === id) found = newestBlock(found, block);
+  // Workspace blocks carry the projection of pending edits. A detached server
+  // read must not replace that intent before its conflict is resolved.
+  if (found && hasPendingText(state, id)) return found;
+  const detached = blockResponse.safeParse(state.reads[`/blocks/${id}`]).data;
+  return detached ? newestBlock(found, detached) : found;
+}
+function hasPendingText(state: ReplicaState, id: string) {
+  return state.pending.some(
+    ({ command }) =>
+      (command.type === 'text.edit' || command.type === 'text.create') && command.blockId === id,
+  );
+}
+function newestBlock(previous: Block | undefined, incoming: Block): Block {
+  if (!previous) return incoming;
+  if (previous.version !== incoming.version)
+    return previous.version > incoming.version ? previous : incoming;
+  // Generated blocks remain version zero as checkpoints become final output.
+  if (previous.origin === 'generated') {
+    if (previous.messageId && !incoming.messageId) return previous;
+    if (incoming.messageId) return incoming;
+    if (previous.content.text.length > incoming.content.text.length) return previous;
+  }
+  return incoming;
+}
+export function installBlock(state: ReplicaState, incoming: Block, detached = false): Block {
+  const previous = findBlock(state, incoming.id);
+  const block =
+    previous && hasPendingText(state, incoming.id) ? previous : newestBlock(previous, incoming);
+  for (const workspace of Object.values(state.workspaces))
+    workspace.blocks = workspace.blocks.map((cached) =>
+      cached.id === block.id ? structuredClone(block) : cached,
+    );
+  const path = `/blocks/${block.id}`;
+  if (detached || state.reads[path] !== undefined) state.reads[path] = structuredClone(block);
+  return block;
 }
 export function findPlacement(state: ReplicaState, id: string) {
   return Object.values(state.workspaces)
@@ -71,14 +105,19 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         workspace.blocks = workspace.blocks.map((b) =>
           b.id === block.id ? { ...b, version, content: structuredClone(next) } : b,
         );
+      if (state.reads[`/blocks/${block.id}`] !== undefined)
+        state.reads[`/blocks/${block.id}`] = { ...block, version, content: structuredClone(next) };
       return { version, content: next };
     }
     case 'placement.create': {
       const workspace = requireWorkspace(state, command.braneId);
       const block = findBlock(state, command.blockId);
       if (!block) throw new Error('This block is unavailable on this device.');
-      if (!workspace.blocks.some((b) => b.id === block.id))
-        workspace.blocks.push(structuredClone(block));
+      if (workspace.blocks.some((cached) => cached.id === block.id))
+        workspace.blocks = workspace.blocks.map((cached) =>
+          cached.id === block.id ? structuredClone(block) : cached,
+        );
+      else workspace.blocks.push(structuredClone(block));
       const placement = {
         id: command.id,
         block_id: command.blockId,
@@ -127,21 +166,29 @@ export function visibleWorkspace(workspace: BraneState): BraneState {
 export function installWorkspace(state: ReplicaState, workspace: BraneState) {
   const known = new Map<string, Block>();
   for (const cached of Object.values(state.workspaces))
-    for (const block of cached.blocks) {
-      const previous = known.get(block.id);
-      if (!previous || block.version > previous.version) known.set(block.id, block);
-    }
+    for (const block of cached.blocks) known.set(block.id, newestBlock(known.get(block.id), block));
+  const pending = new Set(
+    state.pending.flatMap(({ command }) =>
+      command.type === 'text.edit' || command.type === 'text.create' ? [command.blockId] : [],
+    ),
+  );
   workspace.blocks = workspace.blocks.map((block) => {
-    const previous = known.get(block.id);
-    return previous && previous.version > block.version ? structuredClone(previous) : block;
+    let previous = known.get(block.id);
+    const detached = blockResponse.safeParse(state.reads[`/blocks/${block.id}`]).data;
+    if (detached && (!previous || !pending.has(block.id)))
+      previous = newestBlock(previous, detached);
+    return structuredClone(
+      previous && pending.has(block.id) ? previous : newestBlock(previous, block),
+    );
   });
   const incoming = new Map(workspace.blocks.map((block) => [block.id, block]));
-  for (const cached of Object.values(state.workspaces)) {
-    cached.blocks = cached.blocks.map((block) => {
-      const next = incoming.get(block.id);
-      return next && next.version >= block.version ? structuredClone(next) : block;
-    });
-  }
+  for (const cached of Object.values(state.workspaces))
+    cached.blocks = cached.blocks.map((block) =>
+      incoming.has(block.id) ? structuredClone(incoming.get(block.id)!) : block,
+    );
+  for (const block of workspace.blocks)
+    if (state.reads[`/blocks/${block.id}`] !== undefined)
+      state.reads[`/blocks/${block.id}`] = structuredClone(block);
   state.workspaces[workspace.brane.id] = workspace;
 }
 

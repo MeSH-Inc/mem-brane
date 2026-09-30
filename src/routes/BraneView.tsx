@@ -34,6 +34,7 @@ import { ResponseSources } from '../components/ResponseSources';
 import { FirstSteps } from '../components/FirstSteps';
 import { RunHistory } from '../components/RunHistory';
 import { RunInputs } from '../components/RunInputs';
+import { UnplacedCards } from '../components/UnplacedCards';
 import { draftDisposition } from '../services/drafts';
 import { useMobile } from '../lib/useMobile';
 import { formatUsd } from '../lib/format';
@@ -147,6 +148,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
   const setTitleDraft = (title: string) => controller.updateDraft({ title });
   const [inspectorTab, setInspectorTab] = useState<'context' | 'history'>('context');
   const [webOpen, setWebOpen] = useState(false),
+    [unplacedOpen, setUnplacedOpen] = useState(false),
     [url, setUrl] = useState(''),
     [managed, setManaged] = useState<{ blockId: string; placementId?: string; view: CardAction }>();
   const mobile = useMobile();
@@ -305,6 +307,24 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     (files: File[], point?: { x: number; y: number }) => acceptFiles(files, 'canvas', point),
     [acceptFiles],
   );
+  const showCardHere = useCallback(
+    async (blockId: string) => {
+      await commands.run(`restore:${blockId}`, async (progress) => {
+        // Read the durable local projection again on retries, including when an
+        // earlier placement succeeded but refreshing the visible workspace failed.
+        const latest = await client.workspace(braneId);
+        if (!latest.placements.some((placement) => placement.block_id === blockId))
+          await client.createPlacement(braneId, blockId, {
+            ...canvasInsertion.current(),
+            width: 320,
+            height: 240,
+          });
+        progress('refreshing');
+        await refresh();
+      });
+    },
+    [braneId, commands, refresh],
+  );
   const focused = state?.blocks.find((b) => b.id === (focus ?? retainedFocus)) ?? state?.blocks[0];
   if (!state) return <div className="loading">{error || 'Opening brane…'}</div>;
   const availableDrafts = ui.availableDrafts.filter((d) =>
@@ -376,6 +396,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
               ▧ Image / PDF
             </button>
             <button onClick={() => setWebOpen(!webOpen)}>↗ Webpage</button>
+            <button onClick={() => setUnplacedOpen(true)}>Unplaced cards</button>
           </ActionMenu>
           <div className="view-toggle">
             <button
@@ -1091,14 +1112,28 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
         )}
         {inputs && (
           <RunInputs
+            key={inputs}
             runId={inputs}
             run={inspected}
             error={inputsError}
             outputPresent={
               !!inspected && state.blocks.some((b) => b.id === inspected.output_block_id)
             }
+            commands={commands}
+            onShowHere={showCardHere}
             onOpenOutput={focusBlock}
             onClose={closeInputs}
+          />
+        )}
+        {unplacedOpen && (
+          <UnplacedCards
+            commands={commands}
+            onShowHere={showCardHere}
+            onOpen={(id) => {
+              setUnplacedOpen(false);
+              focusBlock(id);
+            }}
+            onClose={() => setUnplacedOpen(false)}
           />
         )}
       </div>
