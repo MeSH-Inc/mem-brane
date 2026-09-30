@@ -222,6 +222,19 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     },
     [controller, mobile, focusMode, focusBlock, presentation],
   );
+  const submitRun = async () => {
+    if (needsAccount()) return;
+    const attention = presentation.getState().attention;
+    const reconciling = submission.state.status === 'uncertain';
+    const id = await run();
+    if (!id || reconciling) return;
+    const placementId = controller.state?.placements.find((p) => p.block_id === id)?.id;
+    if (
+      presentation.getState().reveal(attention, { blockId: id, placementId, kind: 'reveal' }) &&
+      (focusMode || mobile)
+    )
+      focusBlock(id);
+  };
   // Exact inputs live in the URL, so Back and shared links reopen the same run.
   const router = useRouter();
   const pushedInputs = useRef<string>(undefined);
@@ -664,6 +677,8 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                     }
                     onFocused={presentation.getState().consume}
                     onEdit={edit}
+                    onStop={controller.cancelRun}
+                    onRetry={controller.retryRun}
                   />
                   {focused.origin === 'generated' && (
                     <ResponseSources
@@ -675,16 +690,18 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                     />
                   )}
                   <footer>
-                    <SpawnButton
-                      block={focused}
-                      busy={spawning.includes(focused.id)}
-                      phase={commands.store.getState()[`spawn:${focused.id}`]?.phase}
-                      retry={retrySpawns.includes(focused.id)}
-                      onSpawn={() => {
-                        const placement = state.placements.find((p) => p.block_id === focused.id);
-                        if (placement) spawn(focused.id, placement.id);
-                      }}
-                    />
+                    {focused.origin !== 'generated' && (
+                      <SpawnButton
+                        block={focused}
+                        busy={spawning.includes(focused.id)}
+                        phase={commands.store.getState()[`spawn:${focused.id}`]?.phase}
+                        retry={retrySpawns.includes(focused.id)}
+                        onSpawn={() => {
+                          const placement = state.placements.find((p) => p.block_id === focused.id);
+                          if (placement) spawn(focused.id, placement.id);
+                        }}
+                      />
+                    )}
                     {focused.messageId ? (
                       <button onClick={() => continueBranch(focused.messageId)}>⑂ Continue</button>
                     ) : (
@@ -760,6 +777,8 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 onImport={attachFiles}
                 onInsertionReady={insertionReady}
                 document={controller.document}
+                onStop={controller.cancelRun}
+                onRetry={controller.retryRun}
                 onSpawn={spawn}
                 onCreate={create}
                 onEdit={edit}
@@ -838,7 +857,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                       (prompt.trim() || submission.state.status === 'uncertain') &&
                       !needsAccount()
                     )
-                      void run();
+                      void submitRun();
                   }
                 }}
               />
@@ -850,7 +869,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                     (pendingAttachments || !!compatibilityError || !prompt.trim()))
                 }
                 onClick={() => {
-                  if (!needsAccount()) void run();
+                  if (!needsAccount()) void submitRun();
                 }}
               >
                 {busy

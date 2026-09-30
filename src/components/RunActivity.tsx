@@ -1,5 +1,5 @@
 import type { WorkspaceController } from '../services/workspace';
-import { CommandButton } from './CommandButton';
+import { statusLabels } from '../lib/labels';
 
 const active = new Set(['queued', 'claimed', 'running', 'cancel_requested']);
 export function RunActivity({
@@ -26,30 +26,8 @@ export function RunActivity({
       <div className="activity-list">
         {runs.map((run) => (
           <div key={run.id} className="activity-item">
-            <span role="status">
-              {run.status === 'cancel_requested' ? 'Stopping…' : run.status}
-            </span>
+            <span role="status">{statusLabels[run.status]}</span>
             <button onClick={() => onOpen(run.output_block_id)}>Open</button>
-            {active.has(run.status) ? (
-              <CommandButton
-                tasks={controller.commands}
-                taskKey={`cancel:${run.id}`}
-                pendingLabel="Stopping…"
-                disabled={run.status === 'cancel_requested'}
-                onClick={() => void controller.cancelRun(run.id).catch(() => {})}
-              >
-                Stop
-              </CommandButton>
-            ) : (
-              <CommandButton
-                tasks={controller.commands}
-                taskKey={`retry:${run.id}`}
-                pendingLabel="Retrying…"
-                onClick={() => void controller.retryRun(run.id).catch(() => {})}
-              >
-                Retry with the same inputs
-              </CommandButton>
-            )}
             {run.error && <p className="error">{run.error}</p>}
           </div>
         ))}

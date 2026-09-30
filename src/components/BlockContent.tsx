@@ -6,13 +6,11 @@ import type { Block } from '../../shared/types/domain';
 import { useInteraction } from '../stores/interaction';
 export function BlockContent({
   block,
-  partial,
   focusRequest,
   onFocused,
   onEdit,
 }: {
   block: Block;
-  partial?: string;
   focusRequest?: string;
   onFocused?: (id: string) => void;
   onEdit: (id: string, text: string) => void;
@@ -45,12 +43,6 @@ export function BlockContent({
         <LocalImage assetId={block.content.assetId!} alt={block.content.text} />
         <figcaption>{block.content.text}</figcaption>
       </figure>
-    );
-  if (block.origin === 'generated')
-    return (
-      <div className="response-content nodrag nowheel nopan">
-        {block.content.text || partial || <span className="muted">Thinking space reserved…</span>}
-      </div>
     );
   return (
     <>

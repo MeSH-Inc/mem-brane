@@ -30,6 +30,8 @@ export default defineRailway(() => {
       BETTER_AUTH_SECRET: preserve(),
       DAILY_USER_SPEND_LIMIT: preserve(),
       DATABASE_PATH: preserve(),
+      DEEPSEEK_API_KEY: preserve(),
+      MAX_OUTPUT_TOKENS: preserve(),
       GLOBAL_DAILY_SPEND_LIMIT: preserve(),
       GLOBAL_MONTHLY_SPEND_LIMIT: preserve(),
       HOST: preserve(),

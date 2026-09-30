@@ -1,3 +1,5 @@
+import { createDeepSeek } from '@ai-sdk/deepseek';
+import { modelProvider } from './provider.js';
 import { representationText } from '../../shared/representations.js';
 import { streamText, type ModelMessage, type LanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -53,7 +55,9 @@ export const executeModel: ModelExecutor = async (request, onChunk) => {
   return executeWithModel(
     request,
     onChunk,
-    createOpenAI({ apiKey: process.env.OPENAI_API_KEY })(request.model),
+    modelProvider(request.model) === 'deepseek'
+      ? createDeepSeek({ apiKey: process.env.DEEPSEEK_API_KEY })(request.model)
+      : createOpenAI({ apiKey: process.env.OPENAI_API_KEY })(request.model),
   );
 };
 export async function executeWithModel(
@@ -67,6 +71,10 @@ export async function executeWithModel(
     maxOutputTokens: request.maxOutputTokens,
     abortSignal: request.signal,
     maxRetries: 0,
+    providerOptions:
+      modelProvider(request.model) === 'deepseek'
+        ? { deepseek: { thinking: { type: 'disabled' } } }
+        : undefined,
     // The worker logs sanitized lifecycle metadata; SDK defaults can print full request bodies.
     onError: () => {},
   });

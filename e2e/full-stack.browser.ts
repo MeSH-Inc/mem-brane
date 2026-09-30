@@ -116,6 +116,14 @@ test('built app saves through navigation, corrects rejected submissions, reconci
     expect(run.inputs.find((input: any) => input.kind === 'prompt').content.text).toBe(
       'Corrected prompt',
     );
+    await expect(page.locator('.focus-card .response-content')).toContainText('Corrected prompt');
+    await expect(
+      page.locator('.focus-card').getByRole('button', { name: 'Copy', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator('.focus-card').getByRole('button', { name: 'Develop', exact: true }),
+    ).toHaveCount(0);
+    await page.screenshot({ path: 'test-results/response-flow.png', fullPage: true });
     const db = new Database(database);
     db.prepare('DELETE FROM session').run();
     db.close();

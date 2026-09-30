@@ -249,7 +249,8 @@ export class WorkspaceController {
         this.budget = config.budget;
         this.vision = config.modelCapabilities;
         this.deps.imports.maxBytes = config.imports.maxBytes;
-        if (!this.draft.model) this.updateDraft({ model: config.defaultModel });
+        if (!this.draft.model || !config.models.includes(this.draft.model))
+          this.updateDraft({ model: config.defaultModel });
         this.emit();
       }),
     );
@@ -701,6 +702,7 @@ export class WorkspaceController {
       if (this.draft.prompt === accepted.request.payload.prompt) this.updateDraft({ prompt: '' });
       progress('refreshing');
       await this.refresh();
+      if (this.valid(epoch)) return accepted.receipt.outputBlockId;
     }).catch(() => {});
   };
   spawn = async (blockId: string, placementId: string) => {

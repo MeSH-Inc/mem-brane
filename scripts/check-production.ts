@@ -1,3 +1,4 @@
+import { providerKeyName } from '../server/llm/provider.js';
 import { config, costPolicy } from '../server/app/config.js';
 import { mailSettings } from '../server/services/mail.js';
 const issues: string[] = [];
@@ -32,7 +33,8 @@ if (config.OCR_PROVIDER !== 'disabled') {
     issues.push('Enhanced OCR requires positive shared and category daily/monthly budgets.');
 }
 if (paid.length) {
-  if (!process.env.OPENAI_API_KEY) issues.push('Set OPENAI_API_KEY on the server.');
+  for (const key of new Set(paid.map(providerKeyName)))
+    if (!process.env[key]) issues.push(`Set ${key} on the server.`);
   if (
     ![
       config.DAILY_USER_SPEND_LIMIT,

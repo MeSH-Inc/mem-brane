@@ -32,12 +32,13 @@ import { SpawnButton } from '../components/SpawnButton';
 import type { CardAction } from '../components/ArtifactActions';
 import { LiveBlockContent } from '../components/LiveBlockContent';
 import { ResponseSources } from '../components/ResponseSources';
-import { cardKind, statusLabels } from '../lib/labels';
+import type { ResponseActions } from '../components/ResponseContent';
+import { cardKind } from '../lib/labels';
 import { idleActivity, type WorkspaceDocument } from '../services/workspace-document';
 import { useInteraction } from '../stores/interaction';
 import { presentationFor } from '../stores/presentation';
 import { useStore } from 'zustand';
-type CardData = {
+type CardData = ResponseActions & {
   mobile: boolean;
   blockId: string;
   document: WorkspaceDocument;
@@ -59,7 +60,6 @@ type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
 type CardNode = Node<CardData>;
 const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
   const block = useStore(data.document.store, (s) => s.blocks[data.blockId]);
-  const status = useStore(data.document.store, (s) => s.runs[data.blockId]?.status);
   const activity = useStore(data.document.store, (s) => s.activity[data.blockId] ?? idleActivity);
   const observer = useContext(RenderObserver);
   if (!block) return null;
@@ -80,9 +80,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
       <header className="card-grip">
         <span className="kind-mark">{block.origin === 'generated' ? '✳' : '◇'}</span>
         <span>{cardKind(block)}</span>
-        <span className="card-status">
-          {status && status !== 'completed' ? statusLabels[status] : ''}
-        </span>
+        <span className="card-status" />
         <button
           className="nodrag nopan icon-button"
           title={data.mobile ? 'Open card in Focus' : 'Focus block'}
@@ -97,6 +95,8 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         focusRequest={data.focusRequest}
         onFocused={data.onFocused}
         onEdit={data.onEdit}
+        onStop={data.onStop}
+        onRetry={data.onRetry}
       />
       {block.origin === 'generated' && (
         <ResponseSources
@@ -109,13 +109,15 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
       )}
       {!data.mobile && (
         <footer className="nodrag nopan">
-          <SpawnButton
-            block={block}
-            busy={activity.busy}
-            phase={activity.phase}
-            retry={activity.retry}
-            onSpawn={() => data.onSpawn(block.id, id)}
-          />
+          {block.origin !== 'generated' && (
+            <SpawnButton
+              block={block}
+              busy={activity.busy}
+              phase={activity.phase}
+              retry={activity.retry}
+              onSpawn={() => data.onSpawn(block.id, id)}
+            />
+          )}
           {block.messageId ? (
             <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
           ) : (
@@ -146,7 +148,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
   );
 });
 const nodeTypes = { card: Card };
-interface Props {
+interface Props extends ResponseActions {
   mobile: boolean;
   onContext: (ids: string[]) => void;
   onContinue: (id: string) => void;
@@ -266,6 +268,8 @@ function Inner(props: Props) {
           onOpenSource: openSource,
           onInspect: props.onInspect,
           onRerun: props.onRerun,
+          onStop: props.onStop,
+          onRetry: props.onRetry,
         },
       };
       const previous = nodeCache.current.get(p.id);
@@ -302,6 +306,8 @@ function Inner(props: Props) {
     openSource,
     props.onInspect,
     props.onRerun,
+    props.onStop,
+    props.onRetry,
   ]);
   useEffect(() => {
     if (!request || request.kind !== 'reveal') return;

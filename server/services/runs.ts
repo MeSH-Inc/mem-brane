@@ -1,3 +1,4 @@
+import { modelProvider } from '../llm/provider.js';
 import { planRun, type RunPlanLimits } from './run-plan.js';
 import { decodeRecord, decodeJson, runRecord, runOptions, type RunRecord } from '../db/records.js';
 import type { Placement, Geometry } from '../../shared/types/domain.js';
@@ -102,7 +103,7 @@ export function submitRun(
       input.braneId,
       input.key,
       hash,
-      input.model === 'mock' ? 'mock' : 'openai',
+      modelProvider(input.model),
       input.model,
       JSON.stringify({
         ...(derivation ? { action: derivation.action, actionVersion: 1 } : {}),

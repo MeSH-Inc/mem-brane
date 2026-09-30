@@ -281,3 +281,51 @@ it.each(['eof', 'failed', 'incomplete'])(
     }
   },
 );
+
+it('DeepSeek streams text and usage with bounded non-thinking output and frozen image input', async () => {
+  const { createDeepSeek } = await import('@ai-sdk/deepseek');
+  let submitted: any;
+  const server = await localServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    submitted = JSON.parse(Buffer.concat(chunks).toString());
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end(
+      `data: ${JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', created: 0, model: 'deepseek-flash', choices: [{ index: 0, delta: { content: 'A real answer' }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', created: 0, model: 'deepseek-flash', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24 } })}\n\ndata: [DONE]\n\n`,
+    );
+  });
+  try {
+    const result = await executeWithModel(
+      {
+        model: 'deepseek-flash',
+        inputs: [],
+        maxOutputTokens: 100,
+        signal: AbortSignal.timeout(3000),
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Frozen prompt' },
+              {
+                type: 'image',
+                image: new Uint8Array([1, 2, 3]),
+                mediaType: 'image/png',
+                providerOptions: { deepseek: { imageDetail: 'low' } },
+              },
+            ],
+          },
+        ],
+      },
+      () => {},
+      createDeepSeek({ apiKey: 'fixture-only', baseURL: server.url })('deepseek-flash'),
+    );
+    expect(result.text).toBe('A real answer');
+    expect(result.usage?.inputTokens).toBe(20);
+    expect(result.usage?.outputTokens).toBe(4);
+    expect(submitted.thinking).toEqual({ type: 'disabled' });
+    expect(submitted.max_tokens).toBe(100);
+    expect(submitted.messages[0].content[1].image_url.detail).toBe('low');
+  } finally {
+    await server.close();
+  }
+});

@@ -46,7 +46,7 @@ export async function resolveMessages(
           type: 'image',
           image: bytes,
           mediaType: content.mimeType,
-          providerOptions: { openai: { imageDetail: 'low' } },
+          providerOptions: { openai: { imageDetail: 'low' }, deepseek: { imageDetail: 'low' } },
         },
       ],
     };
