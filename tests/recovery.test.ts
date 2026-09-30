@@ -1,3 +1,4 @@
+import { testProcessEnvironment } from './fixtures/process-environment';
 import { afterEach, expect, it } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -22,12 +23,10 @@ afterEach(async () => {
 });
 function start(path: string, complete = false) {
   const child = spawn(process.execPath, ['--import', 'tsx', 'tests/fixtures/worker-process.ts'], {
-    env: {
-      ...process.env,
-      NODE_ENV: 'test',
+    env: testProcessEnvironment({
       TEST_DATABASE: path,
       TEST_COMPLETE: complete ? 'yes' : 'no',
-    },
+    }),
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
   children.push(child);

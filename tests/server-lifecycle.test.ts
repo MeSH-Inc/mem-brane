@@ -1,3 +1,4 @@
+import { testProcessEnvironment } from './fixtures/process-environment';
 import { it, expect } from 'vitest';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -17,9 +18,7 @@ it('runs real auth, uploads, SSE and worker shutdown against an isolated server'
   const origin = `http://127.0.0.1:${port}`;
   const database = join(directory, 'db.sqlite');
   const child = spawn(process.execPath, ['--import', 'tsx', 'server/app/main.ts'], {
-    env: {
-      ...process.env,
-      NODE_ENV: 'test',
+    env: testProcessEnvironment({
       PORT: String(port),
       HOST: '0.0.0.0',
       SIGNUP_MODE: 'invite',
@@ -28,13 +27,9 @@ it('runs real auth, uploads, SSE and worker shutdown against an isolated server'
       APP_ORIGIN: origin,
       DATABASE_PATH: database,
       ASSET_DIRECTORY: join(directory, 'assets'),
-      MODEL_ALLOWLIST: 'mock',
-      MODEL_DEFAULT: 'mock',
-      MODEL_PRICING_JSON: '{}',
-      R2_ENDPOINT: '',
       SHUTDOWN_MS: '2000',
       MAX_OUTPUT_TOKENS: '1000',
-    },
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const exit = once(child, 'exit');

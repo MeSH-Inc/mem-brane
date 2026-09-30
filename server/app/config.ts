@@ -1,5 +1,4 @@
 import { modelPrice } from '../domain/money.js';
-import 'dotenv/config';
 import { z } from 'zod';
 const positive = (fallback: number) => z.coerce.number().int().positive().default(fallback);
 const env = z

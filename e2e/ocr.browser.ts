@@ -1,3 +1,4 @@
+import { testProcessEnvironment } from '../tests/fixtures/process-environment';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -24,25 +25,18 @@ test('bounded OCR uploads require credits and consent, recover across reload and
     process.execPath,
     ['--import', 'tsx', '--import', './tests/fixtures/ocr-fetch.ts', 'dist-server/main.js'],
     {
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
+      env: testProcessEnvironment({
         PORT: String(port),
         APP_ORIGIN: origin,
         DATABASE_PATH: database,
         ASSET_DIRECTORY: join(directory, 'assets'),
-        R2_ENDPOINT: '',
-        MODEL_ALLOWLIST: 'mock',
-        MODEL_DEFAULT: 'mock',
-        MODEL_PRICING_JSON: '{}',
         OCR_PROVIDER: 'mistral',
         MISTRAL_API_KEY: 'test-ocr-no-network',
         GLOBAL_DAILY_SPEND_LIMIT: '1',
         GLOBAL_MONTHLY_SPEND_LIMIT: '1',
         OCR_DAILY_SPEND_LIMIT: '1',
         OCR_MONTHLY_SPEND_LIMIT: '1',
-        SHUTDOWN_MS: '3000',
-      },
+      }),
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   );

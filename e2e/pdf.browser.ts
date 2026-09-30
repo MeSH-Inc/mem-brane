@@ -1,3 +1,4 @@
+import { testProcessEnvironment } from '../tests/fixtures/process-environment';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -12,19 +13,12 @@ test('PDF originals, page text, frozen context and unavailable representations i
   const directory = mkdtempSync(join(tmpdir(), 'membrane-pdf-'));
   const origin = 'http://127.0.0.1:4185';
   const child = spawn(process.execPath, ['dist-server/main.js'], {
-    env: {
-      ...process.env,
-      NODE_ENV: 'test',
+    env: testProcessEnvironment({
       PORT: '4185',
       APP_ORIGIN: origin,
       DATABASE_PATH: join(directory, 'db.sqlite'),
       ASSET_DIRECTORY: join(directory, 'assets'),
-      MODEL_ALLOWLIST: 'mock',
-      MODEL_DEFAULT: 'mock',
-      MODEL_PRICING_JSON: '{}',
-      R2_ENDPOINT: '',
-      SHUTDOWN_MS: '3000',
-    },
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const exit = once(child, 'exit');

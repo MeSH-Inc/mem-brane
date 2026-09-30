@@ -1,3 +1,4 @@
+import { testProcessEnvironment } from '../tests/fixtures/process-environment';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -14,19 +15,12 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
   const origin = 'http://127.0.0.1:4187';
   const database = join(directory, 'db.sqlite');
   const child = spawn(process.execPath, ['dist-server/main.js'], {
-    env: {
-      ...process.env,
-      NODE_ENV: 'test',
+    env: testProcessEnvironment({
       PORT: '4187',
       APP_ORIGIN: origin,
       DATABASE_PATH: database,
       ASSET_DIRECTORY: join(directory, 'assets'),
-      MODEL_ALLOWLIST: 'mock',
-      MODEL_DEFAULT: 'mock',
-      MODEL_PRICING_JSON: '{}',
-      R2_ENDPOINT: '',
-      SHUTDOWN_MS: '3000',
-    },
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const exit = once(child, 'exit');

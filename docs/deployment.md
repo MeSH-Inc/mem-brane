@@ -189,7 +189,7 @@ failure. To release them, stop the server, wait for outstanding object writes to
 settle, and run:
 
 ```sh
-node --import tsx scripts/reconcile-uploads.ts --offline
+node --import tsx --env-file-if-exists=.env scripts/reconcile-uploads.ts --offline
 ```
 
 This deletes only keys recorded in upload intents and releases their reservations;

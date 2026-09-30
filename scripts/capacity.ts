@@ -1,3 +1,5 @@
+import './fixtures/isolated-environment.js';
+import { testProcessEnvironment } from '../tests/fixtures/process-environment.js';
 import { MAX_BRANE_PLACEMENTS, MAX_BLOCK_TEXT_CHARACTERS } from '../shared/limits.js';
 // Isolated fixture exercise: no live database, provider or object storage is used.
 import { spawn } from 'node:child_process';
@@ -105,22 +107,17 @@ for (let i = 0; i < queueLimit; i++) {
   }
 }
 const child = spawn(process.execPath, ['dist-server/main.js'], {
-  env: {
-    ...process.env,
+  env: testProcessEnvironment({
     NODE_ENV: 'development',
     PORT: String(port),
     APP_ORIGIN: origin,
     DATABASE_PATH: path,
     ASSET_DIRECTORY: join(directory, 'assets'),
-    R2_ENDPOINT: '',
-    MODEL_ALLOWLIST: 'mock',
-    MODEL_DEFAULT: 'mock',
-    MODEL_PRICING_JSON: '{}',
     WORKER_CONCURRENCY: '2',
     MAX_OUTPUT_TOKENS: String(limits.maxTokens),
     TELEMETRY_INTERVAL_MS: '250',
     RUN_QUEUE_LIMIT: String(queueLimit),
-  },
+  }),
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 const exited = once(child, 'exit');

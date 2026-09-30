@@ -1,3 +1,4 @@
+import { testProcessEnvironment } from '../tests/fixtures/process-environment';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -12,19 +13,12 @@ test('interrupted two-tab edits remain recoverable and stale Spawn requires expl
   const origin = 'http://127.0.0.1:4189';
   const database = join(directory, 'db.sqlite');
   const child = spawn(process.execPath, ['dist-server/main.js'], {
-    env: {
-      ...process.env,
-      NODE_ENV: 'test',
+    env: testProcessEnvironment({
       PORT: '4189',
       APP_ORIGIN: origin,
       DATABASE_PATH: database,
       ASSET_DIRECTORY: join(directory, 'assets'),
-      MODEL_ALLOWLIST: 'mock',
-      MODEL_DEFAULT: 'mock',
-      MODEL_PRICING_JSON: '{}',
-      R2_ENDPOINT: '',
-      SHUTDOWN_MS: '3000',
-    },
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const exit = once(child, 'exit');

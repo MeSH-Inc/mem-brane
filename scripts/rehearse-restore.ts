@@ -1,3 +1,5 @@
+import './fixtures/isolated-environment.js';
+import { testProcessEnvironment } from '../tests/fixtures/process-environment.js';
 import Database from 'better-sqlite3';
 // Rehearse a downloaded bundle without modifying the original bundle or live data.
 import { cp, mkdtemp, rm } from 'node:fs/promises';
@@ -72,22 +74,14 @@ try {
   await new Promise<void>((r) => listener.close(() => r()));
   const origin = `http://127.0.0.1:${port}`;
   const child = spawn(process.execPath, ['dist-server/main.js'], {
-    env: {
-      ...process.env,
-      NODE_ENV: 'test',
+    env: testProcessEnvironment({
       READ_ONLY: '1',
-      OPENAI_API_KEY: '',
       PORT: String(port),
       APP_ORIGIN: origin,
       DATABASE_PATH: path,
       ASSET_DIRECTORY: join(directory, 'restore', 'assets'),
-      R2_ENDPOINT: '',
-      MODEL_ALLOWLIST: 'mock',
-      MODEL_DEFAULT: 'mock',
-      MODEL_PRICING_JSON: '{}',
-      SHUTDOWN_MS: '3000',
       MIN_FREE_DISK_BYTES: '1',
-    },
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const exit = once(child, 'exit');
