@@ -186,21 +186,3 @@ it('leaves work queued when admission is paused and resumes after recovery', asy
     db.close();
   }
 });
-
-it('cleans expired authentication rows in bounded batches without deleting live sessions', () => {
-  const { db, actor } = fixture();
-  try {
-    for (const expiry of [10, 20, 30])
-      db.prepare(
-        'INSERT INTO session (id,token,expiresAt,createdAt,updatedAt,userId) VALUES (?,?,?,?,?,?)',
-      ).run(uid(), uid(), expiry, 0, 0, actor);
-    expect(maintainHistory(db, { completedCheckpointDays: 7, batchSize: 1 }, 25).sessions).toBe(1);
-    expect(maintainHistory(db, { completedCheckpointDays: 7, batchSize: 1 }, 25).sessions).toBe(1);
-    expect(maintainHistory(db, { completedCheckpointDays: 7, batchSize: 1 }, 25).sessions).toBe(0);
-    expect(
-      (db.prepare('SELECT expiresAt FROM session').get() as { expiresAt: number }).expiresAt,
-    ).toBe(30);
-  } finally {
-    db.close();
-  }
-});

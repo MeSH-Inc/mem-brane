@@ -14,6 +14,9 @@ export function maintainHistory(db: DB, policy: RetentionPolicy, time = Date.now
     policy.batchSize > 1000
   )
     throw new Error('Invalid retention policy');
+  // Better Auth's SQLite adapter stores dates as ISO text. Bind the same format
+  // so both expiry indexes can compare dates directly without converting rows.
+  const authCutoff = new Date(time).toISOString();
   return db.transaction(() => {
     const checkpoints = db
       .prepare(
@@ -34,12 +37,12 @@ export function maintainHistory(db: DB, policy: RetentionPolicy, time = Date.now
       .prepare(
         'DELETE FROM session WHERE id IN (SELECT id FROM session WHERE expiresAt<? ORDER BY expiresAt LIMIT ?)',
       )
-      .run(time, policy.batchSize).changes;
+      .run(authCutoff, policy.batchSize).changes;
     const verifications = db
       .prepare(
         'DELETE FROM verification WHERE id IN (SELECT id FROM verification WHERE expiresAt<? ORDER BY expiresAt LIMIT ?)',
       )
-      .run(time, policy.batchSize).changes;
+      .run(authCutoff, policy.batchSize).changes;
     return { checkpoints, sessions, verifications };
   })();
 }
