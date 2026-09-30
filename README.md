@@ -6,7 +6,7 @@ This is a greenfield, single-server application under active development. The de
 
 ## Quick start
 
-Use Node.js 22.13+ and npm. Local verification currently uses Node 24.13.1 and npm 11.18.0 on macOS. The SQLite dependency, `better-sqlite3`, needs a compatible native binary; if a prebuilt binary is unavailable, installation requires your platform's C/C++ build tools.
+Use Node.js 22.13+ and npm. Local verification currently uses Node 24.21.0 and npm 12.1.0 on macOS. The SQLite dependency, `better-sqlite3`, needs a compatible native binary; if a prebuilt binary is unavailable, installation requires your platform's C/C++ build tools.
 
 ```sh
 git clone https://github.com/MeSH-Inc/mem-brane.git
@@ -55,6 +55,8 @@ for limits, API contracts, and operator commands.
 
 Brane navigation collapses from the upper-left menu. **Context · N** beside the prompt opens reference ordering; **History** lists this brane's responses, with Stop and Retry; earlier responses whose cards were removed load on request. Both open as dialogs without resizing the workspace. A response's **Exact inputs** (from History or its **Based on** strip) opens at its own address, `/b/:braneId?inputs=:runId`, showing the frozen inputs, cost and a link to the response. Back, Close and Escape return to where it was opened. The link works for anyone signed in to the same account. Running and failed generations remain accessible from the activity row. Card actions appear on selection, hover or keyboard focus, and stay visible on touch screens. A card's **More** menu shows it on another brane, opens its version history, or removes it from this brane while keeping its history.
 
+Removing a card preserves its content and history. **Add → Unplaced cards** lists cards in the current library with no remaining placement, with paginated summaries, full previews and **Show here**. Restoration keeps the original identity, file bytes and provenance. A removed response can also be previewed and shown again from History's **Exact inputs**. If a card still appears on another brane, use its **Show on another brane** action there. Reusing a response's inputs requires all its sources to be on the current brane; missing sources are reported and your unfinished prompt is kept.
+
 The canvas has no tool modes:
 
 | Gesture                                         | Effect                                                     |
@@ -90,7 +92,7 @@ On Linux, if browser system libraries are missing, use `npx playwright install -
 3. Vitest unit and integration tests.
 4. Playwright browser tests: the full suite in Chromium and canvas, geometry, selection, presentation, loading and native-input checks in Firefox and WebKit.
 
-The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Test server processes ignore local `.env` files and inherited deployment, backup, mail and provider settings. Application commands load `.env` explicitly at their entry point. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests include intercepted canvas APIs and an isolated built-server flow through authentication, text saving, generation, SSE reconciliation and session expiration. They do not exercise live provider accounts. The mixed-media workspace rehearsal also covers composer/title recovery, independent tabs, branching and historical provenance. Additional drills cover interrupted two-tab edits and uncertain Run/Spawn delivery across reload. Ports 4179, 4181, 4183, 4185, 4187, 4189, 4191, 4193 and 4195 must be available.
+The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Test server processes ignore local `.env` files and inherited deployment, backup, mail and provider settings. Application commands load `.env` explicitly at their entry point. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests include intercepted canvas APIs and an isolated built-server flow through authentication, text saving, generation, SSE reconciliation and session expiration. They do not exercise live provider accounts. The mixed-media workspace rehearsal also covers composer/title recovery, independent tabs, branching and historical provenance. Additional drills cover interrupted two-tab edits and uncertain Run/Spawn delivery across reload. Ports 4179, 4181, 4183, 4185, 4187, 4189, 4191, 4193, 4195 and 4199 must be available.
 
 Run `npm run test:stress` separately, with port 4180 free, to measure 500 mounted cards under four streams, delayed saves and geometry conflicts. It runs production profiling builds serially across all three engines and writes `artifacts/stress/latest.md` and `latest.json`. See the [interaction verification guide](docs/interaction-verification.md) for measurement definitions, the interactive fixture and the pending physical-device protocol.
 
@@ -216,7 +218,7 @@ Back up SQLite through the online backup script and back up image bytes separate
 
 - Webpage imports use lightweight text extraction, without browser rendering or a rich readability parser. HTTP(S) targets and redirects are validated, DNS is pinned, and time/byte limits apply. Failed imports permit pasted text.
 - Image context resolves authorized bytes using frozen asset IDs and SHA-256 hashes. Paid models must explicitly support vision in the pricing catalog; image requests use low detail.
-- Public signup is enabled. Invitation policy, email delivery, email verification and password recovery are not implemented in this slice.
+- Signup can be open, invitation-only or closed. Guest workspaces support account claiming; after guest expiry and a seven-day recovery grace, unclaimed content is reclaimed with durable asset deletion. Email delivery, password recovery and backup alerts are implemented but require operator configuration and delivery acceptance; email verification is not implemented. See [recovery and alert activation](docs/operations/recovery-and-alerts.md) and [retention](docs/operations/retention.md).
 - Local tests cover mock execution, adapter fixtures, authenticated APIs, migrations, worker crash recovery and browser interactions. They do not establish live OpenAI/R2 behavior or production readiness.
 - Multiplayer, CRDTs, presence, rich text, embeddings, semantic retrieval, plugin frameworks, workflow execution, automatic regeneration and multi-server infrastructure are deferred.
 
