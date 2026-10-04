@@ -68,22 +68,10 @@ function AuthScreen({
           m<span>·</span>b
         </div>
         <span className="eyebrow">MEM-BRANE / A SPATIAL NOTEBOOK</span>
-        <h1>
-          Give your thoughts
-          <br />a little more room.
-        </h1>
-        <p>
-          A place to collect, connect, and explore.
-          <br />
-          One brane. Many possibilities.
-        </p>
+        <h1>A spatial notebook for cards and AI.</h1>
         <div className="art-note one">
           What if…<i>an idea could take shape?</i>
         </div>
-        <div className="art-note two">
-          ◇<i>Make space for the unexpected.</i>
-        </div>
-        <span className="auth-footnote">YOUR IDEAS, AT YOUR OWN PACE.</span>
       </div>
       <form
         className="auth-form"
