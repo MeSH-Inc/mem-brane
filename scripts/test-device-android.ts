@@ -1,4 +1,4 @@
-import { visibleEditorSwipe } from './device-geometry';
+import { visibleEditorSwipe, visiblePinch, isolatedCaseUrls } from './device-geometry';
 import { connectCdp } from './device-cdp';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -9,8 +9,7 @@ import type { StressMeasurement } from '../e2e/stress/metrics';
 // is operated on; closing the connection does not quit the user's browser.
 const endpoint = process.env.ANDROID_CDP_URL;
 if (!endpoint) throw new Error('Set ANDROID_CDP_URL to the forwarded Chrome DevTools WebSocket.');
-const url =
-  process.env.STRESS_DEVICE_URL ?? 'http://127.0.0.1:4180/e2e/stress/index.html?view=canvas';
+const caseUrls = isolatedCaseUrls(process.env.STRESS_DEVICE_CASE_URLS);
 const browser = await connectCdp(endpoint);
 let cdp: Awaited<ReturnType<typeof connectCdp>> | undefined;
 let targetId: string | undefined;
@@ -53,7 +52,13 @@ async function key(key: string, code: string, windowsVirtualKeyCode: number) {
 }
 const directory = process.env.STRESS_DEVICE_OUTPUT ?? 'artifacts/stress/device';
 await mkdir(directory, { recursive: true });
-const reports: { delayMs: number; passed: string[]; metrics?: StressMeasurement }[] = [];
+const reports: {
+  delayMs: number;
+  origin: string;
+  passed: string[];
+  pinchTargets?: unknown;
+  metrics?: StressMeasurement;
+}[] = [];
 let failure: string | undefined;
 let environment: unknown;
 const card = '[data-id="placement-000"]';
@@ -94,7 +99,11 @@ try {
   cdp = await connectCdp(targetUrl.href);
   await cdp.send('Page.enable');
   await cdp.send('Page.bringToFront');
-  await cdp.send('Page.navigate', { url });
+  const initialUsage = await cdp.send('Storage.getUsageAndQuota', {
+    origin: new URL(caseUrls[0]).origin,
+  });
+  assert.equal(initialUsage.usage, 0, 'First case origin must have no existing quota-managed data');
+  await cdp.send('Page.navigate', { url: caseUrls[0] });
   await wait(
     () => evaluate(() => document.querySelectorAll('.react-flow__node').length === 500),
     'mount 500 cards',
@@ -120,13 +129,21 @@ try {
       cdp = await connectCdp(targetUrl.href);
       await cdp.send('Page.enable');
       await cdp.send('Page.bringToFront');
-      await cdp.send('Page.navigate', { url });
+      const usage = await cdp.send('Storage.getUsageAndQuota', {
+        origin: new URL(caseUrls[1]).origin,
+      });
+      assert.equal(usage.usage, 0, 'Second case origin must have no existing quota-managed data');
+      await cdp.send('Page.navigate', { url: caseUrls[1] });
       await wait(
         () => evaluate(() => document.querySelectorAll('.react-flow__node').length === 500),
         'fresh fixture',
       );
     }
-    const report: (typeof reports)[number] = { delayMs, passed: [] };
+    const report: (typeof reports)[number] = {
+      delayMs,
+      origin: new URL(caseUrls[reports.length]).origin,
+      passed: [],
+    };
     reports.push(report);
     await evaluate((delay) => {
       window.stress.server.delayMs = delay;
@@ -189,8 +206,37 @@ try {
     await evaluate(() => window.stress.metrics.wait('pan:0'));
     report.passed.push('background touch pan');
     const fresh = await box(editor);
-    const first = { id: 1, x: host.x + 15, y: fresh.y + 50 },
-      second = { id: 2, x: fresh.x + 100, y: fresh.y + 50 };
+    const viewport = await evaluate(() => ({
+      x: visualViewport?.offsetLeft ?? 0,
+      y: visualViewport?.offsetTop ?? 0,
+      width: visualViewport?.width ?? innerWidth,
+      height: visualViewport?.height ?? innerHeight,
+    }));
+    const { first, second, end } = visiblePinch(fresh, await box('.canvas-host'), viewport);
+    report.pinchTargets = { first, second, end };
+    assert(
+      await evaluate(
+        ({ selector, first, second, end }) => {
+          const element = document.querySelector(selector);
+          const canvas = document.querySelector('.canvas-host');
+          const background = document.elementFromPoint(first.x, first.y);
+          const overEditor = Array.from(
+            { length: 11 },
+            (_, i) =>
+              document.elementFromPoint(second.x + ((end.x - second.x) * i) / 10, second.y) ===
+              element,
+          ).every(Boolean);
+          return (
+            !!background &&
+            !!canvas?.contains(background) &&
+            !background.closest('.react-flow__node,button,input,textarea,a') &&
+            overEditor
+          );
+        },
+        { selector: editor, first, second, end },
+      ),
+      'Pinch must start on canvas background and visible editor, with visible editor travel',
+    );
     const scale = () =>
       evaluate(
         () =>
@@ -204,7 +250,7 @@ try {
     await evaluate(() =>
       window.stress.metrics.arm('pinch:0', 'pointermove', '.react-flow__viewport', 'transform'),
     );
-    await touch('touchMove', [first, { ...second, x: second.x + 70 }]);
+    await touch('touchMove', [first, end]);
     await touch('touchEnd', []);
     await wait(async () => (await scale()) > scaleBefore + 0.1, 'pinch zoom');
     await evaluate(() => window.stress.metrics.wait('pinch:0'));

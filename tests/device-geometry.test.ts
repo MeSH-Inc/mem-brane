@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { visibleEditorSwipe } from '../scripts/device-geometry';
+import { visibleEditorSwipe, visiblePinch, isolatedCaseUrls } from '../scripts/device-geometry';
 
 describe('physical Android editor swipe', () => {
   it('keeps the POCO regression path above the clipped canvas bottom', () => {
@@ -34,5 +34,37 @@ describe('physical Android editor swipe', () => {
     ]) {
       expect(() => visibleEditorSwipe(rectangles)).toThrow();
     }
+  });
+});
+
+describe('isolated physical device cases', () => {
+  it('rejects shared origins even if URL query or hostname path differs', () => {
+    const a = 'http://127.0.0.1:48001/e2e/stress/index.html?view=canvas';
+    expect(() => isolatedCaseUrls(JSON.stringify([a, a + '&case=2']))).toThrow();
+    expect(() => isolatedCaseUrls(undefined)).toThrow();
+    expect(() => isolatedCaseUrls(JSON.stringify([a]))).toThrow();
+    expect(() =>
+      isolatedCaseUrls(JSON.stringify([a, 'https://example.com/e2e/stress/index.html'])),
+    ).toThrow();
+    expect(isolatedCaseUrls(JSON.stringify([a, a.replace('48001', '48002')]))).toHaveLength(2);
+  });
+  it('keeps both pinch contacts and the outward travel within the clipped editor/viewport', () => {
+    const p = visiblePinch(
+      { x: 120, y: 390, width: 318, height: 198 },
+      { x: 0, y: 269, width: 392, height: 285 },
+      { x: 0, y: 0, width: 392, height: 714 },
+    );
+    expect(p.first.x).toBe(15);
+    expect(p.second.x).toBe(144);
+    expect(p.end.x).toBe(214);
+    expect(p.second.y).toBeGreaterThan(390);
+    expect(p.second.y).toBeLessThan(554);
+    expect(() =>
+      visiblePinch(
+        { x: 340, y: 390, width: 100, height: 198 },
+        { x: 0, y: 269, width: 392, height: 285 },
+        { x: 0, y: 0, width: 392, height: 714 },
+      ),
+    ).toThrow();
   });
 });

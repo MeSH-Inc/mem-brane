@@ -95,13 +95,15 @@ For an unlocked Android phone with USB debugging authorized and Chrome open, use
 
 ```sh
 adb devices -l
-adb reverse tcp:4180 tcp:4180
+adb reverse tcp:49351 tcp:4180
+adb reverse tcp:49352 tcp:4180
 adb forward tcp:59261 localabstract:chrome_devtools_remote
 ANDROID_CDP_URL='ws://127.0.0.1:59261/devtools/browser' \
+STRESS_DEVICE_CASE_URLS='["http://127.0.0.1:49351/e2e/stress/index.html?view=canvas","http://127.0.0.1:49352/e2e/stress/index.html?view=canvas"]' \
 STRESS_DEVICE_LABEL='Phone model / Android version' npm run test:device:android
 ```
 
-Localhost is a secure context on the phone. If Chrome uses a process-specific debugging socket, inspect `adb shell cat /proc/net/unix` for `chrome_devtools_remote` and forward that socket instead. Choose an unused host port; the values above are examples. After the run, remove only the mappings created for it with `adb forward --remove tcp:59261` and `adb reverse --remove tcp:4180`. Stop the fixture and SafariDriver processes started for testing.
+Localhost is a secure context on the phone. If Chrome uses a process-specific debugging socket, inspect `adb shell cat /proc/net/unix` for `chrome_devtools_remote` and forward that socket instead. Choose an unused host port; the values above are examples. After the run, remove only the mappings created for it with `adb forward --remove tcp:59261` and `adb reverse --remove tcp:49351` / `adb reverse --remove tcp:49352`. Stop the fixture and SafariDriver processes started for testing.
 
 ## Human input record — pending
 
@@ -119,3 +121,20 @@ Record device model, OS, browser/version, input hardware, display refresh rate, 
 | Slow save and conflict visible while editing a different card                                     | Input remains usable, independent save/cancel progresses, latest geometry survives retry | Pending |
 
 The next architectural decision should use this record: classify any stall as event handling, React rendering, layout/paint or storage/transport, then change the responsible boundary and rerun the same workload. Card virtualization needs explicit editor-focus retention and gesture cancellation tests before adoption.
+
+### Android case isolation and touch targeting
+
+`STRESS_DEVICE_CASE_URLS` supplies two distinct dedicated localhost origins, in
+350 ms / 1500 ms save-delay order. Select fresh unused device-side ports for each
+run; both reverse to the same local fixture server. The runner rejects an origin
+with existing quota-managed browser data instead of clearing it. A new tab alone
+does not isolate persisted synthetic drafts. Receipts record each origin; never
+reuse an origin belonging to another task or real application.
+
+Editor swipes use the intersection of editor, clipping ancestors and visual
+viewport, with all injected points hit-tested against the editor. Pinch contacts
+are derived from visible geometry: one starts on unobstructed canvas background,
+and the second starts over the editor with its outward travel hit-tested there.
+Insufficient space or an occluding element fails before touch injection; scroll,
+zoom and conflict assertions are unchanged. These are CDP inputs on physical
+Chrome, not human rotation, OS app-resume or physical display-latency evidence.
