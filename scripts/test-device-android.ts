@@ -1,3 +1,4 @@
+import { visibleEditorSwipe } from './device-geometry';
 import { connectCdp } from './device-cdp';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -133,15 +134,44 @@ try {
       window.stress.metrics.reset('android-' + delay);
     }, delayMs);
     const before = await camera();
-    const bounds = await box(editor);
+    const clipping = await evaluate((selector) => {
+      const element = document.querySelector(selector);
+      if (!element) throw new Error('Missing fixture editor');
+      const rectangles = [element.getBoundingClientRect().toJSON()];
+      for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        const style = getComputedStyle(ancestor);
+        if (/(auto|scroll|hidden|clip)/.test(`${style.overflowX} ${style.overflowY}`)) {
+          rectangles.push(ancestor.getBoundingClientRect().toJSON());
+        }
+      }
+      const viewport = window.visualViewport;
+      rectangles.push({
+        x: viewport?.offsetLeft ?? 0,
+        y: viewport?.offsetTop ?? 0,
+        width: viewport?.width ?? innerWidth,
+        height: viewport?.height ?? innerHeight,
+      });
+      return rectangles;
+    }, editor);
+    const path = visibleEditorSwipe(clipping);
+    assert(
+      await evaluate(
+        ({ selector, from, to }) => {
+          const element = document.querySelector(selector);
+          return Array.from({ length: 11 }, (_, i) => ({
+            x: from.x + ((to.x - from.x) * i) / 10,
+            y: from.y + ((to.y - from.y) * i) / 10,
+          })).every(({ x, y }) => document.elementFromPoint(x, y) === element);
+        },
+        { selector: editor, ...path },
+      ),
+      'Entire swipe must hit the visible editor',
+    );
     const scrollBefore = await evaluate(
       (selector) => document.querySelector(selector)!.scrollTop,
       editor,
     );
-    await swipe(
-      { x: bounds.x + 100, y: bounds.y + bounds.height - 20 },
-      { x: bounds.x + 100, y: bounds.y + 20 },
-    );
+    await swipe(path.from, path.to);
     await wait(
       async () =>
         (await evaluate((selector) => document.querySelector(selector)!.scrollTop, editor)) >
