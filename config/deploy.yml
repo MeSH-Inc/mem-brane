@@ -51,7 +51,7 @@ env:
     OCR_PROVIDER: disabled
     SHUTDOWN_MS: "20000"
     # One R2 bucket, one token: hourly bundles under mem-brane/production/,
-    # Litestream under litestream/.
+    # Litestream under db/.
     BACKUP_BUCKET: mem-brane-backup
     BACKUP_ENDPOINT: https://edc30d8f8e11aaf6c06393f7b611a7a7.r2.cloudflarestorage.com
     BACKUP_REGION: auto

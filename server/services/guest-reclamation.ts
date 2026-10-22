@@ -51,11 +51,9 @@ export function reclaimExpiredGuests(db: DB, batchSize: number, time = Date.now(
         SELECT storage_key,?,MAX(size) FROM (
           SELECT storage_key,size FROM assets WHERE owner_id=?
           UNION ALL SELECT id,size FROM upload_intents WHERE owner_id=?
-          UNION ALL SELECT j.storage_key,j.size FROM asset_consolidation_journal j
-            JOIN assets a ON a.id=j.canonical_id WHERE a.owner_id=? AND j.state!='deleted'
         ) GROUP BY storage_key
       `,
-        ).run(library, library, library, library);
+        ).run(library, library, library);
         const ownedBlocks = 'SELECT id FROM blocks WHERE owner_id=?';
         const ownedAssets = 'SELECT id FROM assets WHERE owner_id=?';
         db.prepare('DELETE FROM artifact_imports WHERE owner_id=?').run(library);
@@ -75,9 +73,6 @@ export function reclaimExpiredGuests(db: DB, batchSize: number, time = Date.now(
         db.prepare(`DELETE FROM asset_representations WHERE asset_id IN (${ownedAssets})`).run(
           library,
         );
-        db.prepare(
-          `DELETE FROM asset_consolidation_journal WHERE canonical_id IN (${ownedAssets})`,
-        ).run(library);
         db.prepare('DELETE FROM assets WHERE owner_id=?').run(library);
         db.prepare('DELETE FROM upload_intents WHERE owner_id=?').run(library);
         db.prepare('DELETE FROM guest_claim_intents WHERE library_id=?').run(library);

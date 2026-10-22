@@ -8,7 +8,7 @@ guide covers what is specific to mem-brane.
 
 ```txt
 visitor ─TLS─▶ Cloudflare edge ─tunnel─▶ cloudflared ─▶ kamal-proxy 127.0.0.1:80 ─▶ mem-brane:3001
-                                                         Litestream ─▶ R2 mem-brane-backup/litestream/
+                                                         Litestream ─▶ R2 mem-brane-backup/db/
 ```
 
 ## Configuration
@@ -79,7 +79,7 @@ budgets (see `config/deploy.yml`). Set the budgets to zero to disable paid model
 
 Two jobs write to the private `mem-brane-backup` R2 bucket with one scoped token:
 
-- **Litestream** replicates the database continuously under `litestream/`, with a
+- **Litestream** replicates the database continuously under `db/`, with a
   daily snapshot and 30 days of point-in-time history. It covers the database only.
 - **Hourly bundle job** (`BACKUP_*`) creates one portable SQL-plus-assets bundle
   per UTC day under `mem-brane/production/`. It validates the local bundle, uploads

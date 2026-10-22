@@ -1,4 +1,3 @@
-import { cleanupLiabilities } from './cleanup-report.js';
 import { policyIdentity } from '../ingestion/policy.js';
 import { decodeContent } from '../services/representations.js';
 import { representationId } from '../domain/canonical.js';
@@ -86,6 +85,5 @@ export async function verifyRestoration(db: DB, store: Pick<AssetStore, 'get'>) 
     assets: assets.length,
     references,
     pendingUploads: pending,
-    cleanup: cleanupLiabilities(db),
   };
 }

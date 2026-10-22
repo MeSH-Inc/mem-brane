@@ -17,9 +17,19 @@ export function openDatabase(path: string): DB {
     db.pragma('foreign_keys = ON');
     db.pragma('busy_timeout = 5000');
     db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY)');
-    for (const name of readdirSync(resolve('migrations'))
+    const names = readdirSync(resolve('migrations'))
       .filter((n) => n.endsWith('.sql'))
-      .sort()) {
+      .sort();
+    // History was squashed into 001-baseline.sql. A database that applied a migration
+    // this checkout no longer has predates the baseline and cannot be upgraded.
+    const unknown = (
+      db.prepare('SELECT name FROM schema_migrations').pluck().all() as string[]
+    ).filter((name) => !names.includes(name));
+    if (unknown.length)
+      throw new Error(
+        `Database predates the schema baseline (applied ${unknown[0]}); start from an empty database`,
+      );
+    for (const name of names) {
       if (!db.prepare('SELECT 1 FROM schema_migrations WHERE name=?').get(name)) {
         // SQLite table rebuilds require enforcement off outside the transaction. Validate
         // the complete resulting graph before commit, then restore enforcement even on failure.
