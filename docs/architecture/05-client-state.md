@@ -42,7 +42,7 @@ interaction contract, including jitter, native controls, cancellation and update
 during resizing. Trusted multi-touch injection currently runs in Chromium; native
 tap tests run in all three engines. Hardware gestures require hands-on verification.
 
-Placement geometry uses optimistic concurrency. Each placement has a monotonically increasing `version`; PATCH requires that version and atomically returns the updated placement or HTTP 409. GET placement applies the same ownership checks. Migration 005 initializes existing placement versions to zero.
+Placement geometry uses optimistic concurrency. Each placement has a monotonically increasing `version`; PATCH requires that version and atomically returns the updated placement or HTTP 409. GET placement applies the same ownership checks.
 
 `PlacementSaves` owns one independent write lane per placement. It sends at most one request per lane, coalesces waiting moves into the newest intent, and advances the next expected version only from that lane's successful acknowledgement. Refreshes cannot silently rebase queued edits onto another writer's version, and older snapshots cannot replace newer acknowledged geometry. The controller also ignores fetch responses and failures superseded by a newer refresh request. The numeric geometry form uses the same queue as drag, resize and keyboard movement.
 
@@ -113,8 +113,8 @@ same rule to its source set. Generated sources and immutable conversation lineag
 are resolved through their existing revision boundaries.
 
 Both HTTP submission endpoints return `{ runId, outputBlockId, edits }`. Each edit
-receipt contains its block ID, actual accepted version and content. Migration 021
-adds immutable `submission_receipts`, written inside the admission transaction.
+receipt contains its block ID, actual accepted version and content. Immutable
+`submission_receipts` are written inside the admission transaction.
 Deduplicated submission returns that original receipt, even after subsequent edits
 or worker completion. A no-op edit retains its version. The client validates the
 receipt before retiring the journal, reconciles acknowledged versions monotonically,

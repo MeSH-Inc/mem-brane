@@ -169,8 +169,7 @@ restore, then confirms that missing and corrupted bytes are detected.
 
 ## Measured capacity and disk admission
 
-The capacity exercise and its machine-specific results are recorded in
-[the capacity report](operations/capacity.md). Current defaults admit eight active
+Current defaults admit eight active
 or queued generation runs, six webpage imports globally and three per actor.
 Workspaces admit 200 placements. Artifact text is limited to 20,000 characters and
 serialized content to 32 KiB, including multibyte characters and JSON escaping.
@@ -230,9 +229,6 @@ startup migrations and session preparation operate on the disposable copy. The
 original bundle and live database are untouched.
 
 Use `scripts/fixture-bundle.ts /new/fixture-directory` for synthetic drills.
-The September 8 rehearsal completed remote verification, retrieval and four HTTP
-checks using synthetic image/provenance data; see
-[the transfer receipt](operations/offhost-receipt.json).
 
 ## Production configuration and live integration smoke test
 

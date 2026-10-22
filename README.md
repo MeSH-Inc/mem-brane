@@ -2,11 +2,11 @@
 
 A spatial workspace for thinking with cards and AI. Create a **brane**, arrange text, images, PDFs and imported webpages, then develop a card or write a prompt with exactly the cards you choose as context. Every response shows what it was based on, keeps the exact inputs it was sent, and says when a source has changed since.
 
-This is a greenfield, single-server application under active development. The default **mock** model streams deterministic text locally without provider credentials or model spend. Live OpenAI and R2 integrations are implemented, but have not been verified against live accounts.
+This is a greenfield, single-server application under active development, running at [mem-brane.com](https://mem-brane.com) with DeepSeek generation under small spend limits. Locally, the default **mock** model streams deterministic text without provider credentials or model spend.
 
 ## Quick start
 
-Use Node.js 22.13+ and npm. Local verification currently uses Node 24.21.0 and npm 12.1.0 on macOS. The SQLite dependency, `better-sqlite3`, needs a compatible native binary; if a prebuilt binary is unavailable, installation requires your platform's C/C++ build tools.
+Use Node.js 24 (see `.node-version`) and npm. The SQLite dependency, `better-sqlite3`, needs a compatible native binary; if a prebuilt binary is unavailable, installation requires your platform's C/C++ build tools.
 
 ```sh
 git clone https://github.com/MeSH-Inc/mem-brane.git
@@ -27,199 +27,24 @@ Set `SEED_EMAIL` and `SEED_PASSWORD` to override those credentials, or skip the 
 
 Vite serves the browser on port 5173 and proxies `/api` to the Node server on port 3001. Use `localhost` to match `APP_ORIGIN`. If you change the browser hostname, update that setting too. Run commands from the repository root: migrations, browser assets and default data paths resolve from the working directory.
 
-## First steps
-
-1. Open the seeded brane or choose **New brane**.
-2. In Canvas, double-click empty space to create a thought and type into its editor. In Focus, choose **Add → Text** instead.
-3. Choose **Develop** on a card to create a response from it. Develop captures the card's current text and records provenance; it does not read the prompt or inherit a conversation automatically.
-4. To compose, choose **Use as context** on cards (or select them and choose **+ Add N selected**), order them under **Context · N**, write a prompt and Run. The response's **Based on** strip links to its sources and exact inputs, and marks sources edited since. **⑂ Continue** on a response explicitly selects its conversation's ancestor chain.
-5. An empty brane lists these steps. Titles, text and placement changes save automatically. The composer shows saving status; failed title writes retain the draft and offer Retry. Background runs continue when you navigate away.
-
-The mock model exercises streaming and persistence but does not perform reasoning or image understanding.
-
-## Import images and PDFs
-
-Paste a screenshot, drop files onto the canvas, or choose **Add → Image / PDF**. The **+** button in the prompt attaches files as explicit context. Text paste keeps normal editor behavior. Pending imports show previews, survive navigation and can be recovered after reload; Retry reuses the original import identity.
-
-PNG, JPEG, GIF, WebP and PDF files are supported, up to 5 MiB by default. Original files are retained. PDFs expose extracted text by page and work as text context with every configured model. Scanned PDFs without a text layer are kept but are not usable as context. Embedded images are not sent as model context. Documents beyond extraction limits remain downloadable without sending partial text. Animated images are stored but require a still image for model context.
-
-## Canvas and Focus
-
-Brane navigation collapses from the upper-left menu. **Context · N** beside the prompt opens reference ordering; **History** lists this brane's responses, with Stop and Retry; earlier responses whose cards were removed load on request. Both open as dialogs without resizing the workspace. A response's **Exact inputs** (from History or its **Based on** strip) opens at its own address, `/b/:braneId?inputs=:runId`, showing the frozen inputs, cost and a link to the response. Back, Close and Escape return to where it was opened. The link works for anyone signed in to the same account. Running and failed generations remain accessible from the activity row. Card actions appear on selection, hover or keyboard focus, and stay visible on touch screens. A card's **More** menu shows it on another brane, opens its version history, or removes it from this brane while keeping its history.
-
-Removing a card preserves its content and history. **Add → Unplaced cards** lists cards in the current library with no remaining placement, with paginated summaries, full previews and **Show here**. Restoration keeps the original identity, file bytes and provenance. A removed response can also be previewed and shown again from History's **Exact inputs**. If a card still appears on another brane, use its **Show on another brane** action there. Reusing a response's inputs requires all its sources to be on the current brane; missing sources are reported and your unfinished prompt is kept.
-
-The canvas has no tool modes:
-
-| Gesture                                         | Effect                                                     |
-| ----------------------------------------------- | ---------------------------------------------------------- |
-| Drag empty canvas                               | Select cards intersecting the marquee                      |
-| Double-click empty canvas                       | Create a thought                                           |
-| Drag a card header                              | Move the card, or the selected group if it is selected     |
-| Shift-click a header                            | Toggle that placement in the selection                     |
-| Space-drag, middle/right drag, one-finger touch | Pan the viewport, including from a card header             |
-| Arrow keys / Alt+Arrow keys                     | Nudge / resize the selected cards (Shift for larger steps) |
-
-Use Fit View to find offscreen cards. Editor text gestures do not move cards. Escape, blur and pointer cancellation abort selection, movement and resizing without saving; cancellation restores the previous selection. Wheel gestures pan; Control/Command-wheel zooms around the pointer.
-
-Selection belongs to placements: two instances of the same block can be selected independently. When cards are selected, the prompt offers **+ Add N selected**, which resolves the selection to unique blocks. Responses offer **⑂ Continue** to branch their conversation. Selection, proximity, movement and resizing never invoke a model or implicitly change context.
-
-Mobile defaults to **Focus**, with a full-width editor, horizontal block outline, tap-to-add, image picker and brane navigation. Canvas is an optional overview, with touch viewport panning. Canvas rendering is lazy. In production, PWA installation also precaches Canvas code and styles in the background so it can open offline. A focused link has the form `/b/:braneId?focus=:blockId&view=focus`.
-
-## Local verification and development
-
-Install the three browser engines once before running browser checks, and repeat after a Playwright update that requires new browser binaries:
+## Develop
 
 ```sh
-npx playwright install chromium firefox webkit
-npm run verify
+npx playwright install chromium firefox webkit   # once
+npm run verify                                   # format, build, unit and browser tests
 ```
 
-On Linux, if browser system libraries are missing, use `npx playwright install --with-deps chromium firefox webkit` to install the browsers and required system packages.
+`npm run verify` is the pre-push gate; there is no CI. See [development](docs/development.md) for every command, configuration setting and the stress suite.
 
-`npm run verify` stops at the first failure and runs, in order:
+## Documentation
 
-1. Formatting checks.
-2. TypeScript checking and production builds for browser and server.
-3. Vitest unit and integration tests.
-4. Playwright browser tests: the full suite in Chromium and canvas, geometry, selection, presentation, loading and native-input checks in Firefox and WebKit.
-
-The checks use temporary databases, mock providers and fixture APIs; no `.env`, seeded database or paid credentials are required. Test server processes ignore local `.env` files and inherited deployment, backup, mail and provider settings. Application commands load `.env` explicitly at their entry point. Playwright starts its own Vite server on `127.0.0.1:4179`, so leave that port available. Browser tests include intercepted canvas APIs and an isolated built-server flow through authentication, text saving, generation, SSE reconciliation and session expiration. They do not exercise live provider accounts. The mixed-media workspace rehearsal also covers composer/title recovery, independent tabs, branching and historical provenance. Additional drills cover interrupted two-tab edits and uncertain Run/Spawn delivery across reload. Ports 4179, 4181, 4183, 4185, 4187, 4189, 4191, 4193, 4195 and 4199 must be available.
-
-Run `npm run test:stress` separately, with port 4180 free, to measure 500 mounted cards under four streams, delayed saves and geometry conflicts. It runs production profiling builds serially across all three engines and writes `artifacts/stress/latest.md` and `latest.json`. See the [interaction verification guide](docs/interaction-verification.md) for measurement definitions, the interactive fixture and the pending physical-device protocol.
-
-Development currently favors direct architectural improvements over compatibility scaffolding. Make focused, atomic commits directly to `main`, verify changes locally before committing, and run `npm run verify` before pushing. GitHub Actions is deferred until it provides a concrete benefit such as catching platform differences, shared verification across independent contributors, or repeatable release artifacts.
-
-| Command                  | Purpose                                              |
-| ------------------------ | ---------------------------------------------------- |
-| `npm run dev`            | Browser, API and background workers in watch mode    |
-| `npm run dev:web`        | Vite only                                            |
-| `npm run dev:server`     | API and workers only                                 |
-| `npm run db:migrate`     | Apply pending SQLite migrations                      |
-| `npm run db:seed`        | Create the development account and initial brane     |
-| `npm test`               | Unit and integration tests                           |
-| `npm run test:browser`   | Chromium suite and Firefox/WebKit interaction tests  |
-| `npm run test:stress`    | 500-card responsiveness and render-isolation checks  |
-| `npm run preview:stress` | Interactive stress fixture on port 4180              |
-| `npm run typecheck`      | TypeScript validation                                |
-| `npm run format`         | Format application code, tests and documentation     |
-| `npm run format:check`   | Check formatting without writing                     |
-| `npm run build`          | Typecheck and build `dist/` and `dist-server/`       |
-| `npm run verify`         | Complete local pre-push checks                       |
-| `npm start`              | Serve the built browser, API and workers on loopback |
-
-## Configuration
-
-For production, start with [.env.production.example](.env.production.example), run `npm run check:production`, and follow the [bounded integration smoke test](docs/deployment.md#production-configuration-and-live-integration-smoke-test). For installation and offline behavior, see [the PWA guide](docs/offline-pwa.md).
-
-[.env.example](.env.example) lists defaults. Local data lives under ignored `data/`; dependencies, build outputs, browser test output and `.env` are also ignored.
-
-| Settings                                                               | Purpose                                                                          |
-| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `PORT`, `APP_ORIGIN`                                                   | Server port and trusted browser origin                                           |
-| `BETTER_AUTH_SECRET`                                                   | Authentication secret; replace the example value for deployed use                |
-| `DATABASE_PATH`, `ASSET_DIRECTORY`                                     | SQLite database and local image bytes                                            |
-| `MODEL_ALLOWLIST`, `MODEL_DEFAULT`                                     | Comma-separated allowed models and selected default; default must be allowlisted |
-| `OPENAI_API_KEY`                                                       | Credentials for real OpenAI invocation                                           |
-| `DAILY_USER_SPEND_LIMIT`, `MODEL_PRICING_JSON`                         | Paid admission limit and verified model pricing/capabilities                     |
-| `WORKER_CONCURRENCY`, `USER_RUN_LIMIT`                                 | Global worker concurrency and per-user active-run limit                          |
-| `MAX_OUTPUT_TOKENS`, `MAX_CONTEXT_CHARACTERS`                          | Model output and context bounds                                                  |
-| `MAX_WEBPAGE_BYTES`, `MAX_UPLOAD_BYTES`                                | Import and image upload bounds                                                   |
-| `CHECKPOINT_INTERVAL_MS`, `CHECKPOINT_CHARACTERS`, `LEASE_MS`          | Streaming persistence and worker recovery timing                                 |
-| `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Optional S3-compatible object storage; absent endpoint selects local files       |
-
-To enable real models, supply `OPENAI_API_KEY`, add the model ID to `MODEL_ALLOWLIST`, configure its operator-verified entry in `MODEL_PRICING_JSON`, and set positive `DAILY_USER_SPEND_LIMIT`, `GLOBAL_DAILY_SPEND_LIMIT` and `GLOBAL_MONTHLY_SPEND_LIMIT` values. Optionally change `MODEL_DEFAULT`. A zero budget disables paid admission. Pricing entries include input/output token rates, vision capability, an image token bound, source URL and verification date; see [billing configuration](docs/deployment.md#billing-configuration-and-uncertain-requests).
-
-Paid admission atomically reserves a conservative usage bound. Recorded costs use frozen configured rates, not provider invoices. Interrupted or unmetered requests retain their reservations until explicit, audited reconciliation. Retrying never assumes the previous request was free.
-
-## Domain and persistence
-
-| Record        | Responsibility                                                         |
-| ------------- | ---------------------------------------------------------------------- |
-| Block         | Stable artifact identity, content kind and authored/generated origin   |
-| LiveState     | Current editable content for authored blocks, with version checks      |
-| BlockRevision | Immutable snapshot used by history and model inputs                    |
-| Placement     | One block instance on one brane, with independent geometry and version |
-| Run           | Execution state and an ordered set of frozen input revisions           |
-
-A block can have several placements, including across branes. Removing a placement leaves the block intact. Generated artifacts have no editable live state; streamed checkpoints become an immutable output revision only after successful completion.
-
-Run and Spawn capture prompt, sources and source text synchronously at activation. They reserve only the affected text lanes, so later typing cannot change a queued request and unrelated edits continue. On the server, they apply pending source edits in that same transaction using expected versions. Their durable receipts return the actual accepted edit versions, including unchanged versions for no-op edits. Workers assemble provider messages from those frozen inputs, so later edits and layout changes cannot alter the recorded request. Requests are reconstructable; real model output is not guaranteed deterministic.
-
-Spawn's **Develop** action answers explicit requests or expands an idea into a self-contained artifact. The current UI spawns from one source; the service supports ordered multiple sources. Derivation connectors project provenance from run inputs and outputs. They do not define a workflow or trigger downstream regeneration.
-
-React Flow nodes project domain records. Zustand owns transient selection, tools and text drafts. An actor/brane-scoped workspace controller owns saving, recovery, imports, streamed updates and the authoritative composer context. The application owns gesture recognition and cancellation; React Flow renders the result. A per-brane presentation store retains camera, selection and focus. Delayed actions reveal results only while the user’s attention is still on the action. The canvas owns in-progress gesture geometry; a per-placement save queue serializes completed moves and coalesces waiting updates. Version conflicts preserve the newest local geometry and offer explicit retry or use-saved-placement actions. Delayed responses and older refreshes cannot overwrite newer acknowledged geometry.
-
-Text autosave uses version checks. IndexedDB retains recoverable drafts with their original server version, scoped by actor and block. Text conflict recovery offers server text or explicit overwrite. Completed placement intents and ordinary workspace mutations commit to an account-scoped IndexedDB replica and outbox before synchronization. Replica replay follows entity dependencies instead of an account-wide queue. Cancellation bypasses local writes and conflicts, and new server output can refresh around pending edits. Opened workspaces support offline reload and editing; reconnect conflicts require an explicit choice. This is not automatic merging or multiplayer collaboration. See [offline PWA behavior](docs/offline-pwa.md).
-
-## Background work
-
-One server process runs SQLite-backed generation and webpage-import workers. Generation submission deduplicates per-user request keys, and workers claim queued runs atomically, maintain leases and checkpoint streamed text. Provider calls run outside database transactions.
-
-One authenticated browser SSE connection multiplexes updates. Reconnection reloads authoritative state, so final results survive missed events. Navigation does not cancel work. Explicit retry creates a new run from the original frozen inputs. Retrying an uncertain Run or Spawn submission reuses its journaled request and key across navigation and reload; that is separate from retrying a failed generation.
-
-Expired claims can be requeued before invocation. Expired running work becomes interrupted and is never automatically retried because provider completion and billing may be uncertain. Shutdown aborts active calls best-effort and records interruption. Run exactly one server/worker process; this is not a distributed worker system.
-
-## Stack and repository map
-
-The browser uses React, TypeScript, Vite, React Flow, Zustand and TanStack Router. The server uses Hono, Better Auth, SQLite in WAL mode, AI SDK Core, authenticated SSE, and filesystem or S3-compatible image storage. Redis is not required.
-
-```text
-src/app/            authentication, navigation and styles
-src/routes/         workspace, Focus view and context inspector
-src/canvas/         node projection, tool policy and gesture lifetime
-src/components/     editors, artifact actions and rendering
-src/stores/         transient interaction state
-src/services/       workspace controller, submission journals and save/recovery services
-src/lib/            responsive presentation helpers
-server/app/         configuration and process lifecycle
-server/api/         validated endpoints and request limits
-server/auth/        authentication integration
-server/db/          WAL connection, migrations and typed record decoders
-server/domain/      authorization and domain errors
-server/services/    artifacts, snapshots, placements, context, costs and runs
-server/jobs/        claiming, leases, checkpoints and finalization
-server/llm/         frozen-message assembly and provider invocation
-server/sse/         actor-scoped update hub
-server/storage/     filesystem and S3-compatible adapters
-server/ingestion/   bounded, DNS-pinned webpage imports
-shared/             domain types, command schemas and public response contracts
-migrations/         schema changes and immutable-history guards
-scripts/            migration, seed, backup and cost reconciliation
-tests/              unit, API, migration, recovery and invariant tests
-e2e/                browser fixtures and interaction tests
-docs/architecture/  design boundaries and invariants
-```
-
-## Running the built application
-
-For a local production-build smoke test, keep development mode and point authentication at the built application's origin:
-
-```sh
-npm run build
-APP_ORIGIN=http://localhost:3001 npm start
-```
-
-Open [localhost:3001](http://localhost:3001). `/health` returns a basic process health response. Startup applies pending migrations automatically; the explicit migration command is useful during setup and before starting a new build.
-
-For a hosted instance, follow the [deployment guide](docs/deployment.md): use HTTPS, `NODE_ENV=production`, the public `APP_ORIGIN`, a random authentication secret, persistent database/assets paths and one server process. The Node listener binds to `127.0.0.1`; a reverse proxy provides public access. Keep the repository's migrations and production dependencies alongside build output.
-
-Back up SQLite through the online backup script and back up image bytes separately. A database backup alone does not contain uploaded images. The operations guide covers restoration, SSE proxying, storage configuration and audited cost reconciliation.
-
-## Current boundaries
-
-- Webpage imports use lightweight text extraction, without browser rendering or a rich readability parser. HTTP(S) targets and redirects are validated, DNS is pinned, and time/byte limits apply. Failed imports permit pasted text.
-- Image context resolves authorized bytes using frozen asset IDs and SHA-256 hashes. Paid models must explicitly support vision in the pricing catalog; image requests use low detail.
-- Signup can be open, invitation-only or closed. Guest workspaces support account claiming; after guest expiry and a seven-day recovery grace, unclaimed content is reclaimed with durable asset deletion. Email delivery, password recovery and backup alerts are implemented but require operator configuration and delivery acceptance; email verification is not implemented. See [recovery and alert activation](docs/operations/recovery-and-alerts.md) and [retention](docs/operations/retention.md).
-- Local tests cover mock execution, adapter fixtures, authenticated APIs, migrations, worker crash recovery and browser interactions. They do not establish live OpenAI/R2 behavior or production readiness.
-- Multiplayer, CRDTs, presence, rich text, embeddings, semantic retrieval, plugin frameworks, workflow execution, automatic regeneration and multi-server infrastructure are deferred.
-
-## Design references
-
-Start with [principles](docs/architecture/00-principles.md) and [invariants](docs/architecture/01-invariants.md). The architecture directory also covers [domain modeling](docs/architecture/02-domain-model.md), [snapshots](docs/architecture/03-snapshot-semantics.md), [run lifecycle](docs/architecture/04-run-lifecycle.md), [client state and save queues](docs/architecture/05-client-state.md), [future collaboration](docs/architecture/06-collaboration-migration.md), [costs](docs/architecture/07-cost-model.md), [security](docs/architecture/08-security.md), [non-goals](docs/architecture/09-non-goals.md), [artifact derivation](docs/architecture/10-artifact-derivation.md), and [artifact imports and representations](docs/architecture/11-artifact-imports.md).
-
-The [scaffold report](docs/scaffold-report.md) and [follow-up implementation notes](docs/follow-up-report.md) are historical implementation records. Use the current source, scripts and architecture documents for present behavior.
-
-Operational limits, durable upload reconciliation, run deadlines, and the database-plus-assets restore verifier are documented in [the operations guide](docs/deployment.md#admission-and-restoration-controls).
-
-Command types derive from their schemas; HTTP responses are validated through typed client methods. See [type boundaries](docs/architecture/14-type-boundaries.md) for persistence records, public DTOs and local contract verification.
+| Document                                                     | Covers                                                          |
+| ------------------------------------------------------------ | --------------------------------------------------------------- |
+| [Using mem-brane](docs/guide.md)                             | Branes, cards, context, imports, canvas gestures and Focus      |
+| [Development](docs/development.md)                           | Verification, commands, configuration, running a build          |
+| [Architecture overview](docs/architecture/README.md)         | Domain records, background work, repository map, boundaries     |
+| [Architecture decisions](docs/architecture/)                 | Principles, invariants and one document per subsystem (00–15)   |
+| [Deployment](docs/deployment.md)                             | Kamal on apps-1, Litestream and bundle backups, budgets, limits |
+| [Offline PWA](docs/offline-pwa.md)                           | Installation, offline reload and reconnect conflicts            |
+| [Interaction verification](docs/interaction-verification.md) | Stress suite, latency guards and device coverage                |
+| [Operations](docs/operations/)                               | Live generation, recovery and alerts, retention                 |

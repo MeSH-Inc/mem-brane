@@ -2,7 +2,7 @@
 
 Spawn is a one-click command on every ready artifact, including generated artifacts. The initial action is Develop: answer explicit requests directly, otherwise expand the central idea into a concrete, self-contained text artifact. The server resolves the instruction and freezes it as the prompt revision. Model and action/version are recorded on the run. Spawn does not read the global composer or implicitly inherit conversation ancestors.
 
-Block kind describes content format (text, image, webpage); origin separately describes authored or generated content. Generated artifacts have no editable live state. Their checkpoints remain operational state until finalization produces an immutable revision. The origin migration converts legacy response blocks into generated text without changing existing revision IDs.
+Block kind describes content format (text, image, webpage); origin separately describes authored or generated content. Generated artifacts have no editable live state. Their checkpoints remain operational state until finalization produces an immutable revision.
 
 POST /artifacts/spawn accepts braneId, key, ordered sourceBlockIds, anchorPlacementId, action=develop, model, and source edits with expected versions. The first source is primary; the remaining sources are additional derivation sources. Supporting context uses the existing reference input kind, distinct from source inputs and prompt instructions. The first UI slice submits a single source. Multi-source commands are supported by the service and schema.
 

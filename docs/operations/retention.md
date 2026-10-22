@@ -35,8 +35,8 @@ evidence.
 
 Reclamation atomically marks the guest as purged, revokes its sessions and claim
 intent, deletes its content graph and moves original assets, abandoned upload
-reservations and outstanding consolidation objects into a durable deletion queue.
-The migration allows revision and representation deletion only for purged,
+reservations into a durable deletion queue.
+The schema allows revision and representation deletion only for purged,
 unclaimed guests; it never drops history guards at runtime. Minimal guest, library
 and principal tombstones remain so ownership and the irreversible purge decision
 are preserved. Request bodies that finish after reclamation must recheck their

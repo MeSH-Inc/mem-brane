@@ -1,6 +1,6 @@
 # Interaction verification
 
-The local checks cover gesture ownership, focus, per-entity rendering and responsiveness under a deliberately crowded canvas. The browser-engine runs are automated. Injected-input checks have also passed in installed macOS Safari and Chrome on a physical Pixel. Physical iPhone Safari passes the keyboard selection, save-lane, cancellation and conflict-retry subset; native gesture and text-entry coverage is pending. Human trackpad and touchscreen checks remain pending. The [device checkpoint](operations/canvas-device-checkpoint.md) records the exact coverage and the native-runner signing prerequisite.
+The local checks cover gesture ownership, focus, per-entity rendering and responsiveness under a deliberately crowded canvas. The browser-engine runs are automated. Injected-input checks have also passed in installed macOS Safari and Chrome on a physical Pixel. Physical iPhone Safari passes the keyboard selection, save-lane, cancellation and conflict-retry subset; native gesture and text-entry coverage is pending. Human trackpad and touchscreen checks remain pending.
 
 ## Repeatable checks
 
@@ -16,7 +16,7 @@ npm run test:stress
 
 The stress entry point is separate from the shipped application. The standard production build does not use React's profiling renderer. Its cards create no Profiler boundary unless a render observer is supplied.
 
-For Chrome CPU/timeline attribution, run `npm run test:stress:trace`. It runs the previous global queries and the corrected scoped queries against the same application, writing `artifacts/stress/trace-comparison.md`, `.json` and `traces/*.json`. Load the raw Chrome trace in DevTools Performance. Phase marks, input marks and response measures align the measured workload with browser tasks, layout, paint and sampled stacks. The [trace checkpoint](operations/interaction-trace-checkpoint.md) explains why broad accessibility searches and retry diagnostics must stay outside the measured input path. Keep ordinary timing baselines untraced.
+For Chrome CPU/timeline attribution, run `npm run test:stress:trace`. It runs the previous global queries and the corrected scoped queries against the same application, writing `artifacts/stress/trace-comparison.md`, `.json` and `traces/*.json`. Load the raw Chrome trace in DevTools Performance. Phase marks, input marks and response measures align the measured workload with browser tasks, layout, paint and sampled stacks. Keep ordinary timing baselines untraced.
 
 ## Workload and acceptance
 
@@ -32,7 +32,7 @@ The fixture mounts all 500 React Flow cards, including offscreen cards. Four gen
 
 Each input category must have p95 below 100 ms and maximum below 250 ms. These are broad stall guards for a headless local run, not a universal frame-rate or device-performance target. Rendering isolation is an exact structural assertion; timing is hardware-dependent.
 
-The [recorded baseline](operations/canvas-interaction-baseline.md) includes all input categories, per-phase frame gaps and the full raw report. Cancellation reduces the remaining active streams to three during the conflict-typing samples.
+Cancellation reduces the remaining active streams to three during the conflict-typing samples.
 
 The added tests exposed and fixed three behaviors: Shift+Enter only added selection instead of toggling it; an owned pinch ignored a second finger over an editor; switching tools changed the resize data of every card. Resize availability now changes only for selected cards. Mixed mouse/touch sequences cannot take over each other's active gesture.
 

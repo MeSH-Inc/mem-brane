@@ -30,14 +30,6 @@ expansion semantics. Finalization reads only the local prompt and parent identit
 Live edits and newer extraction results do not participate in expansion. The
 conversation endpoint returns typed messages with parsed content and references.
 
-Migration 014 builds manifests and associates existing messages with their
-originating runs. It compares every reconstructed input sequence against the old
-flattened rows and checks message reference JSON against the original local inputs
-before removing either representation. Divergence aborts the transaction. Existing
-run, revision, message and output identities survive. The legacy fixture covers
-branching, continuation from user messages, images, multi-source derivation,
-failed runs and retries; tests compare both expanded inputs and provider messages.
-
 For the measured 80-turn fixture, storage falls from 6,480 flattened input rows to
 81 local context entries. Expansion still produces 160 inputs for the last run.
 This reduces historical storage growth, not the model's required context size or

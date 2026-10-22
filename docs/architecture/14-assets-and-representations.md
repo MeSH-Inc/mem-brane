@@ -35,10 +35,6 @@ policy and asset to an immutable representation. Imports serialize matching
 owner/digest/policy work within the database handle and reuse persisted results on
 later deliveries, while still verifying original object integrity.
 
-Migrations preserve revision identities and provider content. They abort rather
-than guess if legacy hashes are missing, conflicting, or cannot satisfy canonical
-owner/digest uniqueness. No object deletion is attempted during SQL migration.
-
 Import completion stores a block foreign key and the original placement identity.
 The placement ID is historical, so it survives placement removal without a foreign
 key or a geometry snapshot. Completed receipts are immutable. Both first delivery
@@ -46,8 +42,3 @@ and retry return `{ blockId, placementId, braneId }`; the UI refreshes authorita
 workspace state. Reconciliation never recreates a removed placement or applies an
 old position. Request hashes still reject reuse of an import key with different
 bytes, filenames or placement intent.
-
-The [offline consolidation tool](../operations/asset-read-efficiency.md) can resolve
-legacy duplicate owner/digest rows before migration 015. A verified original backup
-precedes reference rewriting. Redundant objects stay in a cleanup journal and in
-quota accounting until deletion or absence is acknowledged.
