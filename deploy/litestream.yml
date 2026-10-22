@@ -1,0 +1,17 @@
+# Continuous replication of the one database file to Cloudflare R2.
+# Credentials and bucket come from the environment; nothing secret lives here.
+# Shares the BACKUP_* bucket: bundles live under mem-brane/production/, this under litestream/.
+snapshot:
+  interval: 24h
+  retention: 720h   # keep 30 days of point-in-time history
+
+dbs:
+  - path: ${DATABASE_PATH}
+    replica:
+      type: s3
+      bucket: ${LITESTREAM_BUCKET}
+      path: litestream
+      endpoint: ${LITESTREAM_ENDPOINT}
+      region: auto
+      access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+      secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}

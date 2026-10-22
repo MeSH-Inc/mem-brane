@@ -1,0 +1,23 @@
+#!/bin/sh
+# Kamal hook: stop the running container before its replacement boots.
+#
+# Every app on apps-1 is a single process that owns its SQLite file. Kamal's
+# default (start new, then stop old) would briefly run two copies: two
+# Litestream processes replicating one database corrupts the replica, wmgs
+# refuses to boot while the old process holds its lease, faeriecore would
+# fork live Yjs documents, and yapbot would answer Discord twice. Stopping
+# first trades a few seconds of 502s per deploy for that safety, the same
+# trade Railway made for services with a volume.
+#
+# Canonical copy: ~/apps/selfhost/pre-app-boot. Each repo keeps an identical
+# copy in .kamal/hooks/; only SERVICE differs.
+set -eu
+
+SERVICE=mem-brane
+SSH_USER="${SSH_USER:-root}"
+
+for host in $(echo "${KAMAL_HOSTS:?}" | tr ',' ' '); do
+  echo "Stopping running $SERVICE containers on $host before boot"
+  ssh "$SSH_USER@$host" \
+    "ids=\$(docker ps -q --filter label=service=$SERVICE); [ -z \"\$ids\" ] || docker stop -t 30 \$ids"
+done

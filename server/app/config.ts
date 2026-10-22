@@ -18,6 +18,9 @@ const env = z
     GUEST_MAX_OPERATIONS: positive(10000),
     REDIRECT_HOSTS: z.string().default(''),
     READ_ONLY: z.enum(['0', '1']).default('0'),
+    // 'cloudflare': client IPs come from CF-Connecting-IP (Cloudflare Tunnel is the
+    // sole way in). Unset: better-auth's default single-entry X-Forwarded-For.
+    TRUST_PROXY: z.enum(['', 'cloudflare']).default(''),
     APP_ORIGIN: z.string().url().default('http://localhost:5173'),
     DATABASE_PATH: z.string().default('data/mem-brane.sqlite'),
     ASSET_DIRECTORY: z.string().default('data/assets'),

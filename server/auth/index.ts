@@ -122,6 +122,14 @@ export function createAuth(db: DB, recoveryEnabled = Boolean(mailSettings())) {
         '/sign-in/anonymous': { window: 60, max: 5 },
       },
     },
-    advanced: { useSecureCookies: process.env.NODE_ENV === 'production' },
+    advanced: {
+      useSecureCookies: process.env.NODE_ENV === 'production',
+      // Behind Cloudflare Tunnel and kamal-proxy X-Forwarded-For has several
+      // hops, which better-auth refuses to guess between: every visitor would
+      // share one rate-limit bucket. Cloudflare's edge overwrites this header.
+      ...(config.TRUST_PROXY === 'cloudflare'
+        ? { ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] } }
+        : {}),
+    },
   });
 }
