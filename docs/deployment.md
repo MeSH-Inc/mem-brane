@@ -1,148 +1,112 @@
-# Railway deployment at mem-brane.com
+# Deploying mem-brane.com
 
-The repository includes a pinned Node 24.13.1 Debian Docker image and Railway
-configuration. Deploy exactly one always-running service, with a persistent volume
-mounted at `/data`. Allocate at least 5 GB: the application keeps 1 GiB free disk
-headroom, in addition to database and asset storage. Disable service sleeping.
+Production runs as one container on `apps-1` (Hetzner), deployed with Kamal 2 from
+this Mac and reached only through Cloudflare Tunnel. Server bootstrap, the
+Cloudflare tunnel and R2 setup, Keychain secrets and DNS cutover are shared with
+the other self-hosted apps and documented in `~/apps/selfhost/README.md`. This
+guide covers what is specific to mem-brane.
 
-The image builds UI, API, and operational commands, retains production dependencies
-and migrations, prepares volume directory ownership, then runs Node as the
-unprivileged `node` user. `/health` gates deployment readiness; allow 25 seconds
-for graceful shutdown. Migrations execute at application startup, after the volume
-is mounted. Do not run SQLite migrations in a separate pre-deploy container.
+```txt
+visitor ─TLS─▶ Cloudflare edge ─tunnel─▶ cloudflared ─▶ kamal-proxy 127.0.0.1:80 ─▶ mem-brane:3001
+                                                         Litestream ─▶ R2 mem-brane-backup/litestream/
+```
 
-Set the variables from `.env.production.example`, with paths
-`DATABASE_PATH=/data/mem-brane.sqlite` and `ASSET_DIRECTORY=/data/assets`.
-`APP_ORIGIN=https://mem-brane.com`, `HOST=0.0.0.0`, and
-`REDIRECT_HOSTS=www.mem-brane.com` keep UI and API on the canonical origin.
-`PORT` must match the Railway domain's target port (3001 by default).
+## Configuration
 
-Production defaults to closed registration. Set `SIGNUP_MODE=invite` and a separate
-random `SIGNUP_INVITE_CODE` of at least 32 characters for private registration.
-The UI prompts for the code; the auth hook rejects invalid requests before user
-creation, including direct calls to the auth API. This is a reusable invitation:
-anyone holding it can register. Rotate the code to revoke unused invitations;
-existing accounts remain valid. `SIGNUP_MODE=closed` stops all new registrations,
-while `open` deliberately enables public signup. Email ownership verification and
-password recovery are not configured. Do not use an email allowlist as proof of
-identity. Generate the auth secret and invitation separately and retain them in
-private operator storage outside the repository.
+| File                        | Purpose                                                                  |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `config/deploy.yml`         | Host, proxy, non-secret environment, volume and timeouts                 |
+| `.kamal/secrets`            | Keychain lookups under `kamal/mem-brane`; no secret values are committed |
+| `.kamal/hooks/pre-app-boot` | Stops the running container before its replacement boots                 |
+| `Dockerfile`                | Pinned Node 24 Debian image with Litestream and the operational commands |
+| `deploy/entrypoint.sh`      | Prepares `/data`, restores an empty volume, runs Node under Litestream   |
+| `deploy/litestream.yml`     | Continuous SQLite replication to R2                                      |
 
-Keep `MODEL_DEFAULT=mock`, `MODEL_ALLOWLIST=mock`, zero model/global spend budgets,
-and `OCR_PROVIDER=disabled` for the initial infrastructure verification.
-
-In Porkbun, retain its nameservers and configure only the web records:
-
-- Root: ALIAS with blank Host, Answer set to Railway's assigned root-domain target.
-- `www`: CNAME pointing to Railway's assigned target for that custom domain.
-- Add each ownership TXT record exactly as Railway returns it.
-- Replace conflicting parking records for those web hosts. Preserve MX, unrelated
-  TXT, and unrelated subdomains. Register both domains in Railway before DNS changes.
-
-Railway supplies HTTPS. The application redirects `www` to the canonical origin,
-preserving paths and queries. Volume redeployments have brief downtime and cannot
-use replicas. Validate the exact uploaded deployment's successful status before
-changing DNS, then verify certificate issuance, `/health`, auth cookies, uploads,
-SSE and persistence across a restart.
-
-The current Railway plan does not include managed volume backups (the dashboard
-requires Pro). The deployment instead uses a separate private S3-compatible bucket.
-Set `BACKUP_ENDPOINT`, `BACKUP_BUCKET`, `BACKUP_REGION`, `BACKUP_ACCESS_KEY_ID`, and
-`BACKUP_SECRET_ACCESS_KEY` on the app. A bounded subprocess checks at startup and
-every hour, creating one portable SQL-plus-assets backup per UTC day. It validates
-the local bundle, uploads the compressed archive, reads it back to verify SHA-256,
-and publishes a `.verified` marker only after verification. Failed or interrupted
-uploads without that marker are retried. Only this deployment's dated objects
-older than 14 days are expired, and only after a new verified backup succeeds.
-The job runs for at most five minutes; failures emit `backup_job_failed` and
-`remote_backup_failed` logs and retry on the next hourly check. Read-only recovery
-mode disables the scheduler. The application remains available on backup failure.
-
-Archive keys are under `mem-brane/production/`. Runtime access is scoped to the
-backup bucket; provider/model keys never enter its object names or log output.
-The bucket is independent of the live volume but remains in the same Railway
-account. Monitor failed jobs and rehearse recovery regularly. The scheduler's
-hourly check provides eventual daily backup, not a strict midnight SLA.
-
-Take a release backup with `node dist-ops/backup-remote.js --force`. This creates a
-unique dated object even if today's scheduled backup exists. Download an archive
-to an independent machine, extract it, and use the restore rehearsal below.
-Alternatively, take a local portable bundle before releases:
+Store each secret named in `config/deploy.yml` with `~/apps/selfhost/keychain-secret`,
+then confirm none resolve empty:
 
 ```sh
-# In the deployed container; use a new destination each time.
-node dist-ops/backup-bundle.js /data/backup-YYYY-MM-DD
-node dist-ops/verify-bundle.js /data/backup-YYYY-MM-DD
-# Download the directory/archive, then run locally against that downloaded copy:
-node --import tsx scripts/rehearse-restore.ts /downloaded/backup-YYYY-MM-DD
+kamal secrets print | grep '=$'
 ```
 
-Local bundles consume live volume space; move completed bundles off-host and
-remove only those verified copies after transfer. Managed platform snapshots can supplement
-these portable bundles if the account later upgrades to Pro. A recurring copy to
-a separate provider/account remains an operator choice. Keep backup and restore receipts out of logs containing
-credentials. No GitHub Actions workflow is required: validate locally and upload
-the committed checkout through the Railway CLI.
+Kamal builds the committed `HEAD`; uncommitted changes are not deployed. Run Kamal
+with OrbStack's Docker engine (see the selfhost README), using `kamal setup` the
+first time and `kamal deploy` afterwards:
 
-## One-VPS alternative
-
-Use one Linux VPS with persistent disk, Node 22.13+, Caddy and a dedicated unprivileged `membrane` service user. Deploy the repository (including migrations), run `npm ci` and `npm run build`, and retain production dependencies. Build assets are `dist/` and `dist-server/`. The server resolves migrations and assets relative to its working directory.
-
-Set `NODE_ENV=production`, `APP_ORIGIN=https://your-domain`, a random `BETTER_AUTH_SECRET` of at least 32 characters, `DATABASE_PATH=/var/lib/mem-brane/mem-brane.sqlite`, and `ASSET_DIRECTORY=/var/lib/mem-brane/assets`. Keep the environment file readable only by the service user. Run `npm run db:migrate` before startup; startup also applies pending migrations. Never run the development seed in production.
-
-Caddy terminates HTTPS; the Node process listens on loopback only. V1 assumes UI and API share one origin. An example Caddyfile:
-
-```caddyfile
-ideas.example.com {
-    encode zstd gzip
-    reverse_proxy 127.0.0.1:3001 {
-        flush_interval -1
-    }
-    header X-Content-Type-Options nosniff
-    header Referrer-Policy same-origin
-}
+```sh
+env -u DOCKER_HOST kamal deploy
 ```
 
-Avoid proxy buffering for SSE. Long-lived event streams are hints; reconnect fetches current data. Restrict public network ingress to Caddy/SSH. Choose an account signup policy before public exposure. Better Auth provides authentication rate limits; the application has a single-process actor-scoped burst guard. Add edge request controls if exposed broadly.
+Run `npm run verify` before every deploy. No CI workflow is involved.
 
-An example systemd unit (adapt paths and Node installation):
+## Runtime behavior
 
-```ini
-[Unit]
-Description=mem-brane
-After=network.target
+- **One process.** The pre-app-boot hook stops the old container first, trading a
+  few seconds of 502s per deploy for never running two writers or two Litestream
+  processes against one volume. SQLite has atomic claims, but this is not a
+  multi-server lease/fencing system. On shutdown the server stops claiming, aborts
+  active work and records interrupted runs; after a forced kill, lease expiry
+  recovers them conservatively. Never blindly rerun interrupted paid work.
+- **Startup.** The entrypoint restores the latest Litestream replica if the volume
+  has no database, runs `check-production`, then starts Node. Migrations execute at
+  application startup after the volume is mounted. `deploy_timeout` (180 s) covers
+  a restore; `drain_timeout` (25 s) covers `SHUTDOWN_MS` (20 s). `/health` gates
+  readiness.
+- **Proxy.** TLS ends at Cloudflare. `TRUST_PROXY=cloudflare` makes rate limits use
+  `CF-Connecting-IP`, which is only trustworthy because nothing reaches the origin
+  except through the tunnel. kamal-proxy response buffering is disabled and its
+  response timeout (330 s) exceeds the 300 s run deadline, so SSE streams flush.
+- **Origin.** `APP_ORIGIN=https://mem-brane.com`; `REDIRECT_HOSTS=www.mem-brane.com`
+  redirects `www` to the canonical origin, preserving paths and queries. Both
+  hostnames need a tunnel public hostname pointing to `http://localhost:80`.
+- **Storage.** The `mem-brane-data` volume holds `/data/mem-brane.sqlite` and
+  `/data/assets`. The application keeps 1 GiB free disk headroom.
 
-[Service]
-Type=simple
-User=membrane
-WorkingDirectory=/opt/mem-brane
-Environment=NODE_ENV=production
-EnvironmentFile=/etc/mem-brane.env
-ExecStart=/usr/bin/node /opt/mem-brane/dist-server/main.js
-Restart=on-failure
-RestartSec=3
-KillSignal=SIGTERM
-TimeoutStopSec=25
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ReadWritePaths=/var/lib/mem-brane
+## Signup and models
 
-[Install]
-WantedBy=multi-user.target
-```
+Production uses `SIGNUP_MODE=invite` with a separate random `SIGNUP_INVITE_CODE`
+of at least 32 characters. The auth hook rejects invalid requests before user
+creation, including direct calls to the auth API. Anyone holding the code can
+register; rotate it to revoke unused invitations. `closed` stops new registrations
+and `open` enables public signup. Email ownership is not verified; do not use an
+email allowlist as proof of identity.
 
-Run exactly one server/worker process. SQLite has atomic claims, but the scaffold is not a multi-server lease/fencing system. On shutdown it stops claiming, aborts active work and records interrupted runs. If forcibly killed, lease expiry recovers them conservatively. Never blindly rerun interrupted paid work; provider completion or billing may be uncertain.
+Generation uses `deepseek-flash` with `DEEPSEEK_API_KEY`, operator-verified
+`MODEL_PRICING_JSON`, and small positive per-user, global daily and global monthly
+budgets (see `config/deploy.yml`). Set the budgets to zero to disable paid models.
 
 ## Backups and restoration
 
-Use SQLite's online backup API, not a copy of only the `.sqlite` file while WAL writes are active:
+Two jobs write to the private `mem-brane-backup` R2 bucket with one scoped token:
+
+- **Litestream** replicates the database continuously under `litestream/`, with a
+  daily snapshot and 30 days of point-in-time history. It covers the database only.
+- **Hourly bundle job** (`BACKUP_*`) creates one portable SQL-plus-assets bundle
+  per UTC day under `mem-brane/production/`. It validates the local bundle, uploads
+  the compressed archive, reads it back to verify SHA-256, and publishes a
+  `.verified` marker only after verification. Unverified uploads are retried. Only
+  this deployment's dated objects older than 14 days are expired, and only after a
+  new verified backup succeeds. The job runs for at most five minutes; failures
+  emit `backup_job_failed` and `remote_backup_failed` and retry on the next hourly
+  check. Read-only recovery mode disables the scheduler. The application stays
+  available on backup failure.
+
+Take a release backup with `kamal app exec --reuse "node dist-ops/backup-remote.js --force"`,
+which creates a unique dated object even if today's backup exists. Download an
+archive to an independent machine, extract it, and run the restore rehearsal
+described below.
+
+To recover the database alone, stop the app, remove the volume's database (and any
+stale `-wal`/`-shm` files), and boot: the entrypoint restores the latest replica.
+To recover assets too, restore a verified bundle into the volume first. Validate
+`PRAGMA integrity_check`, start one process and inspect interrupted runs.
+
+For an ad-hoc online copy outside the container, use SQLite's backup API rather than
+copying the file while WAL writes are active:
 
 ```sh
 node --import tsx --env-file-if-exists=.env scripts/backup.ts /safe/backup/mem-brane.sqlite
 ```
-
-The command runs `integrity_check` on the copy. Back up image bytes as well: SQL references storage keys and is not a binary backup. Keep dated off-host copies with bounded retention, protect them like the live database, and periodically test restoration into an isolated instance. For recovery, stop Node, restore the database and matching assets, validate `PRAGMA integrity_check`, start one process and inspect interrupted runs. Do not restore stale WAL/SHM files alongside a clean backup.
 
 ## R2 / S3-compatible storage
 
@@ -283,7 +247,7 @@ Run `npm run check:production` with those environment values loaded. This checks
 configuration structure without printing secrets or making provider requests.
 `npm run build` itself does not require provider keys.
 
-Live generation requires `OPENAI_API_KEY`, allowed model IDs, operator-verified
+Live generation requires the provider key for each allowed model (`DEEPSEEK_API_KEY` for `deepseek-*`, otherwise `OPENAI_API_KEY`), allowed model IDs, operator-verified
 pricing/capabilities and positive user/global daily/global monthly budgets. Local
 file storage needs no additional key. R2 requires all four R2 settings. Enhanced
 OCR now has a pinned provider adapter but remains disabled by default; its live
@@ -308,8 +272,8 @@ retry a model request or assume that a timed-out provider request was free.
 For a local rehearsal only, use the seeded account with
 `SMOKE_ORIGIN=http://localhost:5173` and run `npm run smoke:live -- --allow-mock`.
 This proves the API/storage flow with a deterministic provider; it does not verify
-OpenAI or R2. Live provider credentials were absent during the PWA implementation,
-so live-account behavior remains unverified until the real smoke command passes.
+a live provider or R2. The R2 asset store and OpenAI models have not been verified
+against live accounts.
 
 Keep secrets on the Node server. The browser uses same-origin session cookies and
 never receives an operator provider key. Do not put provider credentials in

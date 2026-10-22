@@ -43,7 +43,7 @@ mail before opening any restored copy for writes.
 ## Activation and acceptance
 
 1. Choose/verify the sender and configure the three variables in the production
-   service's private Railway configuration. Never commit credentials or tokens.
+   Keychain entries read by `.kamal/secrets`, and list them under `env.secret` in `config/deploy.yml`. Never commit credentials or tokens.
 2. Build/typecheck, run password recovery, mail, backup and lifecycle tests, then
    run the browser recovery test. Deploy the exact verified commit.
 3. With the operator's explicit test recipient, request one reset, confirm inbox

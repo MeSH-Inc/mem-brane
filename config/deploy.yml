@@ -73,7 +73,7 @@ volumes:
 ssh:
   user: root
 
-# check-production plus a possible restore from R2 (Railway allowed 120 s).
+# check-production plus a possible restore from R2.
 deploy_timeout: 180
 # SHUTDOWN_MS is 20 s.
 drain_timeout: 25

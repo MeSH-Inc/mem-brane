@@ -30,7 +30,7 @@ export function recordBackupResult(db: DB, recipient: string, ok: boolean, now =
         {
           recipient,
           subject: 'mem-brane backup needs attention',
-          body: 'The production backup job failed. Inspect Railway backup logs, bucket access, free space and the newest verified archive. The job retries hourly; do not delete prior backups. A recovery notification follows a successful job.',
+          body: 'The production backup job failed. Inspect the backup job logs, bucket access, free space and the newest verified archive. The job retries hourly; do not delete prior backups. A recovery notification follows a successful job.',
         },
         now + day,
         now,

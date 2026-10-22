@@ -210,7 +210,7 @@ APP_ORIGIN=http://localhost:3001 npm start
 
 Open [localhost:3001](http://localhost:3001). `/health` returns a basic process health response. Startup applies pending migrations automatically; the explicit migration command is useful during setup and before starting a new build.
 
-For a hosted instance, follow the [single-VPS operations guide](docs/deployment.md): use HTTPS, `NODE_ENV=production`, the public `APP_ORIGIN`, a random authentication secret, persistent database/assets paths and one server process. The Node listener binds to `127.0.0.1`; a reverse proxy provides public access. Keep the repository's migrations and production dependencies alongside build output.
+For a hosted instance, follow the [deployment guide](docs/deployment.md): use HTTPS, `NODE_ENV=production`, the public `APP_ORIGIN`, a random authentication secret, persistent database/assets paths and one server process. The Node listener binds to `127.0.0.1`; a reverse proxy provides public access. Keep the repository's migrations and production dependencies alongside build output.
 
 Back up SQLite through the online backup script and back up image bytes separately. A database backup alone does not contain uploaded images. The operations guide covers restoration, SSE proxying, storage configuration and audited cost reconciliation.
 
