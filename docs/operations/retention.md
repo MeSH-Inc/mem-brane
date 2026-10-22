@@ -29,8 +29,8 @@ seven-day claim recovery grace, maintenance reclaims up to 100 guest libraries p
 batch. Claim and purge decisions serialize in immediate transactions. Claimed
 libraries are retained. Active file imports and queued/running ingestion postpone
 cleanup; later eligible guests can still progress. Guest capabilities exclude
-model and OCR work, but any unexpected library with run, conversation, context,
-spend or OCR credit history is retained for investigation, including settled billing
+model work, but any unexpected library with run, conversation, context or
+spend history is retained for investigation, including settled billing
 evidence.
 
 Reclamation atomically marks the guest as purged, revokes its sessions and claim

@@ -20,8 +20,6 @@ const deployment = {
   MODEL_ALLOWLIST: 'paid-sentinel',
   MODEL_DEFAULT: 'paid-sentinel',
   OPENAI_API_KEY: 'sentinel-openai-key',
-  OCR_PROVIDER: 'mistral',
-  MISTRAL_API_KEY: 'sentinel-mistral-key',
   R2_ENDPOINT: 'https://sentinel.invalid',
   R2_BUCKET: 'sentinel-assets',
   R2_ACCESS_KEY_ID: 'sentinel-assets-key',
@@ -57,7 +55,6 @@ it('allowlists runtime settings and accepts only deliberate fixture overrides', 
     MODEL_ALLOWLIST: 'mock',
     MODEL_DEFAULT: 'mock',
     MODEL_PRICING_JSON: '{}',
-    OCR_PROVIDER: 'disabled',
     SHUTDOWN_MS: '1000',
     DATABASE_PATH: '/fixture/db.sqlite',
   });
@@ -98,7 +95,6 @@ it('ignores deployment settings in both the parent environment and a local .env 
          const { assetStore, FileAssetStore } = await import(${JSON.stringify(assetsUrl)});
          console.log(JSON.stringify({
            model: config.defaultModel,
-           ocr: config.OCR_PROVIDER,
            workers: config.WORKER_CONCURRENCY,
            database: config.DATABASE_PATH,
            localAssets: assetStore() instanceof FileAssetStore,
@@ -112,7 +108,6 @@ it('ignores deployment settings in both the parent environment and a local .env 
     );
     expect(JSON.parse(stdout)).toEqual({
       model: 'mock',
-      ocr: 'disabled',
       workers: 2,
       database: join(directory, 'fixture.sqlite'),
       localAssets: true,

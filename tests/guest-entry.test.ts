@@ -99,7 +99,6 @@ it('opens an isolated guest brane, reuses the session, and denies server-only gu
     '/artifacts/spawn',
     '/ingest',
     `/blocks/${uid()}/snapshot`,
-    `/assets/${uid()}/ocr/quote`,
   ])
     expect((await a.client.request(path, {})).status, path).toBe(403);
 });

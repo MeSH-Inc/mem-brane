@@ -19,7 +19,6 @@ export function testProcessEnvironment(
     MODEL_ALLOWLIST: 'mock',
     MODEL_DEFAULT: 'mock',
     MODEL_PRICING_JSON: '{}',
-    OCR_PROVIDER: 'disabled',
     SHUTDOWN_MS: '3000',
     ...overrides,
   };

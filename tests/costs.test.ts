@@ -105,9 +105,9 @@ it('uncertain liability can only be released using an auditable explicit reconci
   expect(() => reconcileUncertainCost(db, run.id, 0, 'Another confirmation')).toThrow(
     'Only uncertain',
   );
-  expect(() =>
-    db.prepare('DELETE FROM spend_reconciliations WHERE commitment_id=?').run(run.id),
-  ).toThrow('immutable');
+  expect(() => db.prepare('DELETE FROM spend_reconciliations WHERE run_id=?').run(run.id)).toThrow(
+    'immutable',
+  );
 });
 
 it('preview does not materialize history and immutable estimates cannot be rewritten', async () => {

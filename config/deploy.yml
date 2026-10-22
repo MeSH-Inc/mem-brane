@@ -48,7 +48,6 @@ env:
     DAILY_USER_SPEND_LIMIT: "1"
     GLOBAL_DAILY_SPEND_LIMIT: "1"
     GLOBAL_MONTHLY_SPEND_LIMIT: "5"
-    OCR_PROVIDER: disabled
     SHUTDOWN_MS: "20000"
     # One R2 bucket, one token: hourly bundles under mem-brane/production/,
     # Litestream under db/.

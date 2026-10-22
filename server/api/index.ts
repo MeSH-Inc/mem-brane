@@ -3,7 +3,6 @@ import { readCard, readUnplacedCards } from '../services/card-library.js';
 import { currentLibrary, authorizeLibrary } from '../domain/libraries.js';
 import { applyWorkspaceOperation } from '../services/workspace-operations.js';
 import { workspaceOperation } from '../../shared/workspace-commands.js';
-import { OcrService, ocrCredits, defaultOcrLimits } from '../services/ocr.js';
 import { cancelRun } from '../services/run-lifecycle.js';
 import { readConfiguration } from '../services/configuration.js';
 import type { RunIdentity } from '../../shared/contracts.js';
@@ -62,14 +61,6 @@ export function createApi(
   auth: ReturnType<typeof createAuth>,
   hub: EventHub,
   store: AssetStore,
-  ocr = new OcrService(db, store, undefined, {
-    ...defaultOcrLimits,
-    maxUploadBytes: config.MAX_UPLOAD_BYTES,
-    globalDailyLimitUsd: config.GLOBAL_DAILY_SPEND_LIMIT,
-    globalMonthlyLimitUsd: config.GLOBAL_MONTHLY_SPEND_LIMIT,
-    categoryDailyLimitUsd: config.OCR_DAILY_SPEND_LIMIT,
-    categoryMonthlyLimitUsd: config.OCR_MONTHLY_SPEND_LIMIT,
-  }),
 ) {
   const app = new Hono<ApiEnvironment>();
   const allowRequest = createRateLimit();
@@ -139,7 +130,6 @@ export function createApi(
       session.user.isAnonymous &&
       c.req.method === 'POST' &&
       (/^\/(runs|artifacts|ingest)(\/|$)/.test(c.req.path.replace(/^\/api/, '')) ||
-        c.req.path.includes('/ocr') ||
         c.req.path.endsWith('/snapshot'))
     )
       throw new DomainError(
@@ -158,42 +148,6 @@ export function createApi(
     queueLimit: config.RUN_QUEUE_LIMIT,
     maxContextCharacters: config.MAX_CONTEXT_CHARACTERS,
   };
-  app.get('/ocr/credits', (c) =>
-    c.json({ enabled: ocr.enabled, ...ocrCredits(db, c.get('actor')) }),
-  );
-  app.get('/assets/:id/ocr', (c) =>
-    c.json(ocr.assetState(c.get('actor'), id.parse(c.req.param('id')))),
-  );
-  app.post('/assets/:id/ocr/quote', async (c) =>
-    c.json(await ocr.quote(c.get('actor'), id.parse(c.req.param('id')))),
-  );
-  app.post('/assets/:id/ocr', async (c) => {
-    const body = z
-      .object({ key: z.string().min(1).max(200), policyId: z.string().regex(/^[a-f0-9]{64}$/) })
-      .strict()
-      .parse(await authorizedBody(c));
-    return c.json(
-      await ocr.submit(c.get('actor'), id.parse(c.req.param('id')), body.key, body.policyId),
-      202,
-    );
-  });
-  app.get('/ocr/jobs/:id', (c) => c.json(ocr.read(c.get('actor'), id.parse(c.req.param('id')))));
-  app.get('/ocr/jobs/:id/result', (c) =>
-    c.json(ocr.result(c.get('actor'), id.parse(c.req.param('id')))),
-  );
-  app.post('/ocr/jobs/:id/cancel', (c) => {
-    ocr.cancel(c.get('actor'), id.parse(c.req.param('id')));
-    return c.json({ ok: true });
-  });
-  app.post('/ocr/jobs/:id/apply', async (c) => {
-    const body = z
-      .object({ blockId: id, version: z.number().int().nonnegative().safe() })
-      .strict()
-      .parse(await authorizedBody(c));
-    return c.json(
-      ocr.apply(c.get('actor'), id.parse(c.req.param('id')), body.blockId, body.version),
-    );
-  });
   app.post('/sync/commands', async (c) =>
     c.json(
       applyWorkspaceOperation(

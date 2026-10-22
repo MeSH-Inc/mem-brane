@@ -59,10 +59,13 @@ it('accounts for storage and spend across every library attached to an account',
   expect(() => reserveUpload(db, library, uid(), 60, { userBytes: 100, totalBytes: 1000 })).toThrow(
     'capacity',
   );
+  // Only the ledger rows matter here; their runs are not part of the accounting.
+  db.pragma('foreign_keys = OFF');
   for (const owner of [account, library])
     db.prepare(
       `INSERT INTO spend_commitments
-    VALUES (?,'ocr',NULL,?,'2026-09-18','reserved',10,1,NULL,'{}',0,0)`,
+    VALUES (?,?,'2026-09-18','reserved',10,1,NULL,'{}',0,0)`,
     ).run(uid(), owner);
+  db.pragma('foreign_keys = ON');
   expect(committedSpend(db, '2026-09-18', { actor: library })).toBe(20);
 });

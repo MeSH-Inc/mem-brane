@@ -19,19 +19,6 @@ if (secret.length < 32 || secret.startsWith('replace-'))
 if (config.SIGNUP_MODE === 'invite' && (process.env.SIGNUP_INVITE_CODE ?? '').length < 32)
   issues.push('Generate SIGNUP_INVITE_CODE with at least 32 random characters.');
 const paid = config.models.filter((model) => model !== 'mock');
-if (config.OCR_PROVIDER !== 'disabled') {
-  if (!process.env.MISTRAL_API_KEY || /\s/.test(process.env.MISTRAL_API_KEY))
-    issues.push('Set a valid server-side MISTRAL_API_KEY for the selected OCR provider.');
-  if (
-    ![
-      config.GLOBAL_DAILY_SPEND_LIMIT,
-      config.GLOBAL_MONTHLY_SPEND_LIMIT,
-      config.OCR_DAILY_SPEND_LIMIT,
-      config.OCR_MONTHLY_SPEND_LIMIT,
-    ].every((value) => value > 0)
-  )
-    issues.push('Enhanced OCR requires positive shared and category daily/monthly budgets.');
-}
 if (paid.length) {
   for (const key of new Set(paid.map(providerKeyName)))
     if (!process.env[key]) issues.push(`Set ${key} on the server.`);

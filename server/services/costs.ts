@@ -25,8 +25,6 @@ import { buildMessages } from '../llm/model.js';
 export type { ModelPrice } from '../domain/money.js';
 export interface CostPolicy extends SpendLimits {
   dailyLimitUsd: number;
-  categoryDailyLimitUsd?: number;
-  categoryMonthlyLimitUsd?: number;
   prices: Record<string, ModelPrice>;
 }
 export const freePrice: ModelPrice = {
@@ -67,9 +65,9 @@ export function costMicro(input: number, output: number, price: ModelPrice) {
 }
 export function budgetState(db: DB, actor: string, policy?: CostPolicy, time = Date.now()): Budget {
   const day = new Date(time).toISOString().slice(0, 10);
-  const committed = committedSpend(db, day, { actor, category: 'model' });
+  const committed = committedSpend(db, day, { actor });
   const limit = usdLimit(policy?.dailyLimitUsd ?? 0);
-  const global = spendAvailable(db, actor, 'model', policy ?? {}, time);
+  const global = spendAvailable(db, actor, policy ?? {}, time);
   return {
     day,
     limitMicrousd: limit,
@@ -125,7 +123,7 @@ export function reserveCost(
         );
       reserveSpend(
         db,
-        { id: runId, actor, category: 'model', amount, units: input, pricing: price },
+        { runId, actor, amount, units: input, pricing: price },
         { ...policy, userDailyLimitUsd: policy?.dailyLimitUsd ?? 0 },
         time,
       );

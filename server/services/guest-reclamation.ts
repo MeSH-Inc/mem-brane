@@ -27,7 +27,6 @@ export function reclaimExpiredGuests(db: DB, batchSize: number, time = Date.now(
       -- and billing evidence instead of erasing it through guest retention.
       AND NOT EXISTS (SELECT 1 FROM runs r WHERE r.owner_id=g.library_id)
       AND NOT EXISTS (SELECT 1 FROM spend_commitments s WHERE s.owner_id=g.library_id)
-      AND NOT EXISTS (SELECT 1 FROM ocr_credit_grants c WHERE c.owner_id=g.library_id)
       AND NOT EXISTS (SELECT 1 FROM context_manifests c WHERE c.owner_id=g.library_id)
       AND NOT EXISTS (SELECT 1 FROM conversations c WHERE c.owner_id=g.library_id)
       AND NOT EXISTS (SELECT 1 FROM ingestions i JOIN blocks b ON b.id=i.block_id

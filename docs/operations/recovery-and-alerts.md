@@ -53,5 +53,5 @@ mail before opening any restored copy for writes.
    failure, no repeated hourly noise, and one recovery. Do not break production
    backup credentials to run this test.
 5. Configure independent missing-heartbeat detection and verify its delivery.
-   Keep paid AI/OCR disabled until those checks and a specific spend ceiling are
+   Keep paid AI disabled until those checks and a specific spend ceiling are
    complete; then select one model/pricing record for a bounded live trial.

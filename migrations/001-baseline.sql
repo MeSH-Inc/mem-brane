@@ -192,7 +192,7 @@ CREATE TRIGGER submission_receipts_no_delete BEFORE DELETE ON submission_receipt
 BEGIN SELECT RAISE(ABORT, 'Submission receipts are immutable'); END;
 
 CREATE TABLE spend_reconciliations (
- commitment_id TEXT PRIMARY KEY REFERENCES spend_commitments(id),
+ run_id TEXT PRIMARY KEY REFERENCES spend_commitments(run_id),
  confirmed_microusd INTEGER NOT NULL CHECK(confirmed_microusd>=0),
  evidence TEXT NOT NULL,
  created_at INTEGER NOT NULL
@@ -329,10 +329,8 @@ CREATE TRIGGER import_receipt_origin BEFORE UPDATE OF state ON artifact_imports 
  WHERE b.id=NEW.block_id AND b.owner_id=NEW.owner_id AND p.id=NEW.placement_id AND p.brane_id=NEW.brane_id AND r.asset_id=NEW.asset_id
 ) BEGIN SELECT RAISE(ABORT,'invalid import receipt'); END;
 
-CREATE TABLE "spend_commitments" (
- id TEXT PRIMARY KEY,
- category TEXT NOT NULL CHECK(category IN ('model','ocr')),
- run_id TEXT UNIQUE REFERENCES runs(id),
+CREATE TABLE spend_commitments (
+ run_id TEXT PRIMARY KEY REFERENCES runs(id),
  owner_id TEXT NOT NULL REFERENCES libraries(id),
  budget_day TEXT NOT NULL,
  status TEXT NOT NULL CHECK(status IN ('reserved','confirmed','uncertain','released')),
@@ -341,65 +339,12 @@ CREATE TABLE "spend_commitments" (
  confirmed_microusd INTEGER,
  pricing_json TEXT NOT NULL,
  created_at INTEGER NOT NULL,
- updated_at INTEGER NOT NULL,
- CHECK ((category='model' AND run_id IS NOT NULL AND run_id=id) OR (category='ocr' AND run_id IS NULL))
+ updated_at INTEGER NOT NULL
 );
-CREATE INDEX spend_owner_day ON spend_commitments(owner_id,category,budget_day,status);
-CREATE INDEX spend_category_day ON spend_commitments(category,budget_day,status);
-CREATE TRIGGER immutable_cost_estimate BEFORE UPDATE OF id,category,run_id,owner_id,budget_day,reserved_microusd,estimated_units,pricing_json,created_at ON spend_commitments BEGIN SELECT RAISE(ABORT,'immutable cost estimate'); END;
+CREATE INDEX spend_owner_day ON spend_commitments(owner_id,budget_day,status);
+CREATE INDEX spend_day ON spend_commitments(budget_day,status);
+CREATE TRIGGER immutable_cost_estimate BEFORE UPDATE OF run_id,owner_id,budget_day,reserved_microusd,estimated_units,pricing_json,created_at ON spend_commitments BEGIN SELECT RAISE(ABORT,'immutable cost estimate'); END;
 CREATE TRIGGER immutable_spend_delete BEFORE DELETE ON spend_commitments BEGIN SELECT RAISE(ABORT,'immutable spend commitment'); END;
-
-CREATE TABLE "ocr_credit_grants" (
- id TEXT PRIMARY KEY,
- owner_id TEXT NOT NULL REFERENCES libraries(id),
- kind TEXT NOT NULL CHECK(kind IN ('trial','prepaid')),
- pages INTEGER NOT NULL CHECK(pages>0),
- evidence TEXT NOT NULL,
- created_at INTEGER NOT NULL
-);
-CREATE UNIQUE INDEX one_ocr_trial ON ocr_credit_grants(owner_id) WHERE kind='trial';
-CREATE TRIGGER immutable_ocr_grant_update BEFORE UPDATE ON ocr_credit_grants BEGIN SELECT RAISE(ABORT,'immutable OCR credit grant'); END;
-CREATE TRIGGER immutable_ocr_grant_delete BEFORE DELETE ON ocr_credit_grants BEGIN SELECT RAISE(ABORT,'immutable OCR credit grant'); END;
-
-CREATE TABLE "ocr_jobs" (
- id TEXT PRIMARY KEY REFERENCES spend_commitments(id),
- owner_id TEXT NOT NULL REFERENCES libraries(id),
- asset_id TEXT NOT NULL REFERENCES assets(id),
- asset_digest TEXT NOT NULL,
- policy_id TEXT NOT NULL,
- policy_json TEXT NOT NULL,
- pages INTEGER NOT NULL CHECK(pages BETWEEN 1 AND 100),
- credit_pages INTEGER NOT NULL CHECK(credit_pages>=0 AND credit_pages<=pages),
- status TEXT NOT NULL CHECK(status IN ('queued','running','succeeded','uncertain','cancelled','failed')),
- attempt_id TEXT,
- deadline INTEGER,
- result_json TEXT,
- error TEXT,
- created_at INTEGER NOT NULL,
- updated_at INTEGER NOT NULL,
- UNIQUE(owner_id,asset_digest,policy_id)
-);
-CREATE INDEX ocr_queue ON ocr_jobs(status,created_at);
-CREATE TRIGGER immutable_ocr_identity BEFORE UPDATE OF id,owner_id,asset_id,asset_digest,policy_id,policy_json,pages,created_at ON ocr_jobs BEGIN SELECT RAISE(ABORT,'immutable OCR job identity'); END;
-CREATE TRIGGER immutable_ocr_job_delete BEFORE DELETE ON ocr_jobs BEGIN SELECT RAISE(ABORT,'immutable OCR job'); END;
-CREATE TRIGGER immutable_ocr_result BEFORE UPDATE OF result_json ON ocr_jobs
-WHEN OLD.result_json IS NOT NULL OR (NEW.result_json IS NOT NULL AND NEW.status!='succeeded')
-BEGIN SELECT RAISE(ABORT,'immutable OCR result evidence'); END;
-CREATE TRIGGER terminal_ocr_status BEFORE UPDATE OF status ON ocr_jobs
-WHEN (OLD.status IN ('succeeded','cancelled','failed') AND NEW.status!=OLD.status)
- OR (OLD.status='uncertain' AND NEW.status NOT IN ('uncertain','failed'))
-BEGIN SELECT RAISE(ABORT,'terminal OCR job cannot be replayed'); END;
-
-CREATE TABLE "ocr_requests" (
- owner_id TEXT NOT NULL REFERENCES libraries(id),
- request_key TEXT NOT NULL,
- asset_digest TEXT NOT NULL,
- policy_id TEXT NOT NULL,
- job_id TEXT NOT NULL REFERENCES ocr_jobs(id),
- PRIMARY KEY(owner_id,request_key)
-);
-CREATE TRIGGER immutable_ocr_request_update BEFORE UPDATE ON ocr_requests BEGIN SELECT RAISE(ABORT,'immutable OCR request'); END;
-CREATE TRIGGER immutable_ocr_request_delete BEFORE DELETE ON ocr_requests BEGIN SELECT RAISE(ABORT,'immutable OCR request'); END;
 
 CREATE TABLE "workspace_operations" (
   owner_id TEXT NOT NULL REFERENCES libraries(id),

@@ -17,7 +17,6 @@ The image bound is 1,024 tokens per image, per the
 The app conservatively accounts at these rates even during cheaper off-peak or
 cached requests. Shared limits are $1/day and $5/month; the per-account limit is
 $1/day. These limits govern this deployment, not other applications sharing the key.
-OCR remains disabled.
 
 Responses reveal themselves when submitted, unless the user has moved on. Both
 Canvas and Focus render Markdown, preserve partial output, and provide Copy and

@@ -32,7 +32,7 @@ A PDF records filename, original asset identity/hash, page count and a pdf-text-
 
 A valid stored PDF can be snapshotted independently of whether its text representation is usable. Model compatibility is checked separately in estimation, run admission and message resolution. Ready PDF text works with text-only models and carries no image-token surcharge. The model receives page-labeled extracted text, explicitly excluding diagrams, images and visual layout. Unavailable representations are rejected before a run is queued. The composer and Spawn surface those constraints.
 
-Run inputs freeze the full representation and extractor version in immutable revisions. Execution reads those pages, never current extraction state, and verifies the original asset hash. Images use the same original-byte integrity path. Enhanced OCR has a separate accepted model/cost policy and durable result. Explicit adoption chooses a new immutable representation for one PDF block without rewriting submitted representations. Enhanced output has its own 100-page/20,000-characters-per-page and 10 MiB evidence bounds; expanded model context still passes the existing context admission limits. See [OCR admission](../ocr-admission.md).
+Run inputs freeze the full representation and extractor version in immutable revisions. Execution reads those pages, never current extraction state, and verifies the original asset hash. Images use the same original-byte integrity path.
 
 ## Verification
 
