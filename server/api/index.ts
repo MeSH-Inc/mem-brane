@@ -24,6 +24,7 @@ import type { createAuth } from '../auth/index.js';
 import type { EventHub } from '../sse/hub.js';
 import type { AssetStore } from '../storage/assets.js';
 import { canEditBrane, DomainError, requireOwned } from '../domain/access.js';
+import { errorBody } from '../../shared/errors.js';
 import {
   createBrane,
   createTextBlock,
@@ -69,7 +70,7 @@ export function createApi(
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
       const origin = c.req.header('origin');
       if (origin && origin !== config.APP_ORIGIN)
-        return c.json({ error: 'Origin is not allowed' }, 403);
+        return c.json(errorBody('Origin is not allowed', 'forbidden'), 403);
     }
     await next();
   });
@@ -77,7 +78,7 @@ export function createApi(
     '*',
     bodyLimit({
       maxSize: config.MAX_UPLOAD_BYTES + 65536,
-      onError: (c) => c.json({ error: 'Request exceeds size limit' }, 413),
+      onError: (c) => c.json(errorBody('Request exceeds size limit', 'too_large'), 413),
     }),
   );
   app.get('/signup-policy', (c) => c.json({ mode: config.SIGNUP_MODE }));
@@ -100,9 +101,12 @@ export function createApi(
   app.route('/', entryApi(db, auth));
   app.use('*', async (c, next) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
-    if (!session) return c.json({ error: 'Sign in required' }, 401);
+    if (!session) return c.json(errorBody('Sign in required', 'unauthenticated'), 401);
     if (c.req.header('X-Mem-Brane-Actor') && c.req.header('X-Mem-Brane-Actor') !== session.user.id)
-      return c.json({ error: 'Account changed. Sign in again before synchronizing.' }, 401);
+      return c.json(
+        errorBody('Account changed. Sign in again before synchronizing.', 'unauthenticated'),
+        401,
+      );
     const library = currentLibrary(
       db,
       session.user.id,
@@ -135,9 +139,10 @@ export function createApi(
       throw new DomainError(
         403,
         'Sign in to use AI, webpage imports, and snapshots. Your guest work will be kept.',
+        'guest_limit',
       );
     if (!allowRequest(session.user.id))
-      return c.json({ error: 'Too many requests; try again shortly' }, 429);
+      return c.json(errorBody('Too many requests; try again shortly', 'rate_limited'), 429);
     await next();
   });
   const limits = {
@@ -450,15 +455,16 @@ export function createApi(
   app.onError((error, c) => {
     if (error instanceof z.ZodError)
       return c.json(
-        {
-          error: 'Invalid request',
+        errorBody('Invalid request', 'invalid_request', {
           details: error.issues.map((i) => ({ path: i.path, message: i.message })),
-        },
+        }),
         400,
       );
-    if (error instanceof DomainError) return c.json({ error: error.message }, error.status);
-    console.error('API error', error);
-    return c.json({ error: 'An unexpected error occurred' }, 500);
+    if (error instanceof DomainError)
+      return c.json(errorBody(error.message, error.code), error.status);
+    const requestId = crypto.randomUUID();
+    console.error('API error', requestId, error);
+    return c.json(errorBody('An unexpected error occurred', 'internal', { requestId }), 500);
   });
   return app;
 }

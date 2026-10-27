@@ -11,6 +11,7 @@ import {
   completeAttempt,
   stopAttempt,
   recoverStale,
+  failureMessages,
 } from '../server/services/run-lifecycle';
 let db: DB, actor: string, id: string;
 beforeEach(() => {
@@ -74,7 +75,7 @@ it.each([false, true])(
     cancelRun(db, actor, id, 3);
     expect(completeAttempt(db, token, { text: 'late' }, 4)).toBe(false);
     expect(renewAttempt(db, token, 100, 4)).toBe(false);
-    expect(stopAttempt(db, token, 'partial', 'failed', 4)).toBe('cancelled');
+    expect(stopAttempt(db, token, 'partial', 'provider', 4)).toBe('cancelled');
     expect(attempt()).toEqual({ outcome: 'cancelled', finished_at: 4 });
     expect(cost()).toEqual({ status: 'uncertain' });
     expect(db.prepare('SELECT text FROM run_checkpoints').get()).toEqual({ text: 'partial' });
@@ -98,10 +99,15 @@ it.each(['running', 'checkpointed', 'cancel_requested'])(
     expect(renewAttempt(db, token, 100, 100)).toBe(false);
     expect(saveCheckpoint(db, token, 'stale', 100)).toBe(false);
     expect(completeAttempt(db, token, { text: 'stale' }, 100)).toBe(false);
-    expect(stopAttempt(db, token, 'stale', 'failed', 100)).toBeNull();
+    expect(stopAttempt(db, token, 'stale', 'provider', 100)).toBeNull();
     recoverStale(db, 100);
     const status = stage === 'cancel_requested' ? 'cancelled' : 'interrupted';
-    expect(readStoredRun(db, id)).toMatchObject({ status, lease_owner: null, finished_at: 100 });
+    expect(readStoredRun(db, id)).toMatchObject({
+      status,
+      lease_owner: null,
+      finished_at: 100,
+      failure_reason: status === 'interrupted' ? 'lease_expired' : null,
+    });
     expect(attempt()).toEqual({ outcome: status, finished_at: 100 });
     expect(cost()).toEqual({ status: 'uncertain' });
     expect(db.prepare('SELECT text FROM run_checkpoints').get()).toEqual(
@@ -119,12 +125,16 @@ it.each(['workerId', 'attemptId'] as const)('rejects mismatched %s', (field) => 
   expect(readStoredRun(db, id).status).toBe('running');
   expect(cost()).toEqual({ status: 'reserved' });
 });
-it.each(['preflight', 'failed', 'shutdown'] as const)(
-  'stops %s with consistent accounting and attempt outcome',
+it.each(['preflight', 'provider', 'stalled', 'deadline', 'output_limit', 'shutdown'] as const)(
+  'stops %s with consistent accounting, attempt outcome and a cause-specific error',
   (reason) => {
     const token = start();
     const status = reason === 'shutdown' ? 'interrupted' : 'failed';
     expect(stopAttempt(db, token, 'partial', reason, 2)).toBe(status);
+    expect(readStoredRun(db, id)).toMatchObject({
+      failure_reason: reason,
+      error: failureMessages[reason],
+    });
     expect(attempt()).toEqual({ outcome: status, finished_at: 2 });
     expect(cost()).toEqual({ status: reason === 'preflight' ? 'released' : 'uncertain' });
     expect(stopAttempt(db, token, 'late', reason, 3)).toBeNull();
@@ -151,7 +161,7 @@ it.each(['complete', 'stop', 'cancel', 'expire'])(
       operation === 'complete'
         ? completeAttempt(db, token!, { text: 'done' }, 2)
         : operation === 'stop'
-          ? stopAttempt(db, token!, 'partial', 'failed', 2)
+          ? stopAttempt(db, token!, 'partial', 'provider', 2)
           : operation === 'cancel'
             ? cancelRun(db, actor, id, 2)
             : recoverStale(db, 100);

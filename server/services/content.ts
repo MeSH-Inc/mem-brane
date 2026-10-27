@@ -32,7 +32,7 @@ export function createBrane(db: DB, actor: string, title = 'Untitled brane', id:
     (db.prepare('SELECT count(*) n FROM branes WHERE owner_id=?').get(actor) as { n: number }).n >=
     100
   )
-    throw new DomainError(429, 'Workspace capacity reached');
+    throw new DomainError(429, 'Workspace capacity reached', 'quota');
   const time = now();
   db.prepare('INSERT INTO branes VALUES (?,?,?,?,?)').run(id, actor, title, time, time);
   return { id, title, created_at: time, updated_at: time };
@@ -51,7 +51,7 @@ export function createPlacement(
     (db.prepare('SELECT count(*) n FROM placements WHERE brane_id=?').get(braneId) as { n: number })
       .n >= MAX_BRANE_PLACEMENTS
   )
-    throw new DomainError(429, 'Brane placement capacity reached');
+    throw new DomainError(429, 'Brane placement capacity reached', 'quota');
   db.prepare(
     'INSERT INTO placements (id,brane_id,block_id,x,y,width,height,z_index,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
   ).run(id, braneId, blockId, g.x, g.y, g.width, g.height, 0, now());

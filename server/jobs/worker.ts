@@ -27,6 +27,22 @@ export interface WorkerOptions {
   canClaim?: () => boolean;
   onFatal?: (error: unknown) => void;
 }
+// Each bound on a run has its own cause, so the stored reason never depends on message text.
+class RunStalled extends Error {
+  constructor() {
+    super('Run stalled');
+  }
+}
+class RunDeadlineExceeded extends Error {
+  constructor() {
+    super('Run deadline exceeded');
+  }
+}
+class RunOutputLimitExceeded extends Error {
+  constructor() {
+    super('Generated text exceeds the character limit');
+  }
+}
 export class RunWorker {
   readonly id = uid();
   private active = new Map<string, AbortController>();
@@ -101,6 +117,7 @@ export class RunWorker {
       savedAt = now();
     const token = startAttempt(db, run.id, this.id);
     if (!token) return;
+    const started = now();
     const publish = (status?: RunRecord['status']) => {
       if (status) lifecycleLog('run_status', { runId: run.id, status, workerId: this.id });
       this.hub.publish(run.owner_id, {
@@ -132,16 +149,13 @@ export class RunWorker {
       Math.min(500, Math.max(50, this.options.leaseMs / 3)),
     );
     const total = setTimeout(
-      () => controller.abort(new Error('Run deadline exceeded')),
+      () => controller.abort(new RunDeadlineExceeded()),
       this.options.totalMs ?? 300000,
     );
     let idle: ReturnType<typeof setTimeout>;
     const progress = () => {
       clearTimeout(idle);
-      idle = setTimeout(
-        () => controller.abort(new Error('Run stalled')),
-        this.options.idleMs ?? 60000,
-      );
+      idle = setTimeout(() => controller.abort(new RunStalled()), this.options.idleMs ?? 60000);
     };
     progress();
     try {
@@ -157,8 +171,7 @@ export class RunWorker {
           (chunk) => {
             controller.signal.throwIfAborted();
             progress();
-            if (!fitsArtifactContent({ text: text + chunk }))
-              throw new Error('Generated text exceeds the character limit');
+            if (!fitsArtifactContent({ text: text + chunk })) throw new RunOutputLimitExceeded();
             text += chunk;
             publish();
             if (
@@ -171,30 +184,37 @@ export class RunWorker {
         controller.signal,
       );
       controller.signal.throwIfAborted();
-      if (!fitsArtifactContent({ text: result.text }))
-        throw new Error('Generated text exceeds the character limit');
+      if (!fitsArtifactContent({ text: result.text })) throw new RunOutputLimitExceeded();
       if (!completeAttempt(db, token, result)) throw new Error('Run no longer owned');
       text = result.text;
       publish('completed');
     } catch (error) {
-      const status = stopAttempt(
-        db,
-        token,
-        text,
-        error instanceof BeforeInvocationError
+      const cause = controller.signal.aborted ? controller.signal.reason : error;
+      const reason =
+        cause instanceof BeforeInvocationError
           ? 'preflight'
           : this.stopping
             ? 'shutdown'
-            : 'failed',
-      );
+            : cause instanceof RunStalled
+              ? 'stalled'
+              : cause instanceof RunDeadlineExceeded
+                ? 'deadline'
+                : cause instanceof RunOutputLimitExceeded
+                  ? 'output_limit'
+                  : 'provider';
+      const status = stopAttempt(db, token, text, reason);
       if (status) publish(status);
       else this.recover();
-      if (!controller.signal.aborted)
-        console.error(
-          'Run execution failed',
-          run.id,
-          error instanceof Error ? error.name : 'Unknown error',
-        );
+      lifecycleLog('run_stopped', {
+        runId: run.id,
+        workerId: this.id,
+        status: status ?? 'not_owned',
+        reason,
+        model: run.model,
+        elapsedMs: now() - started,
+        characters: text.length,
+        error: cause instanceof Error ? cause.name : 'Unknown error',
+      });
     } finally {
       clearInterval(heartbeat);
       clearTimeout(total);

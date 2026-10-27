@@ -28,6 +28,10 @@ One authenticated browser SSE connection multiplexes updates. Reconnection reloa
 
 Expired claims can be requeued before invocation. Expired running work becomes interrupted and is never automatically retried because provider completion and billing may be uncertain. Shutdown aborts active calls best-effort and records interruption. Run exactly one server/worker process; this is not a distributed worker system.
 
+## API errors
+
+Every refusal has the body `{error, code, retryable}` defined in `shared/errors.ts`. The `code` names what the user can do next (`guest_limit`, `budget`, `quota`, `capacity`, `rate_limited`, and the HTTP-shaped codes), and `retryable` says whether the same request may later succeed unchanged. Unexpected failures add a `requestId` that is also written to the server log. The offline replica pauses an operation for review only when its refusal is not retryable; a rate limit or full queue keeps it queued.
+
 ## Stack and repository map
 
 The browser uses React, TypeScript, Vite, React Flow, Zustand and TanStack Router. The server uses Hono, Better Auth, SQLite in WAL mode, AI SDK Core, authenticated SSE, and filesystem or S3-compatible image storage. Redis is not required.

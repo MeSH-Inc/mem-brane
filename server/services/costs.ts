@@ -42,6 +42,7 @@ export function priceFor(model: string, policy?: CostPolicy): ModelPrice {
     throw new DomainError(
       403,
       'Paid runs require verified model pricing and a positive daily budget',
+      'budget',
     );
   usdLimit(policy.dailyLimitUsd);
   return decodeRecord(modelPrice, price);
@@ -120,6 +121,7 @@ export function reserveCost(
         throw new DomainError(
           429,
           'Daily model budget is fully committed, including uncertain previous calls',
+          'budget',
         );
       reserveSpend(
         db,

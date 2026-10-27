@@ -40,6 +40,7 @@ async function fixture() {
   const storage = new IndexedReplicaStorage(storeName);
   let connected = true,
     dropReceipt = false;
+  const refusals: ApiError[] = [];
   let sessionActor: string | null = actor;
   let sessionLibrary: string | null = actor;
   const sent: WorkspaceOperation[] = [];
@@ -70,6 +71,8 @@ async function fixture() {
     if (path === '/sync/commands') {
       const op = raw as WorkspaceOperation;
       sent.push(structuredClone(op));
+      const refused = refusals.shift();
+      if (refused) throw refused;
       try {
         const receipt = applyWorkspaceOperation(db, sessionLibrary!, op);
         if (dropReceipt) {
@@ -78,7 +81,8 @@ async function fixture() {
         }
         return receipt;
       } catch (error) {
-        if (error instanceof DomainError) throw new ApiError(error.status, error.message);
+        if (error instanceof DomainError)
+          throw new ApiError(error.status, error.message, error.code);
         throw error;
       }
     }
@@ -108,6 +112,9 @@ async function fixture() {
     },
     loseReceipt: () => {
       dropReceipt = true;
+    },
+    refuse: (error: ApiError) => {
+      refusals.push(error);
     },
     session: (id: string | null) => {
       sessionActor = id;
@@ -371,6 +378,25 @@ it('pauses on conflicts and explicitly rebases all later edits to the same item'
     content: { text: 'Newest local' },
   });
   expect((await f.storage.read(f.actor)).pending).toHaveLength(0);
+});
+it('keeps a retryable refusal queued but pauses a guest limit for review', async () => {
+  const f = await fixture();
+  f.refuse(new ApiError(429, 'Too many requests; try again shortly', 'rate_limited'));
+  await f.client.saveText({ blockId: f.block.id, text: 'Later', version: 0 });
+  await f.replica.synchronize();
+  const queued = (await f.storage.read(f.actor)).pending;
+  expect(queued).toHaveLength(1);
+  expect(queued[0].failure).toBeUndefined();
+  expect(f.replica.getSnapshot().conflict).toBeUndefined();
+  await f.replica.synchronize();
+  expect((await f.storage.read(f.actor)).pending).toHaveLength(0);
+  f.refuse(new ApiError(429, 'Guest workspace limit reached.', 'guest_limit'));
+  await f.client.saveText({ blockId: f.block.id, text: 'Over the limit', version: 1 });
+  await f.replica.synchronize();
+  expect(f.replica.getSnapshot().conflict?.failure).toMatchObject({
+    status: 429,
+    message: 'Guest workspace limit reached.',
+  });
 });
 it('preserves unrelated local work when server geometry wins a conflict', async () => {
   const f = await fixture();

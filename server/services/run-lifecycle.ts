@@ -1,5 +1,5 @@
 import type { DB } from '../db/index.js';
-import { decodeRecord, runRecord, type RunRecord } from '../db/records.js';
+import { decodeRecord, runRecord, type RunFailureReason, type RunRecord } from '../db/records.js';
 import { requireOwned } from '../domain/access.js';
 import { now, uid } from './content.js';
 import {
@@ -11,6 +11,16 @@ import {
 import type { ModelResult } from '../llm/model.js';
 import { fitsArtifactContent } from '../../shared/limits.js';
 
+/** The stored error for each cause, written for the person who started the run. */
+export const failureMessages: Record<RunFailureReason, string> = {
+  preflight: 'Model preparation failed; no provider call was made',
+  provider: 'The model provider reported an error; completion or billing may be uncertain',
+  stalled: 'The model stopped sending text; the partial response is kept',
+  deadline: 'The response reached the time limit; the partial response is kept',
+  output_limit: 'The response reached the length limit; the partial response is kept',
+  shutdown: 'Server stopped; provider completion is uncertain',
+  lease_expired: 'Processing was interrupted; provider completion is uncertain',
+};
 /** A lease and its attempt fence every write made by an executing worker. */
 export interface AttemptToken {
   runId: string;
@@ -113,11 +123,13 @@ export function recoverStale(db: DB, time = now()) {
             'UPDATE run_attempts SET finished_at=?,outcome=? WHERE run_id=? AND finished_at IS NULL',
           ).run(time, status, run.id);
         }
+        const reason = status === 'interrupted' ? 'lease_expired' : null;
         db.prepare(
-          'UPDATE runs SET status=?,error=?,finished_at=?,lease_owner=NULL,lease_until=NULL WHERE id=?',
+          'UPDATE runs SET status=?,error=?,failure_reason=?,finished_at=?,lease_owner=NULL,lease_until=NULL WHERE id=?',
         ).run(
           status,
-          status === 'queued' ? null : 'Worker lease expired; provider completion is uncertain',
+          reason && failureMessages[reason],
+          reason,
           status === 'queued' ? null : time,
           run.id,
         );
@@ -130,7 +142,7 @@ export function stopAttempt(
   db: DB,
   token: AttemptToken,
   text: string,
-  reason: 'failed' | 'preflight' | 'shutdown',
+  reason: Exclude<RunFailureReason, 'lease_expired'>,
   time = now(),
 ) {
   return db
@@ -146,17 +158,10 @@ export function stopAttempt(
       checkpoint(db, run.id, text, time);
       if (reason === 'preflight') releaseFailedPreflightCost(db, run.id);
       else holdUncertainCost(db, run.id);
-      const error =
-        status === 'cancelled'
-          ? null
-          : reason === 'preflight'
-            ? 'Model preparation failed; no provider call was made'
-            : status === 'interrupted'
-              ? 'Server stopped; provider completion is uncertain'
-              : 'Model request failed; completion or billing may be uncertain';
+      const failure = status === 'cancelled' ? null : reason;
       db.prepare(
-        'UPDATE runs SET status=?,error=?,finished_at=?,lease_owner=NULL,lease_until=NULL WHERE id=?',
-      ).run(status, error, time, run.id);
+        'UPDATE runs SET status=?,error=?,failure_reason=?,finished_at=?,lease_owner=NULL,lease_until=NULL WHERE id=?',
+      ).run(status, failure && failureMessages[failure], failure, time, run.id);
       db.prepare('UPDATE run_attempts SET finished_at=?,outcome=? WHERE id=?').run(
         time,
         status,

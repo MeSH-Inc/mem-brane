@@ -26,7 +26,11 @@ export function reserveUpload(
         )
         .get() as { total: number };
       if (total + size > config.GUEST_TOTAL_STORAGE_BYTES)
-        throw new DomainError(429, 'Guest upload capacity reached. Sign in or try again later.');
+        throw new DomainError(
+          429,
+          'Guest upload capacity reached. Sign in or try again later.',
+          'guest_limit',
+        );
     }
     const usage = db
       .prepare(
@@ -34,7 +38,7 @@ export function reserveUpload(
       )
       .get(actor) as { total: number; actor: number };
     if (usage.total + size > limits.totalBytes || usage.actor + size > limits.userBytes)
-      throw new DomainError(429, 'Artifact storage capacity reached');
+      throw new DomainError(429, 'Artifact storage capacity reached', 'quota');
     db.prepare('INSERT INTO upload_intents (id,owner_id,size,created_at) VALUES (?,?,?,?)').run(
       id,
       actor,
@@ -50,5 +54,5 @@ export function admitImport(db: DB, actor: string, userLimit: number, totalLimit
     )
     .get(actor) as { total: number; actor: number };
   if (count.total >= totalLimit || count.actor >= userLimit)
-    throw new DomainError(429, 'Import queue capacity reached');
+    throw new DomainError(429, 'Import queue capacity reached', 'capacity');
 }

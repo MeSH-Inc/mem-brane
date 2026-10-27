@@ -12,13 +12,19 @@ Heartbeat renews the lease. Stale claimed work can return to queued because no i
 
 Concurrency is configurable globally and per user. Chunks are multiplexed via SSE and periodically checkpointed by time/character threshold. Finalization publishes immutable output and usage atomically. Explicit cancellation aborts local provider work best-effort; it cannot promise zero billing. Shutdown stops claiming, aborts active work and records interrupted unless user cancellation was requested. On restart stale leases are recovered conservatively.
 
-Retry is explicit: a new Run carries retry_of and reuses the same sealed context manifest, with a new idempotency key and attempt. It never silently substitutes newly edited content. Browser disconnect has no cancellation semantics. SSE reconnect reloads all relevant persistent runs and checkpoints; event replay is unnecessary for correctness.
+Retry is explicit: a new Run carries retry_of and reuses the same sealed context manifest, with a new idempotency key and attempt. The client journals that key per retried run, so a lost acknowledgement followed by another activation reconciles the first retry instead of paying for a second. It never silently substitutes newly edited content. Browser disconnect has no cancellation semantics. SSE reconnect reloads all relevant persistent runs and checkpoints; event replay is unnecessary for correctness.
 
 ## Execution supervision
 
 A provider result is final only after an explicit successful finish. Premature EOF,
 provider errors, and output-limit truncation preserve checkpoints without creating an
 output revision. Their billing remains uncertain.
+
+Every stopped run records one `failure_reason`: `preflight`, `provider`, `stalled`
+(idle deadline), `deadline` (total deadline), `output_limit`, `shutdown` or
+`lease_expired`. The stored `error` is the message for that reason, so the user sees
+why the run stopped, and the worker logs a `run_stopped` event with the reason,
+elapsed time and output length for every stop.
 
 Runs have a total deadline (default five minutes) and an idle deadline (default one
 minute). Asset reads receive the cancellation signal. The worker stops waiting even

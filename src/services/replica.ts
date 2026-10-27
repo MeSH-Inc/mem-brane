@@ -179,7 +179,7 @@ export class WorkspaceReplica {
     ) {
       if (typeof window !== 'undefined' && path !== '/runs/estimate')
         requestAccount({ mode: 'signup', reason: accountFeatureReason });
-      throw new ApiError(403, accountFeatureReason);
+      throw new ApiError(403, accountFeatureReason, 'guest_limit');
     }
     const actor = this.actor;
     if (method !== 'GET' && !isLocalMutation(path, method)) {
@@ -421,7 +421,9 @@ export class WorkspaceReplica {
       await this.changed(actor);
       return true;
     } catch (error) {
-      if (error instanceof ApiError && [400, 403, 404, 409, 413, 422].includes(error.status)) {
+      // A refusal that cannot succeed unchanged pauses this operation for review;
+      // a retryable one (rate limit, full queue) stays queued for the next attempt.
+      if (error instanceof ApiError && !error.retryable && error.code !== 'unauthenticated') {
         await this.storage.change(actor, (state) => {
           const current = state.pending.find((op) => op.key === operation.key);
           if (current) current.failure = { status: error.status, message: error.message };

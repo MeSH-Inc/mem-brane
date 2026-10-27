@@ -18,6 +18,7 @@ it('applies the baseline once and reopens without changes', () => {
   const db = openDatabase(path);
   expect(db.prepare('SELECT name FROM schema_migrations').pluck().all()).toEqual([
     '001-baseline.sql',
+    '002-run-failure-reason.sql',
   ]);
   expect(db.prepare('SELECT enabled FROM guest_policy').pluck().get()).toBe(1);
   db.close();

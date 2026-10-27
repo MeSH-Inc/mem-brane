@@ -19,7 +19,11 @@ export function guestCapacity(db: DB, libraryId: string, kind: 'brane' | 'block'
     n: number;
   };
   if (n >= Number(limit))
-    throw new DomainError(429, 'Guest workspace limit reached. Sign in to keep working.');
+    throw new DomainError(
+      429,
+      'Guest workspace limit reached. Sign in to keep working.',
+      'guest_limit',
+    );
 }
 export function guestTextCapacity(db: DB, libraryId: string, text: string, blockId?: string) {
   if (!isGuestLibrary(db, libraryId)) return;
@@ -30,5 +34,5 @@ export function guestTextCapacity(db: DB, libraryId: string, text: string, block
     )
     .get(libraryId, blockId ?? '') as { n: number };
   if (text.length > 20000 || n + text.length > 200000)
-    throw new DomainError(413, 'Guest text limit reached. Sign in to keep working.');
+    throw new DomainError(413, 'Guest text limit reached. Sign in to keep working.', 'guest_limit');
 }

@@ -5,6 +5,7 @@ import type { createAuth } from '../auth/index.js';
 import { config } from '../app/config.js';
 import { currentLibrary, librariesFor } from '../domain/libraries.js';
 import { DomainError } from '../domain/access.js';
+import { errorBody } from '../../shared/errors.js';
 import { createBrane } from '../services/content.js';
 import {
   completeGuestClaim,
@@ -123,7 +124,7 @@ export function entryApi(db: DB, auth: ReturnType<typeof createAuth>) {
     } catch (error) {
       if (!(error instanceof DomainError)) throw error;
       deleteCookie(c, proofCookie, { path: '/api' });
-      return c.json({ error: error.message }, error.status);
+      return c.json(errorBody(error.message, error.code), error.status);
     }
   });
   return app;

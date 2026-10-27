@@ -1,4 +1,5 @@
 import { cancelRun } from '../server/services/run-lifecycle';
+import { MAX_BLOCK_TEXT_CHARACTERS } from '../shared/limits';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase, type DB } from '../server/db/index';
 import {
@@ -293,6 +294,7 @@ describe('worker, branch semantics and reconnect', () => {
     worker.tick();
     await expect.poll(() => requireOwned(db, 'runs', actor, r.id).status).toBe('failed');
     await worker.stop();
+    expect(requireOwned(db, 'runs', actor, r.id).failure_reason).toBe('provider');
     expect(
       (db.prepare('SELECT text FROM run_checkpoints WHERE run_id=?').get(r.id) as any).text,
     ).toBe('Incomplete');
@@ -334,8 +336,27 @@ describe('worker, branch semantics and reconnect', () => {
     );
     worker.tick();
     await worker.stop();
-    expect(requireOwned(db, 'runs', actor, r.id).status).toBe('interrupted');
+    expect(requireOwned(db, 'runs', actor, r.id)).toMatchObject({
+      status: 'interrupted',
+      failure_reason: 'shutdown',
+    });
     expect(db.prepare('SELECT * FROM run_outputs WHERE run_id=?').get(r.id)).toBeUndefined();
+  });
+  it('records an output that outgrows the character limit as a length stop', async () => {
+    const r = submit();
+    const worker = new RunWorker(
+      db,
+      new EventHub(),
+      async () => ({ text: 'x'.repeat(MAX_BLOCK_TEXT_CHARACTERS + 1) }),
+      { concurrency: 1, leaseMs: 5000, checkpointMs: 20, checkpointCharacters: 1 },
+    );
+    worker.tick();
+    await expect.poll(() => requireOwned(db, 'runs', actor, r.id).status).toBe('failed');
+    await worker.stop();
+    expect(requireOwned(db, 'runs', actor, r.id)).toMatchObject({
+      failure_reason: 'output_limit',
+      error: 'The response reached the length limit; the partial response is kept',
+    });
   });
 });
 it('enforces ownership on branes, blocks, runs and assets', () => {
@@ -387,6 +408,9 @@ it.each(['idle', 'total'])(
     await expect
       .poll(() => (db.prepare('SELECT status FROM runs WHERE id=?').get(run.id) as any).status)
       .toBe('failed');
+    expect(requireOwned(db, 'runs', actor, run.id).failure_reason).toBe(
+      deadline === 'idle' ? 'stalled' : 'deadline',
+    );
     expect(() => emit('Late')).toThrow();
     finish({ text: 'Late success' });
     await worker.stop();

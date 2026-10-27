@@ -65,13 +65,18 @@ export function reserveSpend(
         amount > 0 &&
         (!(limits.globalDailyLimitUsd! > 0) || !(limits.globalMonthlyLimitUsd! > 0))
       )
-        throw new DomainError(403, 'Paid work requires positive global daily and monthly budgets');
+        throw new DomainError(
+          403,
+          'Paid work requires positive global daily and monthly budgets',
+          'budget',
+        );
       if (!Number.isSafeInteger(input.units) || input.units < 0)
         throw new RangeError('Invalid spend units');
       if (amount > spendAvailable(db, input.actor, limits, time))
         throw new DomainError(
           429,
           'Spend budget is fully committed, including uncertain previous calls',
+          'budget',
         );
       db.prepare(
         `INSERT INTO spend_commitments

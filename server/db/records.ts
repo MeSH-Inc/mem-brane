@@ -26,6 +26,17 @@ export const assetRecord = z
   })
   .strict();
 export const conversationRecord = z.object(identity).strict();
+export const runFailureReasons = [
+  'preflight',
+  'provider',
+  'stalled',
+  'deadline',
+  'output_limit',
+  'shutdown',
+  'lease_expired',
+] as const;
+export const runFailureReason = z.enum(runFailureReasons);
+export type RunFailureReason = z.infer<typeof runFailureReason>;
 export const runRecord = z
   .object({
     ...identity,
@@ -45,6 +56,7 @@ export const runRecord = z
     usage_json: z.string().nullable(),
     estimated_usage_json: z.string().nullable(),
     error: z.string().nullable(),
+    failure_reason: runFailureReason.nullable(),
     started_at: z.number().int().nullable(),
     finished_at: z.number().int().nullable(),
   })

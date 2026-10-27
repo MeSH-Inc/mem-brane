@@ -1,9 +1,11 @@
 import { decodeRecord, ownedRecords, type OwnedRecords } from '../db/records.js';
 import type { DB } from '../db/index.js';
+import { statusErrorCode, type ErrorCode } from '../../shared/errors.js';
 export class DomainError extends Error {
   constructor(
     public status: 400 | 402 | 401 | 403 | 404 | 409 | 413 | 429 | 500 | 503,
     message: string,
+    public code: ErrorCode = statusErrorCode(status),
   ) {
     super(message);
   }

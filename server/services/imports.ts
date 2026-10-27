@@ -80,7 +80,8 @@ export function createImports(
         if (running.hash !== requestHash) throw new DomainError(409, 'Import key conflict');
         return running.promise;
       }
-      if (active.size >= 4) throw new DomainError(429, 'Import capacity reached; retry shortly');
+      if (active.size >= 4)
+        throw new DomainError(429, 'Import capacity reached; retry shortly', 'capacity');
       const format =
         Buffer.from(bytes.subarray(0, 5)).toString('ascii') === '%PDF-' ? 'pdf' : 'image';
       const policy = policyIdentity(policies[format]);

@@ -1,9 +1,14 @@
+import { errorCodes, isErrorCode, statusErrorCode, type ErrorCode } from '../../shared/errors';
 export class ApiError extends Error {
+  readonly retryable: boolean;
   constructor(
     public status: number,
     message: string,
+    public code: ErrorCode = statusErrorCode(status),
+    public requestId?: string,
   ) {
     super(message);
+    this.retryable = errorCodes[code];
   }
 }
 export async function networkApi(
@@ -32,8 +37,20 @@ export async function networkApi(
     if (response.ok) throw new Error('Invalid server response');
     return { error: 'Request failed' };
   });
-  if (!response.ok) throw new ApiError(response.status, errorMessage(data));
+  if (!response.ok) throw failure(response.status, data);
   return data;
+}
+function failure(status: number, data: unknown): ApiError {
+  const body = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+  const code = isErrorCode(body.code) ? body.code : statusErrorCode(status);
+  const requestId = typeof body.requestId === 'string' ? body.requestId : undefined;
+  const message = errorMessage(data);
+  return new ApiError(
+    status,
+    requestId ? `${message} (reference ${requestId.slice(0, 8)})` : message,
+    code,
+    requestId,
+  );
 }
 function errorMessage(data: unknown): string {
   if (!data || typeof data !== 'object') return 'Request failed';

@@ -439,6 +439,23 @@ it('serves validated configuration, workspace and run DTOs without internal row 
     lease_until: claim.lease_until,
   });
 });
+it('labels refusals with a code that says whether the same request can succeed later', async () => {
+  const missing = await app.request(`/api/runs/${uid()}`, { headers: headers() });
+  expect(missing.status).toBe(404);
+  expect(await missing.json()).toMatchObject({ code: 'not_found', retryable: false });
+  const invalid = await app.request('/api/runs', {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ braneId: 'not-an-id' }),
+  });
+  expect(invalid.status).toBe(400);
+  expect(await invalid.json()).toMatchObject({
+    error: 'Invalid request',
+    code: 'invalid_request',
+    retryable: false,
+    details: expect.any(Array),
+  });
+});
 it('reports invalid persisted run data as a server failure, not a bad request', async () => {
   const brane = createBrane(db, actor);
   const result = await app.request('/api/runs', {
@@ -458,7 +475,14 @@ it('reports invalid persisted run data as a server failure, not a bad request', 
   try {
     const response = await app.request(`/api/runs/${receipt.runId}`, { headers: headers() });
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ error: 'An unexpected error occurred' });
+    const body = await response.json();
+    expect(body).toEqual({
+      error: 'An unexpected error occurred',
+      code: 'internal',
+      retryable: true,
+      requestId: expect.any(String),
+    });
+    expect(log.mock.calls[0][1]).toBe(body.requestId);
   } finally {
     log.mockRestore();
   }
