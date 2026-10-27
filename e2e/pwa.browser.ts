@@ -65,10 +65,10 @@ test('installed shell reloads offline, retains edits and creation, and reconcile
     expect(remote.ok()).toBeTruthy();
     await context.setOffline(false);
     await expect(
-      page.getByText('Synchronization paused for this item:', { exact: false }),
+      page.getByText('Synchronization paused for 1 item.', { exact: false }),
     ).toBeVisible();
     await expect(editor).toHaveValue('My offline thought');
-    await page.getByRole('button', { name: 'Review conflict', exact: true }).click();
+    await page.getByRole('button', { name: 'Review', exact: true }).click();
     await expect(page.locator('.conflict-comparison')).toContainText('Another device edited this');
     await page.getByRole('button', { name: 'Keep local changes', exact: true }).click();
     await expect

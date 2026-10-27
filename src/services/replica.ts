@@ -21,13 +21,22 @@ import {
   overlayPending,
 } from './replica-projection';
 import type { ReplicaStorage, ReplicaState, PendingOperation } from './replica-storage';
+import type { BraneState } from '../../shared/types/domain';
 import { networkApi, ApiError } from './transport';
 import { requestAccount, accountFeatureReason } from './account-prompt';
-import { requestResources, requiredOperations } from './command-dependencies';
+import { commandAccess, requestResources, requiredOperations } from './command-dependencies';
 import { ReplicaScheduler } from './replica-scheduler';
 import { replicaGate, replicaLock } from './replica-locks';
 
-type Status = { connected: boolean; pending: number; error: string; conflict?: PendingOperation };
+type Status = {
+  connected: boolean;
+  pending: number;
+  error: string;
+  conflicts: PendingOperation[];
+};
+// A refused edit can be rebased onto server state; a refused creation can only be discarded.
+const editCommands = new Set(['text.edit', 'placement.edit', 'placement.remove', 'brane.title']);
+const creationCommands = new Set(['text.create', 'placement.create', 'brane.create']);
 const unavailable = (error: unknown) =>
   error instanceof ApiError
     ? error.status >= 500
@@ -44,7 +53,7 @@ export class WorkspaceReplica {
   private scheduler: ReplicaScheduler;
   private channel?: BroadcastChannel;
   private reads = new Map<string, Promise<unknown>>();
-  private status: Status = { connected: true, pending: 0, error: '' };
+  private status: Status = { connected: true, pending: 0, error: '', conflicts: [] };
   private generation = 0;
   constructor(
     readonly storage: ReplicaStorage,
@@ -79,7 +88,7 @@ export class WorkspaceReplica {
     if (this.actor !== actor) return;
     this.setStatus({
       pending: state.pending.length,
-      conflict: state.pending.find((op) => op.failure),
+      conflicts: state.pending.filter((op) => op.failure),
     });
     if (broadcast) this.channel?.postMessage({ actor });
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('brane:local-change'));
@@ -96,7 +105,10 @@ export class WorkspaceReplica {
       this.channel = new BroadcastChannel('mem-brane-replica');
       this.channel.onmessage = (event) => {
         if (event.data.type === 'session') window.dispatchEvent(new Event('brane:session-expired'));
-        if (event.data.actor === this.actor && this.actor) void this.changed(this.actor, false);
+        if (event.data.actor !== this.actor || !this.actor) return;
+        void this.changed(this.actor, false);
+        // Every tab drops its acknowledgement caches after a resolution rebased versions.
+        if (event.data.type === 'reset') window.dispatchEvent(new Event('brane:replica-reset'));
       };
     }
     return () => {
@@ -132,7 +144,7 @@ export class WorkspaceReplica {
     if (this.actor) {
       await this.changed(this.actor, false);
       void this.synchronize();
-    } else this.setStatus({ pending: 0, conflict: undefined });
+    } else this.setStatus({ pending: 0, conflicts: [] });
     return session;
   }
   request: typeof networkApi = async (path, body, method = body === undefined ? 'GET' : 'POST') => {
@@ -167,7 +179,7 @@ export class WorkspaceReplica {
       this.actor = undefined;
       this.principal = undefined;
       ++this.generation;
-      this.setStatus({ pending: 0, conflict: undefined });
+      this.setStatus({ pending: 0, conflicts: [] });
       return result;
     }
     if (!this.actor || path.startsWith('/auth/') || path.startsWith('/guest/'))
@@ -390,7 +402,7 @@ export class WorkspaceReplica {
         connected: true,
         error: 'Sign in again to synchronize your local work.',
         pending: 0,
-        conflict: undefined,
+        conflicts: [],
       });
       if (typeof window !== 'undefined') window.dispatchEvent(new Event('brane:session-expired'));
       return false;
@@ -438,52 +450,50 @@ export class WorkspaceReplica {
       return false;
     }
   }
-  async inspectConflict() {
+  // The local side is the item's final local state, not the first refused operation,
+  // so the comparison shows everything a server choice would replace.
+  async inspectConflict(key: string) {
     const actor = this.actor;
     if (!actor) throw new Error('Sign in to review this conflict.');
     const state = await this.storage.read(actor);
-    const head = state.pending.find((op) => op.failure);
-    if (!head?.failure) return undefined;
-    const command = head.command;
-    const workspace = Object.values(state.workspaces).find((w) =>
-      command.type === 'text.edit'
-        ? w.blocks.some((b) => b.id === command.blockId)
-        : command.type === 'brane.title'
-          ? w.brane.id === command.id
-          : command.type === 'placement.remove'
-            ? w.brane.id === command.braneId
-            : 'id' in command && w.placements.some((p) => p.id === command.id),
-    );
-    if (!workspace) return { key: head.key, local: command, server: 'No cached source workspace.' };
-    const current = workspaceResponse.parse(
-      await this.remote(`/branes/${workspace.brane.id}`, undefined, 'GET', actor),
-    );
-    const server =
-      command.type === 'text.edit'
-        ? current.blocks.find((b) => b.id === command.blockId)
-        : command.type === 'brane.title'
-          ? current.brane
-          : 'id' in command
-            ? current.placements.find((p) => p.id === command.id)
-            : undefined;
-    return { key: head.key, local: command, server: server ?? 'Removed on server' };
+    const failed = state.pending.find((op) => op.key === key && op.failure);
+    if (!failed) return undefined;
+    const command = failed.command;
+    const local = localState(state, command);
+    const absent = creationCommands.has(command.type) ? 'Not on the server' : 'Removed on server';
+    const braneId = commandBrane(state, command);
+    if (!braneId) return { key, local, server: 'No cached source workspace.' };
+    let current;
+    try {
+      current = workspaceResponse.parse(
+        await this.remote(`/branes/${braneId}`, undefined, 'GET', actor),
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return { key, local, server: absent };
+      throw error;
+    }
+    return { key, local, server: serverState(current, command) ?? absent };
   }
-  async resolveConflict(choice: 'local' | 'server') {
+  async resolveConflict(key: string, choice: 'local' | 'server') {
     const actor = this.actor;
     if (!actor) return;
     const work = async () => {
       const initial = await this.storage.read(actor);
-      const head = initial.pending.find((op) => op.failure);
-      if (
-        !head?.failure ||
-        !['text.edit', 'placement.edit', 'placement.remove', 'brane.title'].includes(
-          head.command.type,
-        )
-      )
+      const head = initial.pending.find((op) => op.key === key && op.failure);
+      if (!head) throw new Error('Another window resolved this conflict.');
+      const creation = creationCommands.has(head.command.type);
+      if (!creation && !editCommands.has(head.command.type))
+        throw new Error('This operation cannot be resolved here. Export your local changes.');
+      if (creation && choice === 'local')
         throw new Error(
-          'This operation needs the reported server condition resolved before retrying.',
+          'The server refused this creation. Discard it, or retry once the reported condition is resolved.',
         );
       const entity = commandEntity(head.command);
+      // Choosing server text must not destroy the local text: it is kept as a copy.
+      const preserved =
+        choice === 'server' && head.command.type === 'text.edit'
+          ? findBlock(initial, head.command.blockId)
+          : undefined;
       const remote: ReplicaState['workspaces'] = {};
       for (const id of Object.keys(initial.workspaces)) {
         try {
@@ -498,15 +508,18 @@ export class WorkspaceReplica {
       await this.storage.change(actor, (state) => {
         if (!state.pending.some((op) => op.key === head.key && op.failure))
           throw new Error('Another window resolved this conflict.');
+        const placed = preserved && copyPlacement(state, preserved.id);
         state.workspaces = remote;
         if (head.command.type === 'text.edit')
           // Reset the detached projection too, so choosing server state cannot
           // resurrect a rejected local edit through a later card restoration.
           delete state.reads[`/blocks/${head.command.blockId}`];
         state.branes = state.branes.map((b) => remote[b.id]?.brane ?? b);
+        const discarded = creation ? dependentOperations(state.pending, head.key) : new Set();
         const pending: PendingOperation[] = [];
         for (const entry of state.pending) {
-          const matches = commandEntity(entry.command) === entity;
+          if (discarded.has(entry.key)) continue;
+          const matches = !creation && commandEntity(entry.command) === entity;
           if (matches && choice === 'server') continue;
           const next = structuredClone(entry);
           if (matches) {
@@ -520,7 +533,12 @@ export class WorkspaceReplica {
                   'The source was removed. Export your local changes before choosing server state.',
                 );
               c.version = block.version;
-            } else if (c.type === 'placement.edit' || c.type === 'placement.remove') {
+            } else if (c.type === 'placement.remove') {
+              const placement = findPlacement(state, c.id);
+              // Both sides removed it; the intent is already satisfied.
+              if (!placement) continue;
+              c.version = placement.version;
+            } else if (c.type === 'placement.edit') {
               const placement = findPlacement(state, c.id);
               if (!placement)
                 throw new Error(
@@ -529,27 +547,50 @@ export class WorkspaceReplica {
               c.version = placement.version;
             } else if (c.type === 'brane.title') c.previous = state.workspaces[c.id].brane.title;
           }
-          projectCommand(state, next.command);
-          pending.push(next);
+          pending.push(project(state, next));
+        }
+        if (preserved && placed) {
+          const server = findBlock(state, preserved.id);
+          if (preserved.content.text && preserved.content.text !== server?.content.text) {
+            const blockId = crypto.randomUUID();
+            for (const command of [
+              {
+                type: 'text.create' as const,
+                braneId: placed.brane_id,
+                blockId,
+                placementId: crypto.randomUUID(),
+                geometry: {
+                  x: placed.x + 32,
+                  y: placed.y + 32,
+                  width: placed.width,
+                  height: placed.height,
+                },
+              },
+              { type: 'text.edit' as const, blockId, text: preserved.content.text, version: 0 },
+            ])
+              pending.push(project(state, { key: crypto.randomUUID(), command }));
+          }
         }
         state.pending = pending;
         state.sequence++;
       });
       this.setStatus({ error: '' });
-      await this.changed(actor);
+      await this.changed(actor, false);
       // Reset controller acknowledgement caches after explicit version rebasing.
+      this.channel?.postMessage({ actor, type: 'reset' });
       if (typeof window !== 'undefined') window.dispatchEvent(new Event('brane:replica-reset'));
     };
     await replicaLock(replicaGate(actor), 'exclusive', work);
     await this.synchronize();
   }
-  async retry() {
+  // Without a key every paused operation is attempted again.
+  async retry(key?: string) {
     const actor = this.actor;
     if (!actor) return;
     await this.storage.change(actor, (state) => {
-      const conflict = state.pending.find((op) => op.failure);
-      if (conflict) delete conflict.failure;
+      for (const op of state.pending) if (key === undefined || op.key === key) delete op.failure;
     });
+    await this.changed(actor);
     await this.synchronize();
   }
   async exportLocal() {
@@ -559,6 +600,80 @@ export class WorkspaceReplica {
       actor: this.actor,
       ...(await this.storage.read(this.actor)),
     };
+  }
+}
+// Re-applying one queued operation must not abort the resolution of the others:
+// an operation whose target is gone is paused for its own review instead.
+function project(state: ReplicaState, operation: PendingOperation): PendingOperation {
+  try {
+    projectCommand(state, operation.command);
+    return operation;
+  } catch (error) {
+    return {
+      ...operation,
+      failure: operation.failure ?? { status: 409, message: (error as Error).message },
+    };
+  }
+}
+// A discarded creation takes every queued operation that needs what it created.
+function dependentOperations(pending: PendingOperation[], key: string) {
+  const keys = new Set<string>();
+  const created = new Set<string>();
+  for (const operation of pending) {
+    const { reads, writes } = commandAccess(operation.command);
+    if (operation.key !== key && ![...reads, ...writes].some((r) => created.has(r))) continue;
+    keys.add(operation.key);
+    for (const resource of writes) if (resource.endsWith(':exists')) created.add(resource);
+  }
+  return keys;
+}
+function copyPlacement(state: ReplicaState, blockId: string) {
+  return Object.values(state.workspaces)
+    .flatMap((w) => w.placements)
+    .find((p) => p.block_id === blockId);
+}
+function commandBrane(state: ReplicaState, command: WorkspaceCommand): string | undefined {
+  switch (command.type) {
+    case 'brane.create':
+    case 'brane.title':
+      return command.id;
+    case 'text.create':
+    case 'placement.create':
+    case 'placement.remove':
+      return command.braneId;
+    case 'text.edit':
+      return Object.values(state.workspaces).find((w) =>
+        w.blocks.some((b) => b.id === command.blockId),
+      )?.brane.id;
+    case 'placement.edit':
+      return findPlacement(state, command.id)?.brane_id;
+  }
+}
+function localState(state: ReplicaState, command: WorkspaceCommand): unknown {
+  switch (command.type) {
+    case 'brane.create':
+    case 'brane.title':
+      return state.workspaces[command.id]?.brane ?? command;
+    case 'text.create':
+    case 'text.edit':
+      return findBlock(state, command.blockId) ?? command;
+    case 'placement.create':
+    case 'placement.edit':
+      return findPlacement(state, command.id) ?? command;
+    case 'placement.remove':
+      return command;
+  }
+}
+function serverState(current: BraneState, command: WorkspaceCommand): unknown {
+  switch (command.type) {
+    case 'brane.create':
+    case 'brane.title':
+      return current.brane;
+    case 'text.create':
+    case 'text.edit':
+      return current.blocks.find((b) => b.id === command.blockId);
+    default:
+      return current.placements.find((p) => p.id === command.id);
   }
 }
 function validateBase(state: ReplicaState, command: WorkspaceCommand) {

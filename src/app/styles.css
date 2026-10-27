@@ -1348,6 +1348,10 @@ a {
 .app-status > button {
   margin: 4px 6px 4px 0;
 }
+.sync-conflict-item {
+  padding: 6px 0;
+  border-top: 1px solid #d8c8a4;
+}
 
 .canvas-host {
   touch-action: none;

@@ -51,7 +51,7 @@ export function AppStatus() {
   }
   const disconnected = !connected || !sync.connected;
   if (!disconnected && !update && !problem && !sync.pending && !sync.error) return null;
-  if (!disconnected && !update && !problem && !sync.error && !sync.conflict) return null;
+  if (!disconnected && !update && !problem && !sync.error && !sync.conflicts.length) return null;
   return (
     <aside className="app-status" aria-label="App connection and updates">
       {!connected && <p>Disconnected. Reconnect to synchronize your workspace and use AI.</p>}
@@ -62,18 +62,87 @@ export function AppStatus() {
         </p>
       )}
       {sync.error && <p>{sync.error}</p>}
-      {sync.conflict && (
+      {!!sync.conflicts.length && (
         <div className="sync-conflict">
           <p>
-            <strong>Synchronization paused for this item:</strong> {sync.conflict.failure?.message}
+            <strong>
+              Synchronization paused for {sync.conflicts.length}{' '}
+              {sync.conflicts.length === 1 ? 'item' : 'items'}.
+            </strong>{' '}
+            Other items continue synchronizing.
           </p>
-          <p>Other items continue synchronizing.</p>
-          <button
-            disabled={busy}
-            onClick={() => void act(async () => setReview(await replica.inspectConflict()))}
-          >
-            Review conflict
-          </button>
+          {sync.conflicts.map((conflict) => {
+            const creation = creationTypes.includes(conflict.command.type);
+            return (
+              <div key={conflict.key} className="sync-conflict-item">
+                <p>{conflict.failure?.message}</p>
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    void act(async () => setReview(await replica.inspectConflict(conflict.key)))
+                  }
+                >
+                  Review
+                </button>
+                <button disabled={busy} onClick={() => void act(() => replica.retry(conflict.key))}>
+                  Retry
+                </button>
+                {review?.key === conflict.key && (
+                  <>
+                    <div className="conflict-comparison">
+                      <div>
+                        <strong>On this device</strong>
+                        <pre>{describeChange(review.local)}</pre>
+                      </div>
+                      <div>
+                        <strong>Current server state</strong>
+                        <pre>{describeChange(review.server)}</pre>
+                      </div>
+                    </div>
+                    {creation ? (
+                      <>
+                        <p>
+                          Discarding removes this new item and the queued changes that depend on it.
+                          Other local changes are retained.
+                        </p>
+                        <button
+                          disabled={busy}
+                          onClick={() =>
+                            void act(() => replica.resolveConflict(conflict.key, 'server'))
+                          }
+                        >
+                          Discard this item
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p>
+                          Your choice applies to all queued changes to this same item. Choosing the
+                          server keeps your text as a separate copy.
+                        </p>
+                        <button
+                          disabled={busy}
+                          onClick={() =>
+                            void act(() => replica.resolveConflict(conflict.key, 'local'))
+                          }
+                        >
+                          Keep local changes
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() =>
+                            void act(() => replica.resolveConflict(conflict.key, 'server'))
+                          }
+                        >
+                          Use server changes
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
           <button
             disabled={busy}
             onClick={() =>
@@ -92,42 +161,6 @@ export function AppStatus() {
           >
             Export local recovery
           </button>
-          {review?.key === sync.conflict.key && (
-            <>
-              <div className="conflict-comparison">
-                <div>
-                  <strong>Local change</strong>
-                  <pre>{describeChange(review.local)}</pre>
-                </div>
-                <div>
-                  <strong>Current server state</strong>
-                  <pre>{describeChange(review.server)}</pre>
-                </div>
-              </div>
-              {['text.edit', 'placement.edit', 'placement.remove', 'brane.title'].includes(
-                sync.conflict.command.type,
-              ) && (
-                <>
-                  <p>
-                    Your choice applies to all queued changes to this same item. Other local changes
-                    are retained.
-                  </p>
-                  <button
-                    disabled={busy}
-                    onClick={() => void act(() => replica.resolveConflict('local'))}
-                  >
-                    Keep local changes
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() => void act(() => replica.resolveConflict('server'))}
-                  >
-                    Use server changes
-                  </button>
-                </>
-              )}
-            </>
-          )}
         </div>
       )}
       {(disconnected || !!sync.error) && (
@@ -142,6 +175,8 @@ export function AppStatus() {
     </aside>
   );
 }
+
+const creationTypes = ['text.create', 'placement.create', 'brane.create'];
 
 function describeChange(value: unknown): string {
   if (typeof value === 'string') return value;

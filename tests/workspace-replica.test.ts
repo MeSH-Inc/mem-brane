@@ -21,6 +21,7 @@ import { ApiError, networkApi } from '../src/services/transport';
 import { createClient } from '../src/services/client';
 import type { WorkspaceOperation } from '../shared/workspace-commands';
 let db: DB;
+const firstConflict = (replica: WorkspaceReplica) => replica.getSnapshot().conflicts[0].key;
 beforeEach(() => {
   db = openDatabase(':memory:');
 });
@@ -259,7 +260,7 @@ it('preserves pending text against newer card reads until explicit conflict reso
   expect((await f.client.workspace(f.brane.id)).blocks[0].content.text).toBe(
     'Keep my local intent',
   );
-  await f.replica.resolveConflict('server');
+  await f.replica.resolveConflict(firstConflict(f.replica), 'server');
   expect(await f.client.block(f.block.id)).toMatchObject({
     version: 2,
     content: { text: 'Remote two' },
@@ -369,10 +370,10 @@ it('pauses on conflicts and explicitly rebases all later edits to the same item'
   updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'Other writer', version: 0 });
   f.online();
   await f.replica.synchronize();
-  expect(f.replica.getSnapshot().conflict?.failure?.status).toBe(409);
+  expect(f.replica.getSnapshot().conflicts[0]?.failure?.status).toBe(409);
   expect((await f.client.workspace(f.brane.id)).blocks[0].content.text).toBe('Newest local');
   expect(readBrane(db, f.actor, f.brane.id).blocks[0].content.text).toBe('Other writer');
-  await f.replica.resolveConflict('local');
+  await f.replica.resolveConflict(firstConflict(f.replica), 'local');
   expect(readBrane(db, f.actor, f.brane.id).blocks[0]).toMatchObject({
     version: 3,
     content: { text: 'Newest local' },
@@ -387,16 +388,100 @@ it('keeps a retryable refusal queued but pauses a guest limit for review', async
   const queued = (await f.storage.read(f.actor)).pending;
   expect(queued).toHaveLength(1);
   expect(queued[0].failure).toBeUndefined();
-  expect(f.replica.getSnapshot().conflict).toBeUndefined();
+  expect(f.replica.getSnapshot().conflicts).toEqual([]);
   await f.replica.synchronize();
   expect((await f.storage.read(f.actor)).pending).toHaveLength(0);
   f.refuse(new ApiError(429, 'Guest workspace limit reached.', 'guest_limit'));
   await f.client.saveText({ blockId: f.block.id, text: 'Over the limit', version: 1 });
   await f.replica.synchronize();
-  expect(f.replica.getSnapshot().conflict?.failure).toMatchObject({
+  expect(f.replica.getSnapshot().conflicts[0]?.failure).toMatchObject({
     status: 429,
     message: 'Guest workspace limit reached.',
   });
+});
+it('reviews the final local text and keeps it as a copy when the server wins', async () => {
+  const f = await fixture();
+  f.offline();
+  await f.client.saveText({ blockId: f.block.id, text: 'Hel', version: 0 });
+  await f.client.saveText({ blockId: f.block.id, text: 'Hello, a whole paragraph', version: 1 });
+  await f.replica.synchronize();
+  updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'Other writer', version: 0 });
+  f.online();
+  await f.replica.synchronize();
+  const review = await f.replica.inspectConflict(firstConflict(f.replica));
+  expect(review?.local).toMatchObject({ content: { text: 'Hello, a whole paragraph' } });
+  expect(review?.server).toMatchObject({ content: { text: 'Other writer' } });
+  await f.replica.resolveConflict(review!.key, 'server');
+  expect((await f.storage.read(f.actor)).pending).toHaveLength(0);
+  const texts = readBrane(db, f.actor, f.brane.id).blocks.map((b) => b.content.text);
+  expect(texts.sort()).toEqual(['Hello, a whole paragraph', 'Other writer']);
+  const copy = readBrane(db, f.actor, f.brane.id).placements.find(
+    (p) => p.id !== f.block.placement.id,
+  );
+  expect(copy).toMatchObject({ x: f.block.placement.x + 32, y: f.block.placement.y + 32 });
+});
+it('resolves each conflict even when another queued target was removed on the server', async () => {
+  const f = await fixture();
+  const other = createTextBlock(db, f.actor, f.brane.id);
+  await f.client.workspace(f.brane.id);
+  f.offline();
+  await f.client.saveText({ blockId: f.block.id, text: 'Local text', version: 0 });
+  await f.client.savePlacement(other.placement.id, {
+    x: 700,
+    y: 700,
+    width: 320,
+    height: 220,
+    version: 0,
+  });
+  await f.replica.synchronize();
+  updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'Remote text', version: 0 });
+  removePlacement(db, f.actor, other.placement.id);
+  f.online();
+  await f.replica.synchronize();
+  const conflicts = f.replica.getSnapshot().conflicts;
+  expect(conflicts.map((c) => c.command.type).sort()).toEqual(['placement.edit', 'text.edit']);
+  const text = conflicts.find((c) => c.command.type === 'text.edit')!;
+  await f.replica.resolveConflict(text.key, 'local');
+  expect(readBrane(db, f.actor, f.brane.id).blocks.find((b) => b.id === f.block.id)).toMatchObject({
+    content: { text: 'Local text' },
+  });
+  const [moved] = f.replica.getSnapshot().conflicts;
+  expect(moved.command.type).toBe('placement.edit');
+  await f.replica.resolveConflict(moved.key, 'server');
+  expect((await f.storage.read(f.actor)).pending).toHaveLength(0);
+  expect(f.replica.getSnapshot().conflicts).toEqual([]);
+});
+it('treats a removal that the server already made as satisfied', async () => {
+  const f = await fixture();
+  f.offline();
+  await f.client.removePlacement(f.block.placement.id);
+  await f.replica.synchronize();
+  removePlacement(db, f.actor, f.block.placement.id);
+  f.online();
+  await f.replica.synchronize();
+  expect(f.replica.getSnapshot().conflicts).toHaveLength(1);
+  await f.replica.resolveConflict(firstConflict(f.replica), 'local');
+  expect((await f.storage.read(f.actor)).pending).toHaveLength(0);
+});
+it('discards a refused creation together with the changes that depend on it', async () => {
+  const f = await fixture();
+  f.offline();
+  const created = await f.client.createText(f.brane.id, { x: 0, y: 0, width: 320, height: 220 });
+  await f.client.saveText({ blockId: created.id, text: 'Depends on creation', version: 0 });
+  await f.client.saveText({ blockId: f.block.id, text: 'Unrelated', version: 0 });
+  await f.replica.synchronize();
+  f.refuse(new ApiError(429, 'Guest workspace limit reached.', 'guest_limit'));
+  f.online();
+  await f.replica.synchronize();
+  const [refused] = f.replica.getSnapshot().conflicts;
+  expect(refused.command.type).toBe('text.create');
+  await expect(f.replica.resolveConflict(refused.key, 'local')).rejects.toThrow('Discard it');
+  await f.replica.resolveConflict(refused.key, 'server');
+  expect((await f.storage.read(f.actor)).pending).toHaveLength(0);
+  const state = readBrane(db, f.actor, f.brane.id);
+  expect(state.blocks.map((b) => b.id)).toEqual([f.block.id]);
+  expect(state.blocks[0].content.text).toBe('Unrelated');
+  expect((await f.client.workspace(f.brane.id)).blocks.map((b) => b.id)).toEqual([f.block.id]);
 });
 it('preserves unrelated local work when server geometry wins a conflict', async () => {
   const f = await fixture();
@@ -419,7 +504,7 @@ it('preserves unrelated local work when server geometry wins a conflict', async 
   });
   f.online();
   await f.replica.synchronize();
-  await f.replica.resolveConflict('server');
+  await f.replica.resolveConflict(firstConflict(f.replica), 'server');
   const state = readBrane(db, f.actor, f.brane.id);
   expect(state.placements[0].x).toBe(900);
   expect(state.blocks[0].content.text).toBe('Retain this edit');
@@ -654,7 +739,7 @@ it('blocks only conflicted dependencies and refreshes server content around pend
   updateBlockLiveState(db, f.actor, { blockId: f.block.id, text: 'Remote A', version: 0 });
   f.online();
   await f.replica.synchronize();
-  expect(f.replica.getSnapshot().conflict?.command).toMatchObject({ blockId: f.block.id });
+  expect(f.replica.getSnapshot().conflicts[0]?.command).toMatchObject({ blockId: f.block.id });
   expect((await f.storage.read(f.actor)).pending).toHaveLength(1);
   expect(
     readBrane(db, f.actor, f.brane.id).blocks.find((block) => block.id === b.id)?.content.text,
@@ -673,7 +758,7 @@ it('blocks only conflicted dependencies and refreshes server content around pend
     (await f.client.workspace(f.brane.id)).blocks.find((block) => block.id === f.block.id)?.content
       .text,
   ).toBe('Local A');
-  await f.replica.resolveConflict('server');
+  await f.replica.resolveConflict(firstConflict(f.replica), 'server');
   expect(
     (await f.client.workspace(f.brane.id)).blocks.find((block) => block.id === f.block.id)?.content
       .text,

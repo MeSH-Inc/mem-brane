@@ -40,12 +40,23 @@ offline clients cannot accidentally redeliver an old operation as a new write.
 
 Text and geometry writes carry expected versions; title writes carry the previous
 title; removal carries the placement version. A conflicting operation pauses only
-its dependent changes; unrelated entities continue synchronizing. Review its local
-change and current server state, then explicitly
-keep local changes or use server changes for that item. Later changes to the same
-item are rebased or discarded together; unrelated local changes are retained.
-Capacity, validation and permission failures retain the operation for retry and
-recovery export. Removed sources cannot be silently recreated by an overwrite.
+its dependent changes; unrelated entities continue synchronizing. Every paused item
+is listed and can be reviewed and resolved on its own. The review compares the
+item's final state on this device, including every queued edit, with the current
+server state; then explicitly keep local changes or use server changes for that
+item. Later changes to the same item are rebased or discarded together; unrelated
+local changes are retained. Using server text keeps the local text as a new card
+beside the original, so the choice never discards writing. A removal the server
+already made is treated as done. A queued operation whose target disappeared during
+a resolution is paused for its own review instead of blocking the resolution.
+
+A refusal pauses an operation only when the same request cannot succeed unchanged
+(validation, permission, quota, guest limit); rate limits and full queues stay queued
+and are retried. A refused creation can be discarded together with the queued
+changes that depend on it, or retried once its condition is resolved. Paused
+operations stay available for recovery export. Removed sources cannot be silently
+recreated by an overwrite. A resolution resets acknowledgement caches in every open
+window of the account, not only the one that resolved it.
 
 Before replay, the client revalidates the account. Requests also bind the expected
 actor to the server session, preventing replay under another account's cookies.
