@@ -58,7 +58,9 @@ export class WorkspaceController {
   readonly submission: Submission<Prepared<SubmitRun>>;
   readonly pendingRuns: RequestJournal<Prepared<SubmitRun>>;
   readonly spawnRequests: RequestJournal<Prepared<SpawnArtifact>>;
+  readonly retryRequests: RequestJournal<string>;
   private spawns = new Map<string, Submission<Prepared<SpawnArtifact>>>();
+  private retries = new Map<string, Submission<string>>();
   private client: Client;
   private textSaves: TextSaves;
   readonly document: WorkspaceDocument;
@@ -122,6 +124,11 @@ export class WorkspaceController {
     this.spawnRequests = new RequestJournal(
       JSON.stringify(['mem-brane-pending-spawns', actor, braneId]),
       (v) => validPrepared(v, spawnArtifact),
+      deps.storage,
+    );
+    this.retryRequests = new RequestJournal(
+      JSON.stringify(['mem-brane-pending-retries', actor, braneId]),
+      (v) => typeof v === 'string',
       deps.storage,
     );
     this.submission = new Submission(this.pendingRuns);
@@ -806,8 +813,20 @@ export class WorkspaceController {
   importWebpage = (url: string) =>
     this.mutate('webpage', () => this.client.importWebpage(this.braneId, url));
   cancelRun = (id: string) => this.mutate(`cancel:${id}`, () => this.client.cancelRun(id));
+  // A retry is a paid run. An uncertain acknowledgement reuses its journaled key,
+  // so a second activation reconciles the first instead of creating another run.
   retryRun = (id: string) =>
-    this.mutate(`retry:${id}`, () => this.client.retryRun(id, crypto.randomUUID()));
+    this.mutate(`retry:${id}`, async () => {
+      let submission = this.retries.get(id);
+      if (!submission) {
+        submission = new Submission(this.retryRequests, `retry:${id}`);
+        this.retries.set(id, submission);
+      }
+      await submission.send(
+        async () => crypto.randomUUID(),
+        (key) => this.client.retryRun(id, key),
+      );
+    });
   private mutate = (key: string, work: () => Promise<unknown>) =>
     this.command(key, async (progress) => {
       const epoch = this.epoch;

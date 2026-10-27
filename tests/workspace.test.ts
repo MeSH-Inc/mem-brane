@@ -727,6 +727,48 @@ it('reports a failed cancellation and permits an explicit retry without duplicat
   expect(f.c.error).toBe('');
 });
 
+it('reuses the retry key after a lost acknowledgement, including after reopening', async () => {
+  const f = await fixture();
+  const run = crypto.randomUUID();
+  const retried = () => f.sent.filter((r) => r.path === `/runs/${run}/retry`);
+  f.intercept((path) =>
+    path.endsWith('/retry') ? Promise.reject(new TypeError('Failed to fetch')) : undefined,
+  );
+  await expect(f.c.retryRun(run)).rejects.toThrow('Failed to fetch');
+  const reopened = f.make();
+  reopened.start();
+  await settle();
+  f.intercept((path) =>
+    path.endsWith('/retry')
+      ? Promise.resolve({ runId: crypto.randomUUID(), outputBlockId: crypto.randomUUID() })
+      : undefined,
+  );
+  await reopened.retryRun(run);
+  expect(retried().map((r) => r.body.key)).toEqual([retried()[0].body.key, retried()[0].body.key]);
+  await reopened.retryRun(run);
+  expect(retried()).toHaveLength(3);
+  expect(retried()[2].body.key).not.toBe(retried()[0].body.key);
+});
+
+it('drops the retry key when the server rejects the retry', async () => {
+  const f = await fixture();
+  const run = crypto.randomUUID();
+  f.intercept((path) =>
+    path.endsWith('/retry')
+      ? Promise.reject(new ApiError(409, 'Only stopped runs can be retried'))
+      : undefined,
+  );
+  await expect(f.c.retryRun(run)).rejects.toThrow('Only stopped runs');
+  f.intercept((path) =>
+    path.endsWith('/retry')
+      ? Promise.resolve({ runId: crypto.randomUUID(), outputBlockId: crypto.randomUUID() })
+      : undefined,
+  );
+  await f.c.retryRun(run);
+  const keys = f.sent.filter((r) => r.path.endsWith('/retry')).map((r) => r.body.key);
+  expect(keys[1]).not.toBe(keys[0]);
+});
+
 it('autosaves titles in order and preserves edits made during an earlier acknowledgement', async () => {
   const f = await fixture();
   const gate = deferred<void>();
