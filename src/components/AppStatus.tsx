@@ -8,6 +8,12 @@ export function AppStatus() {
   const [connected, setConnected] = useState(navigator.onLine);
   const [update, setUpdate] = useState(false);
   const [problem, setProblem] = useState('');
+  const [live, setLive] = useState(true);
+  useEffect(() => {
+    const change = (event: Event) => setLive((event as CustomEvent<boolean>).detail);
+    window.addEventListener('brane:live', change);
+    return () => window.removeEventListener('brane:live', change);
+  }, []);
   useEffect(() => replica.start(), []);
   useEffect(() => {
     const online = () => setConnected(true);
@@ -50,11 +56,13 @@ export function AppStatus() {
     }
   }
   const disconnected = !connected || !sync.connected;
-  if (!disconnected && !update && !problem && !sync.pending && !sync.error) return null;
-  if (!disconnected && !update && !problem && !sync.error && !sync.conflicts.length) return null;
+  const paused = !disconnected && !live;
+  if (!disconnected && !paused && !update && !problem && !sync.error && !sync.conflicts.length)
+    return null;
   return (
     <aside className="app-status" aria-label="App connection and updates">
       {!connected && <p>Disconnected. Reconnect to synchronize your workspace and use AI.</p>}
+      {paused && <p>Live updates paused. Reconnecting; responses still finish on the server.</p>}
       {!!sync.pending && (
         <p>
           {sync.pending} local {sync.pending === 1 ? 'change' : 'changes'} waiting to synchronize.

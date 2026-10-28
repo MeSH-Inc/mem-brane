@@ -1,4 +1,5 @@
 import { openEntry, enterGuest } from '../services/entry';
+import { connectLiveUpdates } from '../services/live-updates';
 import { Dialog } from '../components/Dialog';
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -229,22 +230,30 @@ function Shell() {
   useEffect(() => {
     if (!session) return;
     refreshBranes();
-    const events = new EventSource(`/api/events?library=${encodeURIComponent(session.libraryId)}`);
-    events.addEventListener('ready', () => window.dispatchEvent(new Event('brane:reconcile')));
-    events.addEventListener('run', (event) => {
-      try {
-        const detail = runEventResponse.parse(JSON.parse((event as MessageEvent).data));
-        window.dispatchEvent(new CustomEvent('brane:run', { detail }));
-      } catch {
-        // SSE is only a hint. A malformed update must be reconciled from storage.
-        window.dispatchEvent(new Event('brane:reconcile'));
-      }
+    const reconcile = () => window.dispatchEvent(new Event('brane:reconcile'));
+    const disconnect = connectLiveUpdates({
+      open: () => new EventSource(`/api/events?library=${encodeURIComponent(session.libraryId)}`),
+      eventTypes: ['ready', 'run'],
+      onReconcile: reconcile,
+      onConnected: (connected) =>
+        window.dispatchEvent(new CustomEvent('brane:live', { detail: connected })),
+      onEvent: (type, event) => {
+        if (type === 'ready') return reconcile();
+        try {
+          const detail = runEventResponse.parse(JSON.parse((event as MessageEvent).data));
+          window.dispatchEvent(new CustomEvent('brane:run', { detail }));
+        } catch {
+          // SSE is only a hint. A malformed update must be reconciled from storage.
+          reconcile();
+        }
+      },
     });
     window.addEventListener('brane:reconcile', refreshBranes);
     window.addEventListener('brane:local-change', refreshBranes);
     const timer = setInterval(refreshBranes, 10000);
     return () => {
-      events.close();
+      disconnect();
+      window.dispatchEvent(new CustomEvent('brane:live', { detail: true }));
       window.removeEventListener('brane:reconcile', refreshBranes);
       window.removeEventListener('brane:local-change', refreshBranes);
       clearInterval(timer);
