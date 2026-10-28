@@ -483,6 +483,44 @@ it('discards a refused creation together with the changes that depend on it', as
   expect(state.blocks[0].content.text).toBe('Unrelated');
   expect((await f.client.workspace(f.brane.id)).blocks.map((b) => b.id)).toEqual([f.block.id]);
 });
+it('takes the text versions a Run saved, so the next local edit is not refused', async () => {
+  const f = await fixture();
+  const replica = new WorkspaceReplica(
+    new IndexedReplicaStorage(f.storeName),
+    async (path, raw, method, ...rest) => {
+      if (path !== '/runs') return f.transport(path, raw, method, ...rest);
+      // The server saves the source text as part of accepting the Run.
+      const saved = updateBlockLiveState(db, f.actor, {
+        blockId: f.block.id,
+        text: 'Sent with the run',
+        version: 0,
+      });
+      return {
+        runId: uid(),
+        outputBlockId: uid(),
+        edits: [{ blockId: f.block.id, version: saved.version, content: saved.content }],
+      };
+    },
+  );
+  const client = createClient(replica.request);
+  await client.session();
+  await client.workspace(f.brane.id);
+  await replica.request('/runs', { braneId: f.brane.id, references: [f.block.id] });
+  // The connection drops before any refresh can bring the new version.
+  f.offline();
+  expect((await client.workspace(f.brane.id)).blocks[0]).toMatchObject({
+    version: 1,
+    content: { text: 'Sent with the run' },
+  });
+  await client.saveText({ blockId: f.block.id, text: 'Edited after the run', version: 1 });
+  f.online();
+  await replica.synchronize();
+  expect((await f.storage.read(f.actor)).pending).toHaveLength(0);
+  expect(readBrane(db, f.actor, f.brane.id).blocks[0]).toMatchObject({
+    version: 2,
+    content: { text: 'Edited after the run' },
+  });
+});
 it('preserves unrelated local work when server geometry wins a conflict', async () => {
   const f = await fixture();
   f.offline();

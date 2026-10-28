@@ -22,6 +22,7 @@ import {
 } from './replica-projection';
 import type { ReplicaStorage, ReplicaState, PendingOperation } from './replica-storage';
 import type { BraneState } from '../../shared/types/domain';
+import { submissionReceipt } from '../../shared/schemas';
 import { networkApi, ApiError } from './transport';
 import { requestAccount, accountFeatureReason } from './account-prompt';
 import { commandAccess, requestResources, requiredOperations } from './command-dependencies';
@@ -208,7 +209,10 @@ export class WorkspaceReplica {
           );
       }
       if (this.actor !== actor) throw new Error('Account changed. Reopen this workspace.');
-      return this.remote(path, body, method, actor);
+      const result = await this.remote(path, body, method, actor);
+      if (method === 'POST' && (path === '/runs' || path === '/artifacts/spawn'))
+        await this.acknowledgeEdits(actor, result);
+      return result;
     }
     // Ensure destinations exist locally before entering the atomic mutation.
     if (
@@ -449,6 +453,22 @@ export class WorkspaceReplica {
         });
       return false;
     }
+  }
+  // Run and Develop save their sources' text on the server. The replica takes those
+  // versions too; otherwise the next local edit would carry a stale base version
+  // and be refused as a change from another window.
+  private async acknowledgeEdits(actor: string, result: unknown) {
+    const receipt = submissionReceipt.safeParse(result).data;
+    if (!receipt?.edits.length) return;
+    await this.storage.change(actor, (state) => {
+      for (const edit of receipt.edits) {
+        const block = findBlock(state, edit.blockId);
+        if (block && block.version < edit.version)
+          installBlock(state, { ...block, version: edit.version, content: edit.content });
+      }
+      state.sequence++;
+    });
+    await this.changed(actor);
   }
   // The local side is the item's final local state, not the first refused operation,
   // so the comparison shows everything a server choice would replace.
