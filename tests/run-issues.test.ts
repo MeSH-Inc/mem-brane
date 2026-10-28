@@ -1,6 +1,11 @@
 import { expect, it } from 'vitest';
 import { ApiError } from '../src/services/transport';
-import { estimateIssue, runIssueAction, runIssueOf } from '../src/services/run-issues';
+import {
+  estimateIssue,
+  runIssueAction,
+  runIssueOf,
+  runIssueText,
+} from '../src/services/run-issues';
 import type { Estimate } from '../shared/contracts';
 
 const estimate = (canAfford: boolean) => ({ canAfford, reservedMicrousd: 10 }) as Estimate;
@@ -38,4 +43,20 @@ it('blocks Run only when the estimate proves the request will be refused', () =>
     estimateIssue('deepseek-chat', undefined, new ApiError(429, 'Too many', 'rate_limited')),
   ).toBeUndefined();
   expect(estimateIssue('mock', undefined, new TypeError('offline'))).toBeUndefined();
+});
+
+it('reads as sentences and adds a hint only where the message lacks one', () => {
+  expect(
+    runIssueText({ message: 'Concurrent run limit reached', code: 'capacity', blocking: false }),
+  ).toBe('Concurrent run limit reached. Run again when a running response finishes.');
+  expect(
+    runIssueText({
+      message: 'Guest workspace limit reached. Sign in to keep working.',
+      code: 'guest_limit',
+      blocking: false,
+    }),
+  ).toBe('Guest workspace limit reached. Sign in to keep working.');
+  expect(
+    runIssueText({ message: 'Context is too large', code: 'invalid_request', blocking: true }),
+  ).toBe('Context is too large.');
 });

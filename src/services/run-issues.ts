@@ -53,9 +53,15 @@ export function runIssueAction(
   }
 }
 
-export const runIssueHints: Partial<Record<ErrorCode, string>> = {
-  capacity: 'Other responses are using every slot. Run again when one finishes.',
+// Guest refusals already say what an account gives, so they carry no hint.
+const hints: Partial<Record<ErrorCode, string>> = {
+  capacity: 'Run again when a running response finishes.',
   rate_limited: 'Wait a moment, then run again.',
   budget: 'The budget resets daily. The local mock model has no spend.',
-  guest_limit: 'A free account keeps everything in this guest workspace.',
 };
+// Server messages are written as fragments or sentences; the notice reads as sentences.
+export function runIssueText(issue: RunIssue) {
+  const message = /[.!?]$/.test(issue.message) ? issue.message : `${issue.message}.`;
+  const hint = issue.code && hints[issue.code];
+  return hint ? `${message} ${hint}` : message;
+}
