@@ -24,6 +24,7 @@ import { WorkspaceDrafts, type WorkspaceDraft, type WorkspaceStorage } from './w
 import { draftDisposition, type Draft } from './drafts';
 import type { Interaction } from '../stores/interaction';
 import type { Imports } from './imports';
+import { runIssueOf, type RunIssue } from './run-issues';
 
 type DraftState = Pick<
   Interaction,
@@ -85,6 +86,8 @@ export class WorkspaceController {
   private streamed = new Map<string, { revision: number; text: string }>();
   private delivering = new Set<string>();
   error = '';
+  // A Run refusal belongs beside the Run button, not in the workspace banner.
+  runFailure?: RunIssue;
   titleError = '';
   previewed?: Revision;
   models = ['mock'];
@@ -285,8 +288,10 @@ export class WorkspaceController {
       this.titleError = '';
       this.scheduleTitleSave();
     }
-    if (['prompt', 'model', 'references', 'continueFrom'].some((key) => key in patch))
+    if (['prompt', 'model', 'references', 'continueFrom'].some((key) => key in patch)) {
+      this.runFailure = undefined;
       this.scheduleEstimate();
+    }
     if (previous !== this.draft.continueFrom) this.loadLineage();
     this.emit();
   };
@@ -696,21 +701,29 @@ export class WorkspaceController {
         (this.pendingAttachments || this.compatibilityError))
     )
       return;
-    return this.command('run', async (progress) => {
-      const epoch = this.epoch,
-        composer = structuredClone(this.draft);
-      const accepted = await this.send(
-        this.submission,
-        () => this.runRequest(true, composer),
-        this.client.submit,
-        progress,
-      );
-      if (!this.valid(epoch)) return;
-      if (this.draft.prompt === accepted.request.payload.prompt) this.updateDraft({ prompt: '' });
-      progress('refreshing');
-      await this.refresh();
-      if (this.valid(epoch)) return accepted.receipt.outputBlockId;
-    }).catch(() => {});
+    this.runFailure = undefined;
+    return this.command(
+      'run',
+      async (progress) => {
+        const epoch = this.epoch,
+          composer = structuredClone(this.draft);
+        const accepted = await this.send(
+          this.submission,
+          () => this.runRequest(true, composer),
+          this.client.submit,
+          progress,
+        );
+        if (!this.valid(epoch)) return;
+        if (this.draft.prompt === accepted.request.payload.prompt) this.updateDraft({ prompt: '' });
+        progress('refreshing');
+        await this.refresh();
+        if (this.valid(epoch)) return accepted.receipt.outputBlockId;
+      },
+      (error) => {
+        this.runFailure = runIssueOf(error);
+        this.emit();
+      },
+    ).catch(() => {});
   };
   spawn = async (blockId: string, placementId: string) => {
     this.requireActive();
@@ -835,7 +848,11 @@ export class WorkspaceController {
       progress('refreshing');
       await this.refresh();
     });
-  private command<T>(key: string, work: (progress: CommandProgress) => Promise<T>): Promise<T> {
+  private command<T>(
+    key: string,
+    work: (progress: CommandProgress) => Promise<T>,
+    report: (error: unknown) => void = this.report,
+  ): Promise<T> {
     this.requireActive();
     const epoch = this.epoch;
     return this.commands.run(key, async (progress) => {
@@ -844,7 +861,7 @@ export class WorkspaceController {
         return await work(progress);
       } catch (error) {
         if (this.valid(epoch)) {
-          this.report(error);
+          report(error);
           if (error instanceof ApiError && error.status === 409) this.background(this.refresh());
         }
         throw error;

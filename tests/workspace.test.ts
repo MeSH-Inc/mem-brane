@@ -496,6 +496,25 @@ it('treats malformed successful responses as uncertain instead of deleting the r
   expect(f.c.submission.state.status).toBe('uncertain');
   expect(f.make().submission.state.status).toBe('uncertain');
 });
+it('keeps a Run refusal beside Run, not in the workspace banner, until the composer changes', async () => {
+  const f = await fixture();
+  f.c.updateDraft({ prompt: 'Test' });
+  f.intercept((path) =>
+    path === '/runs'
+      ? Promise.reject(new ApiError(429, 'Concurrent run limit reached', 'capacity'))
+      : undefined,
+  );
+  await f.c.run();
+  expect(f.c.error).toBe('');
+  expect(f.c.runFailure).toEqual({
+    message: 'Concurrent run limit reached',
+    code: 'capacity',
+    blocking: false,
+  });
+  expect(f.c.draft.prompt).toBe('Test');
+  f.c.updateDraft({ prompt: 'Test again' });
+  expect(f.c.runFailure).toBeUndefined();
+});
 it('pins known source versions even when there is no local draft', async () => {
   const f = await fixture();
   f.c.updateDraft({ prompt: 'Test', references: [f.block] });

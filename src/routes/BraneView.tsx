@@ -24,6 +24,7 @@ import {
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import type { Geometry } from '../../shared/types/domain';
 import { api, replica, needsAccount } from '../services/api';
+import { RunIssueNotice } from '../components/RunIssueNotice';
 import { useInteraction } from '../stores/interaction';
 import { presentationFor } from '../stores/presentation';
 import { useStore } from 'zustand';
@@ -116,6 +117,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     importTasks,
     pendingAttachments,
     compatibilityError,
+    runFailure,
     refresh,
     saveBlock,
     commands,
@@ -863,6 +865,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
               />
               <button
                 className="primary run-button"
+                aria-describedby={runFailure ? 'run-issue' : undefined}
                 disabled={
                   busy ||
                   (submission.state.status !== 'uncertain' &&
@@ -888,6 +891,17 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
               <p role="alert" className="error">
                 {compatibilityError}
               </p>
+            )}
+            {runFailure && !busy && (
+              <RunIssueNotice
+                id="run-issue"
+                issue={runFailure}
+                model={model}
+                models={models}
+                canRunAgain={submission.state.status !== 'uncertain' && !!prompt.trim()}
+                onUseMock={() => setModel('mock')}
+                onRunAgain={() => void submitRun()}
+              />
             )}
             <div className="composer-meta">
               <ActionMenu label={model === 'mock' ? 'Local mock' : model} className="model-menu">

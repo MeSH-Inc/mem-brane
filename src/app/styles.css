@@ -486,6 +486,15 @@ a {
   white-space: nowrap;
   font-size: 11px;
 }
+.run-issue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.run-issue p {
+  margin: 0;
+}
 .composer-meta {
   display: flex;
   align-items: center;
