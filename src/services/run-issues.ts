@@ -21,9 +21,10 @@ export function estimateIssue(
   estimate: Estimate | undefined,
   error: unknown,
 ): RunIssue | undefined {
-  if (error instanceof ApiError)
-    return { message: error.message, code: error.code, blocking: !error.retryable };
-  if (error) return { message: 'Cost estimate unavailable', blocking: false };
+  // A transient estimate failure says nothing about the Run itself; stay quiet.
+  if (error instanceof ApiError && !error.retryable)
+    return { message: error.message, code: error.code, blocking: true };
+  if (error) return undefined;
   if (model !== 'mock' && estimate && !estimate.canAfford)
     return {
       message: 'This prompt exceeds the remaining daily budget.',

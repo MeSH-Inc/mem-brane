@@ -118,6 +118,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     pendingAttachments,
     compatibilityError,
     runFailure,
+    estimateIssue,
     refresh,
     saveBlock,
     commands,
@@ -865,11 +866,16 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
               />
               <button
                 className="primary run-button"
-                aria-describedby={runFailure ? 'run-issue' : undefined}
+                aria-describedby={
+                  runFailure ? 'run-issue' : estimateIssue ? 'estimate-issue' : undefined
+                }
                 disabled={
                   busy ||
                   (submission.state.status !== 'uncertain' &&
-                    (pendingAttachments || !!compatibilityError || !prompt.trim()))
+                    (pendingAttachments ||
+                      !!compatibilityError ||
+                      !!estimateIssue?.blocking ||
+                      !prompt.trim()))
                 }
                 onClick={() => {
                   if (!needsAccount()) void submitRun();
@@ -891,6 +897,17 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
               <p role="alert" className="error">
                 {compatibilityError}
               </p>
+            )}
+            {!runFailure && estimateIssue && submission.state.status !== 'uncertain' && (
+              <RunIssueNotice
+                id="estimate-issue"
+                issue={estimateIssue}
+                model={model}
+                models={models}
+                canRunAgain={false}
+                onUseMock={() => setModel('mock')}
+                onRunAgain={() => {}}
+              />
             )}
             {runFailure && !busy && (
               <RunIssueNotice
@@ -930,8 +947,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
               </ActionMenu>
               {estimate && model !== 'mock' && (
                 <span>
-                  {estimate.canAfford ? 'Up to' : 'Exceeds budget:'}{' '}
-                  {formatUsd(estimate.reservedMicrousd)}
+                  {estimate.canAfford ? 'Up to' : 'Needs'} {formatUsd(estimate.reservedMicrousd)}
                 </span>
               )}
               <span className="save-notice" role="status">

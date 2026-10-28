@@ -36,8 +36,6 @@ it('blocks Run only when the estimate proves the request will be refused', () =>
   ).toMatchObject({ blocking: true, message: 'Paid runs require verified model pricing' });
   expect(
     estimateIssue('deepseek-chat', undefined, new ApiError(429, 'Too many', 'rate_limited')),
-  ).toMatchObject({ blocking: false });
-  expect(estimateIssue('mock', undefined, new TypeError('offline'))).toMatchObject({
-    blocking: false,
-  });
+  ).toBeUndefined();
+  expect(estimateIssue('mock', undefined, new TypeError('offline'))).toBeUndefined();
 });

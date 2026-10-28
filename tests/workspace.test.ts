@@ -515,6 +515,27 @@ it('keeps a Run refusal beside Run, not in the workspace banner, until the compo
   f.c.updateDraft({ prompt: 'Test again' });
   expect(f.c.runFailure).toBeUndefined();
 });
+it('blocks Run when the estimate shows the server would refuse it', async () => {
+  const f = await fixture();
+  f.intercept((path) =>
+    path === '/runs/estimate'
+      ? Promise.reject(new ApiError(403, 'Paid runs require verified model pricing', 'budget'))
+      : undefined,
+  );
+  f.c.updateDraft({ prompt: 'Test' });
+  await vi.advanceTimersByTimeAsync(400);
+  await settle();
+  expect(f.c.estimateIssue).toMatchObject({ code: 'budget', blocking: true });
+  await f.c.run();
+  expect(f.sent.some((r) => r.path === '/runs')).toBe(false);
+  f.intercept(() => undefined);
+  f.c.updateDraft({ prompt: 'Test again' });
+  expect(f.c.estimateIssue).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(400);
+  await settle();
+  expect(f.c.estimate?.canAfford).toBe(true);
+  expect(f.c.estimateIssue).toBeUndefined();
+});
 it('pins known source versions even when there is no local draft', async () => {
   const f = await fixture();
   f.c.updateDraft({ prompt: 'Test', references: [f.block] });

@@ -24,7 +24,7 @@ import { WorkspaceDrafts, type WorkspaceDraft, type WorkspaceStorage } from './w
 import { draftDisposition, type Draft } from './drafts';
 import type { Interaction } from '../stores/interaction';
 import type { Imports } from './imports';
-import { runIssueOf, type RunIssue } from './run-issues';
+import { estimateIssue, runIssueOf, type RunIssue } from './run-issues';
 
 type DraftState = Pick<
   Interaction,
@@ -94,6 +94,7 @@ export class WorkspaceController {
   vision: Capabilities = {};
   budget?: Budget;
   estimate?: Estimate;
+  private estimateError?: unknown;
   lineage: ConversationMessage[] = [];
   inspected?: Inspection;
   get busy() {
@@ -189,6 +190,10 @@ export class WorkspaceController {
           : [],
       )
       .find(Boolean);
+  }
+  // The estimate is advisory except when it proves the server will refuse the Run.
+  get estimateIssue() {
+    return estimateIssue(this.draft.model ?? 'mock', this.estimate, this.estimateError);
   }
   get hasPending() {
     return (
@@ -377,6 +382,7 @@ export class WorkspaceController {
     const generation = ++this.estimateGeneration,
       epoch = this.epoch;
     this.estimate = undefined;
+    this.estimateError = undefined;
     if (!this.valid(epoch) || !this.draft.prompt?.trim()) return;
     this.estimateTimer = setTimeout(() => {
       const request = this.runRequest();
@@ -388,7 +394,12 @@ export class WorkspaceController {
             this.emit();
           }
         })
-        .catch(() => {});
+        .catch((error) => {
+          if (this.valid(epoch) && generation === this.estimateGeneration) {
+            this.estimateError = error;
+            this.emit();
+          }
+        });
     }, 400);
   }
   private loadLineage() {
@@ -698,7 +709,7 @@ export class WorkspaceController {
     if (
       this.busy ||
       (this.submission.state.status !== 'uncertain' &&
-        (this.pendingAttachments || this.compatibilityError))
+        (this.pendingAttachments || this.compatibilityError || this.estimateIssue?.blocking))
     )
       return;
     this.runFailure = undefined;
