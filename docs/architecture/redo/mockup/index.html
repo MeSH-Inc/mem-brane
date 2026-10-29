@@ -1,0 +1,2448 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>mem-brane redo — table mockup</title>
+    <style>
+      :root {
+        --paper: #f4f2ec;
+        --card: #fffdf8;
+        --ink: #24251f;
+        --muted: #7a7a70;
+        --line: #d8d4c8;
+        --accent: #3f5a45;
+        --accent-soft: #e3ebe2;
+        --stale: #c98a1b;
+        --stale-soft: #f8ecd2;
+        --machine: #23262b;
+        --machine-ink: #f1efe8;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 14px rgba(0, 0, 0, 0.06);
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--paper);
+        color: var(--ink);
+      }
+      body {
+        background-image: radial-gradient(#dcd8cc 1px, transparent 1px);
+        background-size: 22px 22px;
+      }
+
+      #topbar {
+        position: fixed;
+        top: 14px;
+        left: 18px;
+        right: 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        pointer-events: none;
+        z-index: 50;
+      }
+      #topbar > * {
+        pointer-events: auto;
+      }
+      .brane-name {
+        font-weight: 600;
+        font-size: 15px;
+        background: none;
+        border: 0;
+        color: var(--ink);
+        cursor: pointer;
+        padding: 4px 6px;
+        border-radius: 6px;
+      }
+      .brane-name:hover {
+        background: rgba(0, 0, 0, 0.05);
+      }
+      #pip {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #b9b6ab;
+        border: 0;
+        cursor: pointer;
+      }
+      #pip.busy {
+        background: var(--accent);
+        animation: pulse 1s infinite;
+      }
+      #pip.attention {
+        background: var(--stale);
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.35;
+        }
+      }
+
+      #viewport {
+        position: absolute;
+        inset: 0;
+        cursor: default;
+      }
+      #viewport.panning {
+        cursor: grabbing;
+      }
+      #world {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 3000px;
+        height: 2000px;
+        transform-origin: 0 0;
+      }
+      #links {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 3000px;
+        height: 2000px;
+        overflow: visible;
+        pointer-events: none;
+      }
+      #links path.feed {
+        fill: none;
+        stroke: #8e9a8f;
+        stroke-width: 2;
+      }
+      #links path.feed.hot {
+        stroke: var(--accent);
+        stroke-width: 2.5;
+      }
+      #links path.feed.stale {
+        stroke: var(--stale);
+        stroke-dasharray: 6 4;
+      }
+      #links path.feed.flowing {
+        stroke: var(--accent);
+        stroke-dasharray: 4 6;
+        animation: flow 0.5s linear infinite;
+      }
+      @keyframes flow {
+        to {
+          stroke-dashoffset: -10;
+        }
+      }
+      #links path.source {
+        fill: none;
+        stroke: #aab3a9;
+        stroke-width: 1.5;
+        stroke-dasharray: 2 4;
+      }
+      #links path.source.hot {
+        stroke: var(--accent);
+      }
+      #links path.arrow {
+        fill: none;
+        stroke: #9c978a;
+        stroke-width: 1.3;
+      }
+      #links path.arrow.hot {
+        stroke: var(--ink);
+      }
+      #links path.draft {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2;
+        stroke-dasharray: 3 4;
+      }
+      #links text {
+        font-size: 11px;
+        fill: var(--muted);
+        pointer-events: all;
+        cursor: text;
+        paint-order: stroke;
+        stroke: var(--paper);
+        stroke-width: 4px;
+      }
+
+      .region {
+        position: absolute;
+        border: 1.5px dashed #c4bfb1;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.25);
+      }
+      .region > .label {
+        position: absolute;
+        top: -11px;
+        left: 14px;
+        background: var(--paper);
+        padding: 0 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .node {
+        position: absolute;
+        perspective: 1200px;
+      }
+      .node.selected .face {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .flipper {
+        position: relative;
+        width: 100%;
+        transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+        transform-style: preserve-3d;
+      }
+      .node.flipped .flipper {
+        transform: rotateY(180deg);
+      }
+      .node.flipped,
+      .node.selected {
+        z-index: 10;
+      }
+      .face.back {
+        max-height: 340px;
+      }
+      .face {
+        background: var(--card);
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+        border: 1px solid var(--line);
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+        padding: 12px 14px;
+        font-size: 14px;
+        line-height: 1.45;
+        min-height: 64px;
+      }
+      .face.back {
+        position: absolute;
+        inset: 0;
+        transform: rotateY(180deg);
+        overflow: auto;
+        background: #f7f5ee;
+        font-size: 13px;
+      }
+      .face .text {
+        outline: none;
+        white-space: pre-wrap;
+        cursor: grab;
+      }
+      .face .text[contenteditable='true'] {
+        cursor: text;
+      }
+      .badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 9px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        border: 0;
+      }
+      .corner {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 16px;
+        height: 16px;
+        background: linear-gradient(135deg, transparent 50%, #e6e1d3 50%);
+        border-bottom-right-radius: 10px;
+        cursor: pointer;
+      }
+      .node.generated .face.front {
+        background: #fbfaf4;
+        border-left: 3px solid var(--accent);
+      }
+      .node.stale .face.front {
+        border-left-color: var(--stale);
+      }
+      .node.card.stale .face.front::after {
+        content: 'stale';
+        position: absolute;
+        left: 14px;
+        bottom: -9px;
+        font-size: 10px;
+        background: var(--stale-soft);
+        color: var(--stale);
+        padding: 1px 6px;
+        border-radius: 6px;
+      }
+      .kind {
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      .back h4 {
+        margin: 0 0 6px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .back .item {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
+      }
+      .back .item .meta {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 4px;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .back .item .meta button {
+        font-size: 11px;
+        border: 0;
+        background: none;
+        color: var(--accent);
+        cursor: pointer;
+        padding: 0;
+      }
+      .back .input-row {
+        display: flex;
+        gap: 6px;
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+      .back .input-row b {
+        font-weight: 600;
+        min-width: 64px;
+        color: var(--muted);
+      }
+      .back .input-row .edited {
+        color: var(--stale);
+      }
+
+      .port {
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--card);
+        border: 2px solid #9aa59b;
+        top: 50%;
+        right: -7px;
+        transform: translateY(-50%);
+        cursor: crosshair;
+        opacity: 0;
+        transition: opacity 0.15s;
+        z-index: 3;
+      }
+      .node:hover .port,
+      .node.selected .port,
+      body.drawing .port {
+        opacity: 1;
+      }
+
+      .stack .face.front {
+        min-height: 96px;
+      }
+      .stack .sheet {
+        position: absolute;
+        inset: 0;
+        border-radius: 10px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+      .stack .sheet.s1 {
+        transform: rotate(-3deg) translate(-4px, 5px);
+      }
+      .stack .sheet.s2 {
+        transform: rotate(2.5deg) translate(5px, 3px);
+      }
+      .stack .count {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+
+      .machine .face.front {
+        background: var(--machine);
+        color: var(--machine-ink);
+        border-color: #000;
+        padding: 12px 16px 12px 22px;
+      }
+      .machine .face.back {
+        background: #2d3137;
+        color: var(--machine-ink);
+      }
+      .machine .face.back .item {
+        background: #383d44;
+        border-color: #4a4f57;
+        color: var(--machine-ink);
+      }
+      .machine .name {
+        font-weight: 650;
+        font-size: 13px;
+        letter-spacing: 0.02em;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .machine .name .state {
+        font-weight: 500;
+        font-size: 11px;
+        color: #a7aba3;
+      }
+      .machine.stale .name .state {
+        color: #f0b54a;
+      }
+      .machine .template {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        color: #cfd2c9;
+        margin: 8px 0 10px;
+        white-space: pre-wrap;
+        outline: none;
+      }
+      .machine .template .slotref {
+        color: #9fd3a8;
+      }
+      .machine .question {
+        width: 100%;
+        border: 0;
+        border-radius: 6px;
+        padding: 7px 9px;
+        font: inherit;
+        font-size: 13px;
+        background: #3a3f46;
+        color: var(--machine-ink);
+        margin-bottom: 10px;
+        outline: none;
+      }
+      .lever {
+        width: 100%;
+        border: 0;
+        border-radius: 7px;
+        padding: 8px 10px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        background: #9fd3a8;
+        color: #12301a;
+        cursor: pointer;
+      }
+      .lever:disabled {
+        background: #464b52;
+        color: #9a9e97;
+        cursor: not-allowed;
+        font-weight: 500;
+      }
+      .machine.stale .lever:not(:disabled) {
+        background: #f0b54a;
+        color: #3a2600;
+      }
+      .slot-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 24px;
+        font-size: 11.5px;
+        color: #9fd3a8;
+      }
+      .slot-row .fed {
+        color: #8d9289;
+      }
+      .slot-row.empty {
+        color: #8d9289;
+      }
+      .slot {
+        position: absolute;
+        left: -31px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--machine);
+        border: 2px solid #9fd3a8;
+        z-index: 3;
+      }
+      .slot-row.empty .slot {
+        border-color: #6b7078;
+        background: #3a3f46;
+      }
+      .slots {
+        margin-bottom: 10px;
+      }
+      .slot-row .mode {
+        margin-left: 4px;
+        border: 1px solid #4b6a52;
+        border-radius: 4px;
+        padding: 0 4px;
+        font-size: 10px;
+        pointer-events: all;
+        cursor: pointer;
+        color: #cfe7d3;
+      }
+      .tray {
+        position: absolute;
+        right: -7px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 12px;
+        height: 22px;
+        border-radius: 4px;
+        background: #9fd3a8;
+        border: 2px solid var(--machine);
+        z-index: 3;
+        cursor: crosshair;
+      }
+      .machine .face.back label {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        font-size: 12px;
+        margin: 3px 0;
+      }
+      .machine .face.back select {
+        font: inherit;
+        font-size: 12px;
+        background: #383d44;
+        color: var(--machine-ink);
+        border: 1px solid #4a4f57;
+        border-radius: 5px;
+      }
+
+      #dock {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        z-index: 50;
+      }
+      #dock .field {
+        width: 380px;
+        padding: 11px 16px;
+        border-radius: 12px;
+        background: var(--card);
+        box-shadow: var(--shadow);
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 14px;
+        cursor: text;
+      }
+      #dock .field kbd {
+        font: inherit;
+        font-size: 12px;
+        background: #eeebe2;
+        border-radius: 4px;
+        padding: 1px 5px;
+        margin-right: 6px;
+        color: var(--ink);
+      }
+      #dock button {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: var(--card);
+        box-shadow: var(--shadow);
+        font-size: 17px;
+        cursor: pointer;
+        color: var(--ink);
+      }
+
+      #chips {
+        position: fixed;
+        bottom: 74px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 6px;
+        z-index: 50;
+      }
+      #chips button {
+        border: 1px solid var(--line);
+        background: var(--card);
+        border-radius: 999px;
+        padding: 5px 11px;
+        font: inherit;
+        font-size: 12.5px;
+        cursor: pointer;
+        box-shadow: var(--shadow);
+      }
+      #chips button kbd {
+        font: inherit;
+        color: var(--muted);
+        margin-left: 5px;
+        font-size: 11px;
+      }
+      .update {
+        margin-top: 8px;
+        border: 0;
+        background: var(--stale-soft);
+        color: #7a5208;
+        border-radius: 6px;
+        padding: 4px 9px;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      #links path.thread {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 3;
+        stroke-linecap: round;
+        opacity: 0.55;
+      }
+      #palette {
+        position: fixed;
+        left: 50%;
+        top: 22%;
+        transform: translateX(-50%);
+        width: 460px;
+        background: var(--card);
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+        z-index: 100;
+        display: none;
+        overflow: hidden;
+      }
+      #palette.open {
+        display: block;
+      }
+      #palette input {
+        width: 100%;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        padding: 14px 16px;
+        font: inherit;
+        font-size: 15px;
+        outline: none;
+        background: transparent;
+      }
+      #palette .scope {
+        font-size: 11px;
+        color: var(--muted);
+        padding: 8px 16px 2px;
+      }
+      #palette ul {
+        list-style: none;
+        margin: 0;
+        padding: 6px;
+        max-height: 340px;
+        overflow: auto;
+      }
+      #palette li {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      #palette li.active,
+      #palette li:hover {
+        background: var(--accent-soft);
+      }
+      #palette li .hint {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .sheet-panel {
+        position: fixed;
+        top: 44px;
+        bottom: 80px;
+        width: 300px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+        z-index: 60;
+        padding: 14px;
+        overflow: auto;
+        display: none;
+        font-size: 13px;
+      }
+      .sheet-panel.open {
+        display: block;
+      }
+      #workshop {
+        left: 18px;
+      }
+      #activity {
+        right: 18px;
+      }
+      .sheet-panel h3 {
+        margin: 0 0 10px;
+        font-size: 13px;
+      }
+      .tool {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 9px 11px;
+        margin-bottom: 8px;
+        cursor: pointer;
+      }
+      .tool:hover {
+        border-color: var(--accent);
+      }
+      .tool b {
+        display: block;
+        font-size: 13px;
+      }
+      .tool span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .meter {
+        height: 6px;
+        border-radius: 3px;
+        background: #eeebe2;
+        margin: 6px 0 14px;
+        overflow: hidden;
+      }
+      .meter > div {
+        height: 100%;
+        background: var(--accent);
+      }
+      .run-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 0;
+        border-bottom: 1px solid #efece4;
+        font-size: 12px;
+      }
+
+      #guide {
+        position: fixed;
+        right: 18px;
+        bottom: 20px;
+        width: 250px;
+        background: rgba(244, 242, 236, 0.92);
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+        z-index: 40;
+      }
+      #guide summary {
+        cursor: pointer;
+        color: var(--ink);
+      }
+      #guide kbd {
+        font: inherit;
+        background: #eeebe2;
+        border-radius: 4px;
+        padding: 0 4px;
+        color: var(--ink);
+      }
+      #toast {
+        position: fixed;
+        top: 46px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--ink);
+        color: #fff;
+        font-size: 13px;
+        padding: 7px 12px;
+        border-radius: 8px;
+        z-index: 120;
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none;
+      }
+      #toast.show {
+        opacity: 0.92;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="topbar">
+      <button class="brane-name" title="Branes">≡&nbsp; Transit and rent</button>
+      <button id="pip" title="Activity"></button>
+    </div>
+
+    <div id="viewport">
+      <div id="world">
+        <svg id="links"></svg>
+      </div>
+    </div>
+
+    <div id="dock">
+      <div class="field" id="dock-field"><kbd>/</kbd>Ask or do anything…</div>
+      <button id="add-button" title="Add a text card">+</button>
+      <button id="workshop-button" title="Workshop">⚒</button>
+    </div>
+
+    <div id="chips"></div>
+    <div id="palette">
+      <input placeholder="Type a command…" />
+      <div class="scope"></div>
+      <ul></ul>
+    </div>
+
+    <aside class="sheet-panel" id="workshop">
+      <h3>Workshop</h3>
+      <div id="tools"></div>
+    </aside>
+
+    <aside class="sheet-panel" id="activity">
+      <h3>Activity</h3>
+      <div style="font-size: 12px; color: var(--muted)">Today's spend</div>
+      <div style="display: flex; justify-content: space-between">
+        <b id="spend">$0.000</b><span style="color: var(--muted)">of $0.50</span>
+      </div>
+      <div class="meter"><div id="spend-meter" style="width: 0%"></div></div>
+      <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px">Runs</div>
+      <div id="run-list"></div>
+      <div style="font-size: 12px; color: var(--muted); margin-top: 16px">All changes saved.</div>
+    </aside>
+
+    <details id="guide" open>
+      <summary>Mockup guide</summary>
+      Click a card, then <kbd>F</kbd> to flip, <kbd>D</kbd> to develop onto its back,
+      <kbd>/</kbd> to ask about the selection (on a response: reply), <kbd>Space</kbd> for every
+      command.<br />
+      Double-click text to edit; edit the study card and watch Critique and its output go stale.
+      Double-click a machine's prompt to edit it.<br />
+      Drag from a card's right edge to a machine slot (feed) or another card (arrow).<br />
+      Drag empty table to pan. Shift-click to select several.
+    </details>
+    <div id="toast"></div>
+
+    <script>
+      'use strict';
+
+      // ---------- model ----------
+
+      let next_id = 100;
+      const new_id = (prefix) => `${prefix}${next_id++}`;
+
+      const state = {
+        nodes: {},
+        links: [],
+        regions: [],
+        selection: new Set(),
+        runs: [],
+        spend: 0,
+        active_runs: 0,
+        camera: { x: 0, y: 0 },
+      };
+
+      function add_node(node) {
+        const base = { flipped: false, version: 1, back: [], origin: 'authored', width: 230 };
+        state.nodes[node.id] = Object.assign(base, node);
+        return state.nodes[node.id];
+      }
+
+      function slot_names(template) {
+        const names = [];
+        for (const match of template.matchAll(/\{([^}]+)\}/g)) {
+          if (!names.includes(match[1])) names.push(match[1]);
+        }
+        return names;
+      }
+
+      function feeds_into(machine_id, slot) {
+        return state.links.filter(
+          (link) =>
+            link.kind === 'feed' &&
+            link.to === machine_id &&
+            (slot === undefined || link.slot === slot),
+        );
+      }
+
+      function last_run_of(machine) {
+        return machine.runs && machine.runs.length ? machine.runs[machine.runs.length - 1] : null;
+      }
+
+      function is_feed_stale(link) {
+        const machine = state.nodes[link.to];
+        const run = last_run_of(machine);
+        if (!run) return false;
+        const frozen = run.versions[link.from];
+        return frozen !== undefined && frozen !== state.nodes[link.from].version;
+      }
+
+      function is_machine_stale(machine) {
+        const run = last_run_of(machine);
+        if (run && run.machine_version !== machine.version) return true;
+        return feeds_into(machine.id).some(is_feed_stale);
+      }
+
+      function is_output_stale(node) {
+        if (node.origin !== 'generated' || !node.receipt) return false;
+        const machine = state.nodes[node.receipt.machine];
+        if (machine && machine.version !== node.receipt.machine_version) return true;
+        return Object.entries(node.receipt.versions).some(
+          ([id, version]) => state.nodes[id] && state.nodes[id].version !== version,
+        );
+      }
+
+      function machine_estimate(machine) {
+        let runs = 1;
+        for (const slot of slot_names(machine.template)) {
+          for (const link of feeds_into(machine.id, slot)) {
+            if (link.mode === 'each' && state.nodes[link.from].type === 'stack')
+              runs *= state.nodes[link.from].items.length;
+          }
+        }
+        runs *= machine.models.length;
+        return { runs, cost: runs * 0.0041 };
+      }
+
+      function missing_slots(machine) {
+        return slot_names(machine.template).filter(
+          (slot) => feeds_into(machine.id, slot).length === 0,
+        );
+      }
+
+      // ---------- seed ----------
+
+      function seed() {
+        add_node({
+          id: 'claim',
+          type: 'card',
+          x: 60,
+          y: 150,
+          text: 'Good transit raises rents because it makes places more valuable, not because developers target it.',
+        });
+        add_node({
+          id: 'study',
+          type: 'card',
+          x: 60,
+          y: 330,
+          text: '2019 study: rents within 800 m of new light-rail stations rose 8–12% over five years against matched controls.',
+        });
+        add_node({
+          id: 'critique',
+          type: 'machine',
+          x: 380,
+          y: 205,
+          width: 270,
+          name: 'Critique',
+          template:
+            'Find the strongest objection to {claim}, using only {evidence}. Three sentences, then the one fact that would settle it.',
+          models: ['deepseek-chat'],
+          runs: [],
+          destination: 'tray',
+        });
+        state.links.push({
+          id: 'l1',
+          kind: 'feed',
+          from: 'claim',
+          to: 'critique',
+          slot: 'claim',
+          mode: 'together',
+        });
+        state.links.push({
+          id: 'l2',
+          kind: 'feed',
+          from: 'study',
+          to: 'critique',
+          slot: 'evidence',
+          mode: 'together',
+        });
+
+        add_node({
+          id: 'notes',
+          type: 'stack',
+          x: 60,
+          y: 610,
+          title: 'Interview notes',
+          items: [
+            '“We moved out when the line opened — the landlord doubled it.”',
+            "“The station made my commute 20 minutes. I'd pay more to stay.”",
+            '“Nothing changed on our block except the parking.”',
+          ],
+        });
+        add_node({
+          id: 'extract',
+          type: 'machine',
+          x: 380,
+          y: 590,
+          width: 270,
+          name: 'Extract claim',
+          template: 'State the single factual claim in {note} as one sentence.',
+          models: ['deepseek-chat'],
+          runs: [],
+          destination: 'tray',
+        });
+        state.links.push({
+          id: 'l3',
+          kind: 'feed',
+          from: 'notes',
+          to: 'extract',
+          slot: 'note',
+          mode: 'each',
+        });
+
+        add_node({
+          id: 'diagram',
+          type: 'machine',
+          x: 1110,
+          y: 70,
+          width: 250,
+          name: 'Diagram',
+          template: 'Draw {text} as 3–6 short cards joined by labelled arrows.',
+          models: ['deepseek-chat'],
+          runs: [],
+          destination: 'tray',
+          shape: 'diagram',
+        });
+
+        run_machine(state.nodes.critique, { instant: true });
+      }
+
+      // ---------- mock generation ----------
+
+      function snippet(text, words = 9) {
+        const parts = text.replace(/[“”"]/g, '').split(/\s+/);
+        return parts.slice(0, words).join(' ') + (parts.length > words ? '…' : '');
+      }
+
+      function mock_output(machine, inputs, model) {
+        const get = (slot) => (inputs[slot] || []).join(' ');
+        switch (machine.name) {
+          case 'Critique':
+            return `Objection: the study shows rents rise near stations, but not why — "${snippet(get('evidence'), 7)}" fits equally well with developers buying ahead of announced lines.\nDeciding fact: whether land prices moved at announcement or at opening.`;
+          case 'Extract claim':
+            return `Claim: ${snippet(get('note'), 12).replace(/^./, (c) => c.toUpperCase())}`;
+          case 'Develop':
+            return `Developed: ${snippet(get('source'), 14)} A sharper version names the mechanism (access to jobs is capitalised into land), predicts where it fails (stations without walkable catchments), and says what would falsify it.`;
+          case 'Reply':
+          case 'Ask':
+            if (inputs.conversation)
+              return `Continuing from "${snippet(inputs.conversation[inputs.conversation.length - 1], 8)}": ${inputs.question ? 'on ' + snippet(inputs.question, 8) + ' — ' : ''}the announcement effect is testable with land sales dated before and after the route was published.`;
+            return `${model === 'claude-sonnet-5-5' ? 'In short' : 'Answer'}: across ${(inputs.context || []).length} card(s), the common thread is that access, not novelty, drives prices — ${snippet((inputs.context || []).join(' '), 10)}`;
+          default:
+            return `Output of ${machine.name}: ${snippet(Object.values(inputs).flat().join(' '), 16)}`;
+        }
+      }
+
+      function text_of(node) {
+        if (node.type === 'stack') return node.items.join('\n');
+        return node.text;
+      }
+
+      function run_machine(machine, options = {}) {
+        if (missing_slots(machine).length)
+          return toast(`Fill ${missing_slots(machine).join(', ')} first`);
+        const slots = slot_names(machine.template);
+        const versions = {};
+        for (const link of feeds_into(machine.id))
+          versions[link.from] = state.nodes[link.from].version;
+
+        // Expand "each" feeds into one input set per item.
+        let input_sets = [{}];
+        for (const slot of slots) {
+          const expanded = [];
+          for (const set of input_sets) {
+            const links = feeds_into(machine.id, slot);
+            const each = links.find(
+              (link) => link.mode === 'each' && state.nodes[link.from].type === 'stack',
+            );
+            if (each) {
+              for (const item of state.nodes[each.from].items)
+                expanded.push({ ...set, [slot]: [item] });
+            } else {
+              expanded.push({
+                ...set,
+                [slot]: links.map((link) => text_of(state.nodes[link.from])),
+              });
+            }
+          }
+          input_sets = expanded;
+        }
+
+        if (machine.reply_to) {
+          const chain = [];
+          for (
+            let id = machine.reply_to;
+            id && state.nodes[id];
+            id = state.nodes[id].receipt && state.nodes[id].receipt.reply_to
+          )
+            chain.unshift(text_of(state.nodes[id]));
+          input_sets = input_sets.map((set) => ({ conversation: chain, ...set }));
+        }
+        if (machine.question)
+          input_sets = input_sets.map((set) => ({ ...set, question: [machine.question] }));
+
+        const fed_ids = feeds_into(machine.id).map((link) => link.from);
+        const relations = state.links
+          .filter(
+            (link) =>
+              link.kind === 'arrow' && fed_ids.includes(link.from) && fed_ids.includes(link.to),
+          )
+          .map(
+            (link) =>
+              `${snippet(text_of(state.nodes[link.from]), 3)} —${link.label}→ ${snippet(text_of(state.nodes[link.to]), 3)}`,
+          );
+
+        const run = {
+          id: new_id('run'),
+          machine: machine.id,
+          versions,
+          machine_version: machine.version,
+          outputs: [],
+          at: new Date(),
+        };
+        (machine.runs = machine.runs || []).push(run);
+
+        // The previous outputs of this machine leave the table; each new output keeps its predecessor on its back.
+        const previous = Object.values(state.nodes).filter(
+          (node) =>
+            node.receipt && node.receipt.machine === machine.id && node.on_table && !node.kept,
+        );
+        for (const node of previous) {
+          delete state.nodes[node.id];
+          state.links = state.links.filter((link) => link.from !== node.id && link.to !== node.id);
+        }
+
+        const outputs = [];
+        input_sets.forEach((inputs, set_index) => {
+          machine.models.forEach((model, model_index) => {
+            const text = mock_output(machine, inputs, model);
+            const receipt = {
+              machine: machine.id,
+              machine_name: machine.name,
+              machine_version: machine.version,
+              model,
+              inputs,
+              versions,
+              relations,
+              run: run.id,
+              cost: 0.0041,
+              reply_to: machine.reply_to,
+              question: machine.question,
+            };
+            if (machine.destination === 'back') {
+              const source = state.nodes[feeds_into(machine.id)[0].from];
+              source.back.unshift({
+                text: '',
+                label: `${machine.name} · ${model}`,
+                receipt,
+                streaming: text,
+              });
+              source.flipped = true;
+              outputs.push(source.back[0]);
+            } else if (machine.shape === 'diagram') {
+              create_diagram(machine, receipt);
+            } else {
+              const prior = previous[outputs.length];
+              const output = add_node({
+                id: new_id('out'),
+                type: 'card',
+                origin: 'generated',
+                on_table: true,
+                text: '',
+                receipt,
+                x: prior
+                  ? prior.x
+                  : machine.loose
+                    ? machine.x + model_index * 250
+                    : machine.x + machine.width + 60 + model_index * 250,
+                y: prior
+                  ? prior.y
+                  : machine.loose
+                    ? machine.y
+                    : machine.y + set_index * 120 - (input_sets.length > 1 ? 60 : 0),
+              });
+              if (prior)
+                output.back = [{ text: prior.text, label: 'previous version' }, ...prior.back];
+              outputs.push(output);
+              if (machine.loose) {
+                // An Ask collapses into its answer: the inputs point at the output, the question is on its back.
+                for (const link of feeds_into(machine.id))
+                  state.links.push({
+                    id: new_id('l'),
+                    kind: 'source',
+                    from: link.from,
+                    to: output.id,
+                  });
+                if (machine.reply_to)
+                  state.links.push({
+                    id: new_id('l'),
+                    kind: 'thread',
+                    from: machine.reply_to,
+                    to: output.id,
+                  });
+              } else {
+                state.links.push({
+                  id: new_id('l'),
+                  kind: 'feed',
+                  from: machine.id,
+                  to: output.id,
+                  tray: true,
+                });
+              }
+              output.streaming = text;
+            }
+            state.spend += 0.0041;
+          });
+        });
+        run.outputs = outputs;
+        if (machine.loose) {
+          machine.hidden = true;
+          for (const link of feeds_into(machine.id)) link.hidden = true;
+          state.links = state.links.filter(
+            (link) => !(link.kind === 'thread' && link.to === machine.id),
+          );
+          state.selection = new Set(outputs.map((output) => output.id).filter(Boolean));
+        }
+        // Comparing models applies to one run; the machine returns to its first model.
+        machine.models = machine.models.slice(0, 1);
+        state.runs.unshift({
+          name: machine.name,
+          count: outputs.length || 1,
+          cost: 0.0041 * Math.max(outputs.length, 1),
+        });
+
+        if (options.instant) {
+          for (const output of outputs) {
+            output.text = output.streaming;
+            delete output.streaming;
+          }
+          render();
+          return;
+        }
+        stream(outputs);
+      }
+
+      function stream(outputs) {
+        state.active_runs += 1;
+        render();
+        const started = performance.now();
+        const step = () => {
+          const progress = Math.min(1, (performance.now() - started) / 1400);
+          for (const output of outputs) {
+            if (output.streaming === undefined) continue;
+            output.text = output.streaming.slice(0, Math.ceil(output.streaming.length * progress));
+          }
+          render();
+          if (progress < 1) return requestAnimationFrame(step);
+          for (const output of outputs) delete output.streaming;
+          state.active_runs -= 1;
+          render();
+        };
+        requestAnimationFrame(step);
+      }
+
+      function create_diagram(machine, receipt) {
+        const left = machine.x - 130;
+        const top = machine.y + element_of(machine.id).offsetHeight + 50;
+        const region = {
+          id: new_id('region'),
+          label: 'Diagram · rent mechanism',
+          x: left,
+          y: top,
+          width: 470,
+          height: 270,
+        };
+        state.regions.push(region);
+        const spots = [
+          ['New station', 15, 30],
+          ['Shorter commutes', 170, 30],
+          ['Land value rises', 170, 170],
+          ['Rents rise', 325, 170],
+          ['Speculative buying', 15, 170],
+        ];
+        const ids = spots.map(
+          ([text, x, y]) =>
+            add_node({
+              id: new_id('d'),
+              type: 'card',
+              origin: 'generated',
+              on_table: true,
+              kept: true,
+              text,
+              x: left + x,
+              y: top + y,
+              width: 130,
+              receipt,
+              region: region.id,
+            }).id,
+        );
+        const relations = [
+          [0, 1, 'causes'],
+          [1, 2, 'capitalised into'],
+          [2, 3, 'passed to'],
+          [4, 2, 'competes with'],
+          [0, 4, 'announced →'],
+        ];
+        for (const [a, b, label] of relations)
+          state.links.push({ id: new_id('l'), kind: 'arrow', from: ids[a], to: ids[b], label });
+      }
+
+      // ---------- commands ----------
+
+      function selected_nodes() {
+        return [...state.selection].map((id) => state.nodes[id]).filter(Boolean);
+      }
+
+      function develop(node) {
+        const machine = {
+          id: new_id('develop'),
+          name: 'Develop',
+          template: '{source}',
+          models: ['deepseek-chat'],
+          destination: 'back',
+          runs: [],
+          back: [],
+        };
+        state.nodes[machine.id] = machine; // invisible: Develop runs without a placement
+        machine.hidden = true;
+        state.links.push({
+          id: new_id('l'),
+          kind: 'feed',
+          from: node.id,
+          to: machine.id,
+          slot: 'source',
+          mode: 'together',
+          hidden: true,
+        });
+        run_machine(machine);
+      }
+
+      function loose_prompt(at) {
+        const fed = selected_nodes().filter((node) => node.type !== 'machine');
+        const reply = fed.length === 1 && fed[0].origin === 'generated' ? fed[0] : null;
+        const position = reply
+          ? { x: reply.x, y: reply.y + element_of(reply.id).offsetHeight + 46 }
+          : at || { x: 900, y: 500 };
+        const machine = add_node({
+          id: new_id('ask'),
+          type: 'machine',
+          name: reply ? 'Reply' : 'Ask',
+          template: reply ? '' : '{context}',
+          question: '',
+          loose: true,
+          reply_to: reply ? reply.id : null,
+          x: position.x,
+          y: position.y,
+          width: 270,
+          models: ['deepseek-chat'],
+          runs: [],
+          destination: 'tray',
+        });
+        if (reply) {
+          state.links.push({ id: new_id('l'), kind: 'thread', from: reply.id, to: machine.id });
+          state.selection = new Set([machine.id]);
+          render();
+          element_of(machine.id).querySelector('.question').focus();
+          return;
+        }
+        for (const node of fed)
+          state.links.push({
+            id: new_id('l'),
+            kind: 'feed',
+            from: node.id,
+            to: machine.id,
+            slot: 'context',
+            mode: 'together',
+          });
+        state.selection = new Set([machine.id]);
+        render();
+        const input = element_of(machine.id).querySelector('.question');
+        input && input.focus();
+      }
+
+      function critique_selection() {
+        const nodes = selected_nodes().filter((node) => node.type !== 'machine');
+        if (!nodes.length) return;
+        const right = Math.max(...nodes.map((node) => node.x + node.width));
+        const top = Math.min(...nodes.map((node) => node.y));
+        const machine = add_node({
+          id: new_id('m'),
+          type: 'machine',
+          name: 'Critique',
+          template: tools[1].template,
+          x: right + 110,
+          y: top,
+          width: 270,
+          models: ['deepseek-chat'],
+          runs: [],
+          destination: 'tray',
+        });
+        nodes.forEach((node, index) =>
+          state.links.push({
+            id: new_id('l'),
+            kind: 'feed',
+            from: node.id,
+            to: machine.id,
+            slot: index === 0 ? 'claim' : 'evidence',
+            mode: 'together',
+          }),
+        );
+        state.selection = new Set([machine.id]);
+        render();
+      }
+
+      function make_reusable(output) {
+        const machine = state.nodes[output.receipt.machine];
+        machine.hidden = false;
+        machine.loose = false;
+        machine.name = 'Ask';
+        machine.template = `${machine.question || 'Answer using'} {context}`;
+        machine.version += 1;
+        machine.x = output.x - machine.width - 90;
+        machine.y = output.y;
+        for (const link of feeds_into(machine.id)) link.hidden = false;
+        state.links = state.links.filter(
+          (link) => !(link.kind === 'source' && link.to === output.id),
+        );
+        state.links.push({
+          id: new_id('l'),
+          kind: 'feed',
+          from: machine.id,
+          to: output.id,
+          tray: true,
+        });
+        output.receipt.machine_version = machine.version;
+        render();
+      }
+
+      function group_selection() {
+        const nodes = selected_nodes().filter((node) => node.type === 'card');
+        if (nodes.length < 2) return toast('Select two or more cards to group');
+        const items = nodes.map((node) => node.text);
+        const first = nodes[0];
+        for (const node of nodes) {
+          delete state.nodes[node.id];
+          state.links = state.links.filter((link) => link.from !== node.id && link.to !== node.id);
+        }
+        const stack = add_node({
+          id: new_id('stack'),
+          type: 'stack',
+          title: 'Group',
+          items,
+          x: first.x,
+          y: first.y,
+        });
+        state.selection = new Set([stack.id]);
+        render();
+      }
+
+      function add_text_card() {
+        const card = add_node({
+          id: new_id('card'),
+          type: 'card',
+          text: '',
+          x: 160 - state.camera.x + 300,
+          y: 120 - state.camera.y + 380,
+        });
+        state.selection = new Set([card.id]);
+        render();
+        begin_edit(card.id);
+      }
+
+      function add_tool(tool) {
+        const machine = add_node({
+          id: new_id('m'),
+          type: 'machine',
+          name: tool.name,
+          template: tool.template,
+          shape: tool.shape,
+          x: 820 - state.camera.x,
+          y: 460 - state.camera.y,
+          width: 270,
+          models: ['deepseek-chat'],
+          runs: [],
+          destination: 'tray',
+        });
+        state.selection = new Set([machine.id]);
+        document.getElementById('workshop').classList.remove('open');
+        render();
+      }
+
+      const tools = [
+        { name: 'Develop', template: '{source}', note: 'Expand one card. Bound to D.' },
+        {
+          name: 'Critique',
+          template: 'Find the strongest objection to {claim}, using only {evidence}.',
+          note: 'Objection plus the deciding fact.',
+        },
+        {
+          name: 'Split',
+          template: 'Split {text} into one card per idea.',
+          note: 'A page in, a stack out.',
+          shape: 'list',
+        },
+        {
+          name: 'Distill',
+          template: 'Summarise {group} as one card.',
+          note: 'A region in, one card out.',
+        },
+        {
+          name: 'Diagram',
+          template: 'Draw {text} as cards joined by labelled arrows.',
+          note: 'Text in, a region of cards and arrows out.',
+          shape: 'diagram',
+        },
+        {
+          name: 'Compare',
+          template: 'Compare {a} with {b}: agreements, contradictions, gaps.',
+          note: 'Two inputs, one table.',
+        },
+      ];
+
+      function commands() {
+        const nodes = selected_nodes();
+        const one = nodes.length === 1 ? nodes[0] : null;
+        const list = [];
+        if (one && one.type === 'card')
+          list.push({ label: 'Develop onto its back', hint: 'D', run: () => develop(one) });
+        if (nodes.length)
+          list.push({
+            label:
+              one && one.origin === 'generated'
+                ? 'Reply (continues this conversation)'
+                : `Ask about ${nodes.length === 1 ? 'this' : nodes.length + ' cards'}`,
+            hint: '/',
+            run: () => loose_prompt({ x: (one || nodes[0]).x + 320, y: (one || nodes[0]).y }),
+          });
+        if (nodes.length)
+          list.push({
+            label: 'Flip',
+            hint: 'F',
+            run: () => {
+              nodes.forEach((node) => (node.flipped = !node.flipped));
+              render();
+            },
+          });
+        if (one && one.type === 'machine')
+          list.push({ label: `Run ${one.name}`, hint: 'Enter', run: () => run_machine(one) });
+        if (
+          one &&
+          one.origin === 'generated' &&
+          is_output_stale(one) &&
+          state.nodes[one.receipt.machine]
+        )
+          list.push({
+            label: 'Update this output',
+            hint: 'U',
+            run: () => run_machine(state.nodes[one.receipt.machine]),
+          });
+        if (nodes.length && !one?.type?.includes('machine'))
+          list.push({ label: 'Critique with a new machine', hint: '', run: critique_selection });
+        if (
+          one &&
+          one.origin === 'generated' &&
+          state.nodes[one.receipt.machine]?.hidden &&
+          one.receipt.machine_name === 'Ask'
+        )
+          list.push({
+            label: 'Make reusable (turn back into a machine)',
+            hint: '',
+            run: () => make_reusable(one),
+          });
+        if (one && one.type === 'machine')
+          list.push({
+            label: 'Save to Workshop',
+            hint: '',
+            run: () => {
+              tools.push({
+                name: one.name,
+                template: one.template,
+                note: 'Saved from this brane.',
+              });
+              fill_tools();
+              toast(`${one.name} saved to the Workshop`);
+            },
+          });
+        if (nodes.length > 1)
+          list.push({ label: 'Group as a stack', hint: 'G', run: group_selection });
+        list.push({ label: 'Add text card', hint: '+', run: add_text_card });
+        list.push({
+          label: 'Open Workshop',
+          hint: 'W',
+          run: () => document.getElementById('workshop').classList.add('open'),
+        });
+        list.push({
+          label: 'Activity and spend',
+          hint: '',
+          run: () => document.getElementById('activity').classList.add('open'),
+        });
+        list.push({
+          label: 'Fit everything in view',
+          hint: '0',
+          run: () => {
+            state.camera = { x: 0, y: 0 };
+            render();
+          },
+        });
+        if (nodes.length)
+          list.push({ label: 'Remove from this brane', hint: '⌫', run: () => remove(nodes) });
+        return list;
+      }
+
+      function remove(nodes) {
+        for (const node of nodes) {
+          delete state.nodes[node.id];
+          state.links = state.links.filter((link) => link.from !== node.id && link.to !== node.id);
+        }
+        state.selection.clear();
+        render();
+      }
+
+      // ---------- rendering ----------
+
+      const world = document.getElementById('world');
+      const links_layer = document.getElementById('links');
+      const elements = new Map();
+      let editing = null;
+
+      function element_of(id) {
+        return elements.get(id);
+      }
+
+      function escape(text) {
+        return String(text).replace(
+          /[&<>"]/g,
+          (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c],
+        );
+      }
+
+      function back_html(node) {
+        if (node.type === 'machine') {
+          const runs = (node.runs || []).length;
+          return `<h4>${escape(node.name)} settings</h4>
+      <div style="font-size:12px;color:#a7aba3">Models for the next run (tick several to compare side by side)</div>
+      ${['deepseek-chat', 'claude-sonnet-5-5', 'gpt-6-luna'].map((model) => `<label><input type="checkbox" data-model="${model}" ${node.models.includes(model) ? 'checked' : ''}> ${model}</label>`).join('')}
+      <div style="font-size:12px;color:#a7aba3;margin-top:6px">Revision ${node.version}</div>
+      <h4 style="margin-top:12px">${runs} run${runs === 1 ? '' : 's'}</h4>
+      ${node.back.map((item) => `<div class="item">${escape(item.text)}<div class="meta"><span>${escape(item.label)}</span></div></div>`).join('')}`;
+        }
+        if (node.origin === 'generated' && node.receipt) {
+          const receipt = node.receipt;
+          const rows = Object.entries(receipt.inputs)
+            .map(([slot, texts]) => {
+              if (slot === 'conversation')
+                return `<div class="input-row"><b>continues</b><span>${texts.length} earlier message${texts.length === 1 ? '' : 's'}</span></div>`;
+              const edited = Object.entries(receipt.versions).some(
+                ([id, version]) =>
+                  state.nodes[id] &&
+                  state.nodes[id].version !== version &&
+                  texts.some(
+                    (t) =>
+                      text_of(state.nodes[id]).length && t !== text_of(state.nodes[id]) && t.length,
+                  ),
+              );
+              return `<div class="input-row"><b>${escape(slot)}</b><span class="${edited ? 'edited' : ''}">${escape(snippet(texts.join(' '), 10))}${edited ? ' · edited since' : ''}</span></div>`;
+            })
+            .join('');
+          const machine = state.nodes[receipt.machine];
+          const prompt_edited = machine && machine.version !== receipt.machine_version;
+          return `<h4>Receipt</h4>
+      <div class="input-row"><b>machine</b><span class="${prompt_edited ? 'edited' : ''}">${escape(receipt.machine_name)} r${receipt.machine_version}${prompt_edited ? ' · prompt edited since' : ''}</span></div>
+      ${rows}
+      ${(receipt.relations || []).map((relation) => `<div class="input-row"><b>relation</b><span>${escape(relation)}</span></div>`).join('')}
+      <div class="input-row"><b>model</b><span>${escape(receipt.model)}</span></div>
+      <div class="input-row"><b>cost</b><span>$${receipt.cost.toFixed(4)}</span></div>
+      ${back_sections(node)}`;
+        }
+        if (!node.back.length)
+          return `<h4>Developments</h4><div style="color:var(--muted)">Nothing yet. Press D to develop this card; the result lands here.</div>`;
+        return back_sections(node);
+      }
+
+      function back_sections(node) {
+        const indexed = node.back.map((item, index) => [item, index]);
+        const earlier = indexed.filter(([item]) => item.label === 'previous version');
+        const developments = indexed.filter(([item]) => item.label !== 'previous version');
+        let html = '';
+        if (developments.length)
+          html +=
+            `<h4 style="margin-top:10px">Developments · ${developments.length}</h4>` +
+            developments.map(([item, index]) => item_html(item, index)).join('');
+        if (earlier.length)
+          html +=
+            `<h4 style="margin-top:10px">Earlier versions · ${earlier.length}</h4>` +
+            earlier.map(([item]) => `<div class="item">${escape(item.text)}</div>`).join('');
+        return html;
+      }
+
+      function item_html(item, index) {
+        const text = item.streaming !== undefined ? item.text || '…' : item.text;
+        return `<div class="item">${escape(text)}<div class="meta"><span>${escape(item.label)}</span><button data-promote="${index}">Put on table</button></div></div>`;
+      }
+
+      function front_html(node) {
+        if (node.type === 'machine') {
+          const slots = slot_names(node.template);
+          const estimate = machine_estimate(node);
+          const missing = missing_slots(node);
+          const stale = is_machine_stale(node);
+          const running = (node.runs || []).length && state.active_runs && node._running;
+          const lever = missing.length
+            ? `<button class="lever" disabled>Feed ${escape(missing.join(', '))}</button>`
+            : `<button class="lever" data-run>${stale ? 'Rerun' : 'Run'}${estimate.runs > 1 ? ' ×' + estimate.runs : ''} · ≈ $${estimate.cost.toFixed(3)}</button>`;
+          const template = escape(node.template).replace(
+            /\{([^}]+)\}/g,
+            '<span class="slotref">{$1}</span>',
+          );
+          return `<div class="name"><span>${escape(node.name)}</span><span class="state">${stale ? 'stale' : (node.runs || []).length ? 'ran' : ''}</span></div>
+      ${node.loose ? `<input class="question" placeholder="${node.reply_to ? 'Reply…' : 'Ask about the fed cards… (Enter on empty = Develop)'}" value="${escape(node.question || '')}">` : `<div class="template">${template}</div>`}
+      <div class="slots">${slots.map((slot) => slot_html(node, slot)).join('')}</div>
+      ${lever}
+      <div class="tray" data-port="tray" title="Tray: drag to feed another machine"></div>
+      ${node.back.length ? `<button class="badge" data-flip>${node.back.length}</button>` : ''}`;
+        }
+        if (node.type === 'stack') {
+          return `<div class="kind">${escape(node.title)}</div><div class="text">${escape(node.items[0])}</div><div class="count">${node.items.length} cards · stacked</div><div class="port" data-port="out"></div>`;
+        }
+        const update =
+          node.origin === 'generated' && is_output_stale(node) && state.nodes[node.receipt.machine]
+            ? `<button class="update" data-update>Update · ≈ $${machine_estimate(state.nodes[node.receipt.machine]).cost.toFixed(3)}</button>`
+            : '';
+        const kind =
+          node.origin === 'generated' && !node.region
+            ? `<div class="kind">${escape(node.receipt.question ? '“' + snippet(node.receipt.question, 6) + '”' : node.receipt.machine_name)} · ${escape(node.receipt.model)}</div>`
+            : '';
+        return `${kind}<div class="text">${escape(node.text) || '<span style="color:var(--muted)">Write…</span>'}</div>${update}
+    ${node.back.length ? `<button class="badge" data-flip>${node.back.length}</button>` : ''}
+    <div class="corner" data-flip title="Flip (F)"></div><div class="port" data-port="out"></div>`;
+      }
+
+      function slot_html(node, slot) {
+        const links = feeds_into(node.id, slot);
+        const each = links.find(
+          (link) => state.nodes[link.from] && state.nodes[link.from].type === 'stack',
+        );
+        const mode = each
+          ? `<span class="mode" data-mode="${each.id}">${each.mode === 'each' ? 'each' : 'together'}</span>`
+          : '';
+        const fed = links.length
+          ? `<span class="fed">· ${links.length} fed</span>`
+          : `<span class="fed">· empty</span>`;
+        return `<div class="slot-row ${links.length ? '' : 'empty'}"><span class="slot" data-slot="${escape(slot)}"></span>${escape(slot)} ${fed}${mode}</div>`;
+      }
+
+      function render() {
+        world.style.transform = `translate(${state.camera.x}px, ${state.camera.y}px)`;
+
+        // regions
+        for (const region of state.regions) {
+          let el = elements.get(region.id);
+          if (!el) {
+            el = document.createElement('div');
+            el.className = 'region';
+            el.innerHTML = `<span class="label">${escape(region.label)}</span>`;
+            world.insertBefore(el, links_layer.nextSibling);
+            elements.set(region.id, el);
+          }
+          Object.assign(el.style, {
+            left: region.x + 'px',
+            top: region.y + 'px',
+            width: region.width + 'px',
+            height: region.height + 'px',
+          });
+        }
+
+        // nodes
+        const live = new Set();
+        for (const node of Object.values(state.nodes)) {
+          if (node.hidden || (node.origin === 'generated' && node.on_table === false)) continue;
+          live.add(node.id);
+          let el = elements.get(node.id);
+          if (!el) {
+            el = document.createElement('div');
+            el.dataset.id = node.id;
+            el.innerHTML = `<div class="flipper"><div class="face front"></div><div class="face back"></div></div>`;
+            world.appendChild(el);
+            elements.set(node.id, el);
+          }
+          const stale = node.type === 'machine' ? is_machine_stale(node) : is_output_stale(node);
+          el.className = [
+            'node',
+            node.type,
+            node.origin,
+            node.flipped && 'flipped',
+            state.selection.has(node.id) && 'selected',
+            stale && 'stale',
+          ]
+            .filter(Boolean)
+            .join(' ');
+          Object.assign(el.style, {
+            left: node.x + 'px',
+            top: node.y + 'px',
+            width: node.width + 'px',
+          });
+          if (
+            editing !== node.id &&
+            !(node.loose && document.activeElement && el.contains(document.activeElement))
+          ) {
+            const html = front_html(node);
+            if (el._front !== html) {
+              el.querySelector('.front').innerHTML = html;
+              el._front = html;
+            }
+            if (node.type === 'stack' && !el.querySelector('.sheet')) {
+              el.querySelector('.flipper').insertAdjacentHTML(
+                'afterbegin',
+                '<div class="sheet s1"></div><div class="sheet s2"></div>',
+              );
+            }
+          }
+          const back_markup = back_html(node);
+          if (el._back !== back_markup) {
+            el.querySelector('.back').innerHTML = back_markup;
+            el._back = back_markup;
+          }
+          // back sizing: let a flipped card grow to show its back
+          const front = el.querySelector('.front');
+          const back = el.querySelector('.back');
+          back.style.minHeight = front.offsetHeight + 'px';
+          if (node.flipped) {
+            back.style.position = 'relative';
+            front.style.position = 'absolute';
+            front.style.inset = '0';
+          } else {
+            back.style.position = 'absolute';
+            front.style.position = 'relative';
+            front.style.inset = '';
+          }
+        }
+        for (const [id, el] of elements) {
+          if (!live.has(id) && !state.regions.some((region) => region.id === id)) {
+            el.remove();
+            elements.delete(id);
+          }
+        }
+
+        render_links();
+        render_chips();
+
+        const pip = document.getElementById('pip');
+        pip.className = state.active_runs
+          ? 'busy'
+          : Object.values(state.nodes).some(
+                (node) => node.type === 'machine' && is_machine_stale(node),
+              )
+            ? 'attention'
+            : '';
+        pip.title = state.active_runs
+          ? 'Running'
+          : pip.className === 'attention'
+            ? 'Something is stale'
+            : 'Idle, all saved';
+        document.getElementById('spend').textContent = '$' + state.spend.toFixed(3);
+        document.getElementById('spend-meter').style.width =
+          Math.min(100, (state.spend / 0.5) * 100) + '%';
+        document.getElementById('run-list').innerHTML = state.runs
+          .map(
+            (run) =>
+              `<div class="run-row"><span>${escape(run.name)}${run.count > 1 ? ' ×' + run.count : ''}</span><span>$${run.cost.toFixed(4)}</span></div>`,
+          )
+          .join('');
+      }
+
+      function anchor(id, port, slot) {
+        const node = state.nodes[id];
+        const el = elements.get(id);
+        if (!node || !el) return null;
+        const height = el.offsetHeight;
+        if (port === 'slot') {
+          const dot = !node.flipped && el.querySelector(`[data-slot="${CSS.escape(slot)}"]`);
+          if (!dot) return { x: node.x, y: node.y + height / 2 };
+          const box = el.getBoundingClientRect();
+          const rect = dot.getBoundingClientRect();
+          return {
+            x: node.x + rect.left - box.left + rect.width / 2,
+            y: node.y + rect.top - box.top + rect.height / 2,
+          };
+        }
+        if (port === 'top') return { x: node.x + 40, y: node.y };
+        if (port === 'bottom') return { x: node.x + 40, y: node.y + height };
+        if (port === 'in') return { x: node.x, y: node.y + Math.min(height / 2, 40) };
+        return { x: node.x + node.width, y: node.y + height / 2 };
+      }
+
+      function curve(a, b) {
+        const dx = Math.max(40, Math.abs(b.x - a.x) / 2);
+        return `M${a.x},${a.y} C${a.x + dx},${a.y} ${b.x - dx},${b.y} ${b.x},${b.y}`;
+      }
+
+      let draft_link = null;
+
+      function render_links() {
+        let html = `<defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9c978a"/></marker></defs>`;
+        for (const link of state.links) {
+          if (link.hidden) continue;
+          const thread = link.kind === 'thread';
+          const from = anchor(link.from, thread ? 'bottom' : 'out');
+          const to = thread
+            ? anchor(link.to, 'top')
+            : link.kind === 'feed' && !link.tray
+              ? anchor(link.to, 'slot', link.slot)
+              : anchor(link.to, 'in');
+          if (!from || !to) continue;
+          const hot = state.selection.has(link.from) || state.selection.has(link.to);
+          if (thread) {
+            html += `<path class="thread" d="M${from.x},${from.y} L${to.x},${to.y}"/>`;
+          } else if (link.kind === 'source') {
+            html += `<path class="source ${hot ? 'hot' : ''}" d="${curve(from, to)}"/>`;
+          } else if (link.kind === 'feed') {
+            const target = state.nodes[link.to];
+            const flowing =
+              state.active_runs &&
+              (link.tray ? state.nodes[link.to].streaming !== undefined : false);
+            const stale = !link.tray && is_feed_stale(link);
+            html += `<path class="feed ${hot ? 'hot' : ''} ${stale ? 'stale' : ''} ${flowing ? 'flowing' : ''}" d="${curve(from, to)}"/>`;
+          } else {
+            html += `<path class="arrow ${hot ? 'hot' : ''}" d="${curve(from, to)}" marker-end="url(#head)"/>`;
+            if (link.label) {
+              const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 - 4 };
+              html += `<text x="${mid.x}" y="${mid.y}" text-anchor="middle" data-label="${link.id}">${escape(link.label)}</text>`;
+            }
+          }
+        }
+        if (draft_link)
+          html += `<path class="draft" d="${curve(draft_link.from, draft_link.to)}"/>`;
+        links_layer.innerHTML = html;
+      }
+
+      // ---------- interaction ----------
+
+      function toast(message) {
+        const el = document.getElementById('toast');
+        el.textContent = message;
+        el.classList.add('show');
+        clearTimeout(toast.timer);
+        toast.timer = setTimeout(() => el.classList.remove('show'), 1800);
+      }
+
+      function world_point(event) {
+        return { x: event.clientX - state.camera.x, y: event.clientY - state.camera.y };
+      }
+
+      function begin_edit(id) {
+        const el = elements.get(id);
+        const text = el && el.querySelector('.front .text');
+        if (!text) return;
+        editing = id;
+        text.textContent = state.nodes[id].text;
+        el._front = null;
+        text.contentEditable = 'true';
+        text.focus();
+        document.getSelection().selectAllChildren(text);
+        document.getSelection().collapseToEnd();
+      }
+
+      function end_edit() {
+        if (!editing) return;
+        const el = elements.get(editing);
+        const text = el && el.querySelector('.front .text');
+        const node = state.nodes[editing];
+        const template = el && el.querySelector('.front .template[contenteditable=true]');
+        if (template && node && template.textContent !== node.template) {
+          node.template = template.textContent;
+          node.version += 1;
+        } else if (text && node && node.type === 'card' && text.textContent !== node.text) {
+          node.text = text.textContent;
+          node.version += 1;
+        }
+        editing = null;
+        render();
+      }
+
+      let gesture = null;
+
+      document.getElementById('viewport').addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+        const port = event.target.closest('[data-port]');
+        const node_el = event.target.closest('.node');
+        if (port && node_el) {
+          const id = node_el.dataset.id;
+          gesture = { kind: 'link', from: id };
+          draft_link = { from: anchor(id, 'out'), to: world_point(event) };
+          document.body.classList.add('drawing');
+          event.preventDefault();
+          return;
+        }
+        if (event.target.closest('button, input, select, label, [data-label], [data-mode]')) return;
+        if (node_el) {
+          const id = node_el.dataset.id;
+          if (editing === id) return;
+          if (event.shiftKey) {
+            state.selection.has(id) ? state.selection.delete(id) : state.selection.add(id);
+          } else if (!state.selection.has(id)) {
+            state.selection = new Set([id]);
+          }
+          end_edit();
+          const origins = [...state.selection].map((sid) => ({
+            id: sid,
+            x: state.nodes[sid].x,
+            y: state.nodes[sid].y,
+          }));
+          gesture = { kind: 'move', start: { x: event.clientX, y: event.clientY }, origins };
+          render();
+          return;
+        }
+        end_edit();
+        state.selection.clear();
+        gesture = {
+          kind: 'pan',
+          start: { x: event.clientX, y: event.clientY },
+          camera: { ...state.camera },
+        };
+        document.getElementById('viewport').classList.add('panning');
+        render();
+      });
+
+      window.addEventListener('pointermove', (event) => {
+        if (!gesture) return;
+        if (gesture.kind === 'pan') {
+          state.camera = {
+            x: gesture.camera.x + event.clientX - gesture.start.x,
+            y: gesture.camera.y + event.clientY - gesture.start.y,
+          };
+          world.style.transform = `translate(${state.camera.x}px, ${state.camera.y}px)`;
+        } else if (gesture.kind === 'move') {
+          const dx = event.clientX - gesture.start.x;
+          const dy = event.clientY - gesture.start.y;
+          for (const origin of gesture.origins) {
+            const node = state.nodes[origin.id];
+            node.x = origin.x + dx;
+            node.y = origin.y + dy;
+            const el = elements.get(origin.id);
+            if (el) {
+              el.style.left = node.x + 'px';
+              el.style.top = node.y + 'px';
+            }
+          }
+          render_links();
+        } else if (gesture.kind === 'link') {
+          draft_link.to = world_point(event);
+          render_links();
+        }
+      });
+
+      window.addEventListener('pointerup', (event) => {
+        if (!gesture) return;
+        if (gesture.kind === 'link') {
+          const target = document.elementFromPoint(event.clientX, event.clientY);
+          const slot = target && target.closest('[data-slot]');
+          const node_el = target && target.closest('.node');
+          const to = node_el && node_el.dataset.id;
+          if (to && to !== gesture.from) {
+            const to_node = state.nodes[to];
+            if (to_node.type === 'machine') {
+              const slot_name = slot
+                ? slot.dataset.slot
+                : missing_slots(to_node)[0] || slot_names(to_node.template)[0];
+              if (creates_cycle(gesture.from, to)) toast('That feed would make a loop');
+              else {
+                state.links.push({
+                  id: new_id('l'),
+                  kind: 'feed',
+                  from: gesture.from,
+                  to,
+                  slot: slot_name,
+                  mode: state.nodes[gesture.from].type === 'stack' ? 'each' : 'together',
+                });
+                toast(`Fed into ${to_node.name} · ${slot_name}`);
+              }
+            } else {
+              state.links.push({
+                id: new_id('l'),
+                kind: 'arrow',
+                from: gesture.from,
+                to,
+                label: 'relates to',
+              });
+              toast('Arrow drawn · double-click its label to rename');
+            }
+          }
+          draft_link = null;
+          document.body.classList.remove('drawing');
+        }
+        document.getElementById('viewport').classList.remove('panning');
+        gesture = null;
+        render();
+      });
+
+      function creates_cycle(from, to) {
+        const seen = new Set();
+        const walk = (id) => {
+          if (id === from) return true;
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return state.links
+            .filter((link) => link.kind === 'feed' && link.from === id)
+            .some((link) => walk(link.to));
+        };
+        return walk(to);
+      }
+
+      document.getElementById('viewport').addEventListener('dblclick', (event) => {
+        const label = event.target.closest('[data-label]');
+        if (label) {
+          const link = state.links.find((l) => l.id === label.dataset.label);
+          const value = prompt('Arrow label', link.label);
+          if (value !== null) {
+            link.label = value;
+            render();
+          }
+          return;
+        }
+        const template = event.target.closest('.template');
+        if (template) {
+          const id = template.closest('.node').dataset.id;
+          editing = id;
+          template.textContent = state.nodes[id].template;
+          template.contentEditable = 'true';
+          template.closest('.node')._front = null;
+          template.focus();
+          return;
+        }
+        const node_el = event.target.closest('.node');
+        if (
+          node_el &&
+          state.nodes[node_el.dataset.id].type === 'card' &&
+          !state.nodes[node_el.dataset.id].flipped
+        ) {
+          if (state.nodes[node_el.dataset.id].origin === 'generated')
+            return toast('Generated cards are fixed; flip to see the receipt');
+          begin_edit(node_el.dataset.id);
+          return;
+        }
+        if (!node_el) {
+          const point = world_point(event);
+          const card = add_node({
+            id: new_id('card'),
+            type: 'card',
+            text: '',
+            x: point.x - 100,
+            y: point.y - 30,
+          });
+          state.selection = new Set([card.id]);
+          render();
+          begin_edit(card.id);
+        }
+      });
+
+      document.getElementById('viewport').addEventListener('click', (event) => {
+        const node_el = event.target.closest('.node');
+        if (!node_el) return;
+        const node = state.nodes[node_el.dataset.id];
+        if (event.target.closest('[data-flip]')) {
+          node.flipped = !node.flipped;
+          render();
+          return;
+        }
+        if (event.target.closest('[data-run]')) {
+          run_machine(node);
+          return;
+        }
+        if (event.target.closest('[data-update]')) {
+          run_machine(state.nodes[node.receipt.machine]);
+          return;
+        }
+        const mode = event.target.closest('[data-mode]');
+        if (mode) {
+          const link = state.links.find((l) => l.id === mode.dataset.mode);
+          link.mode = link.mode === 'each' ? 'together' : 'each';
+          render();
+          return;
+        }
+        const promote = event.target.closest('[data-promote]');
+        if (promote) {
+          const item = node.back.splice(Number(promote.dataset.promote), 1)[0];
+          const card = add_node({
+            id: new_id('out'),
+            type: 'card',
+            origin: 'generated',
+            on_table: true,
+            kept: true,
+            text: item.text,
+            receipt: item.receipt,
+            x: node.x + node.width + 50,
+            y: node.y,
+          });
+          state.links.push({
+            id: new_id('l'),
+            kind: 'arrow',
+            from: node.id,
+            to: card.id,
+            label: 'developed',
+          });
+          if (!node.back.length) node.flipped = false;
+          render();
+        }
+      });
+
+      document.getElementById('viewport').addEventListener('change', (event) => {
+        const node_el = event.target.closest('.node');
+        if (!node_el) return;
+        const node = state.nodes[node_el.dataset.id];
+        if (event.target.dataset.model) {
+          const model = event.target.dataset.model;
+          node.models = event.target.checked
+            ? [...node.models, model]
+            : node.models.filter((m) => m !== model);
+          if (!node.models.length) node.models = ['deepseek-chat'];
+        }
+        render();
+      });
+
+      document.getElementById('viewport').addEventListener('keydown', (event) => {
+        if (!event.target.classList.contains('question')) return;
+        const node = state.nodes[event.target.closest('.node').dataset.id];
+        if (event.key === 'Enter') {
+          node.question = event.target.value.trim();
+          const fed = feeds_into(node.id);
+          if (!node.question && !node.reply_to && fed.length === 1) {
+            remove([node]);
+            develop(state.nodes[fed[0].from]);
+            return;
+          }
+          event.target.blur();
+          run_machine(node);
+        }
+        if (event.key === 'Escape' && !node.runs.length) remove([node]);
+        event.stopPropagation();
+      });
+
+      // palette
+
+      const palette = document.getElementById('palette');
+      const palette_input = palette.querySelector('input');
+      let palette_items = [];
+      let palette_index = 0;
+
+      function open_palette() {
+        palette.classList.add('open');
+        palette_input.value = '';
+        palette_index = 0;
+        fill_palette();
+        palette_input.focus();
+      }
+
+      function fill_palette() {
+        const query = palette_input.value.toLowerCase();
+        palette_items = commands().filter((item) => item.label.toLowerCase().includes(query));
+        const count = state.selection.size;
+        palette.querySelector('.scope').textContent = count
+          ? `${count} selected`
+          : 'Nothing selected';
+        palette.querySelector('ul').innerHTML = palette_items
+          .map(
+            (item, index) =>
+              `<li class="${index === palette_index ? 'active' : ''}" data-index="${index}"><span>${escape(item.label)}</span><span class="hint">${escape(item.hint)}</span></li>`,
+          )
+          .join('');
+      }
+
+      function close_palette() {
+        palette.classList.remove('open');
+      }
+
+      palette_input.addEventListener('input', () => {
+        palette_index = 0;
+        fill_palette();
+      });
+      palette_input.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') {
+          palette_index = Math.min(palette_items.length - 1, palette_index + 1);
+          fill_palette();
+          event.preventDefault();
+        }
+        if (event.key === 'ArrowUp') {
+          palette_index = Math.max(0, palette_index - 1);
+          fill_palette();
+          event.preventDefault();
+        }
+        if (event.key === 'Enter' && palette_items[palette_index]) {
+          const item = palette_items[palette_index];
+          close_palette();
+          item.run();
+        }
+        if (event.key === 'Escape') close_palette();
+        event.stopPropagation();
+      });
+      palette.querySelector('ul').addEventListener('click', (event) => {
+        const li = event.target.closest('li');
+        if (!li) return;
+        const item = palette_items[Number(li.dataset.index)];
+        close_palette();
+        item.run();
+      });
+
+      let pointer = { x: 600, y: 400 };
+      window.addEventListener('pointermove', (event) => {
+        pointer = world_point(event);
+      });
+
+      window.addEventListener('keydown', (event) => {
+        if (editing) {
+          if (event.key === 'Escape') end_edit();
+          return;
+        }
+        if (event.target.closest && event.target.closest('input, select, [contenteditable=true]'))
+          return;
+        const nodes = selected_nodes();
+        const one = nodes.length === 1 ? nodes[0] : null;
+        switch (event.code === 'Slash' ? '/' : event.key) {
+          case ' ':
+            event.preventDefault();
+            open_palette();
+            break;
+          case '/':
+          case 'Slash':
+            event.preventDefault();
+            loose_prompt({ x: pointer.x, y: pointer.y });
+            break;
+          case 'f':
+          case 'F':
+            nodes.forEach((node) => (node.flipped = !node.flipped));
+            render();
+            break;
+          case 'd':
+          case 'D':
+            if (one && one.type === 'card') develop(one);
+            break;
+          case 'g':
+          case 'G':
+            group_selection();
+            break;
+          case 'u':
+          case 'U':
+            if (one && one.origin === 'generated' && state.nodes[one.receipt.machine])
+              run_machine(state.nodes[one.receipt.machine]);
+            break;
+          case 'w':
+          case 'W':
+            document.getElementById('workshop').classList.toggle('open');
+            break;
+          case 'Enter':
+            if (one && one.type === 'machine') run_machine(one);
+            else if (one && one.type === 'card') begin_edit(one.id);
+            break;
+          case 'Backspace':
+          case 'Delete':
+            if (nodes.length) remove(nodes);
+            break;
+          case 'Escape':
+            close_palette();
+            document
+              .querySelectorAll('.sheet-panel')
+              .forEach((panel) => panel.classList.remove('open'));
+            state.selection.clear();
+            render();
+            break;
+        }
+      });
+
+      document.getElementById('dock-field').addEventListener('click', open_palette);
+      document.getElementById('add-button').addEventListener('click', add_text_card);
+      document
+        .getElementById('workshop-button')
+        .addEventListener('click', () =>
+          document.getElementById('workshop').classList.toggle('open'),
+        );
+      document
+        .getElementById('pip')
+        .addEventListener('click', () =>
+          document.getElementById('activity').classList.toggle('open'),
+        );
+      function fill_tools() {
+        document.getElementById('tools').innerHTML =
+          `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Dragging a machine out places a copy.</div>` +
+          tools
+            .map(
+              (tool, index) =>
+                `<div class="tool" data-tool="${index}"><b>${escape(tool.name)}</b><span>${escape(tool.note)}</span></div>`,
+            )
+            .join('');
+      }
+      fill_tools();
+
+      function render_chips() {
+        const nodes = selected_nodes();
+        const one = nodes.length === 1 ? nodes[0] : null;
+        const chips = [];
+        if (!nodes.length) {
+          document.getElementById('chips').innerHTML = '';
+          return;
+        }
+        if (one && one.type === 'machine') chips.push(['Run', '↵', () => run_machine(one)]);
+        else if (one && one.origin === 'generated') {
+          if (is_output_stale(one) && state.nodes[one.receipt.machine])
+            chips.push(['Update', 'U', () => run_machine(state.nodes[one.receipt.machine])]);
+          chips.push(['Reply', '/', () => loose_prompt()]);
+          chips.push(['Develop', 'D', () => develop(one)]);
+        } else if (one) {
+          chips.push(
+            ['Develop', 'D', () => develop(one)],
+            ['Ask', '/', () => loose_prompt({ x: one.x + one.width + 110, y: one.y })],
+            ['Critique', '', critique_selection],
+          );
+        } else {
+          chips.push(
+            [
+              'Ask about ' + nodes.length,
+              '/',
+              () =>
+                loose_prompt({
+                  x: Math.max(...nodes.map((n) => n.x + n.width)) + 110,
+                  y: nodes[0].y,
+                }),
+            ],
+            ['Critique', '', critique_selection],
+            ['Group', 'G', group_selection],
+          );
+        }
+        chips.push([
+          'Flip',
+          'F',
+          () => {
+            nodes.forEach((node) => (node.flipped = !node.flipped));
+            render();
+          },
+        ]);
+        chips.push(['More', 'Space', open_palette]);
+        const holder = document.getElementById('chips');
+        holder.innerHTML = chips
+          .map(
+            ([label, key], index) =>
+              `<button data-chip="${index}">${escape(label)}${key ? `<kbd>${escape(key)}</kbd>` : ''}</button>`,
+          )
+          .join('');
+        holder.onclick = (event) => {
+          const b = event.target.closest('[data-chip]');
+          if (b) chips[Number(b.dataset.chip)][2]();
+        };
+      }
+      document.getElementById('tools').addEventListener('click', (event) => {
+        const tool = event.target.closest('[data-tool]');
+        if (tool) add_tool(tools[Number(tool.dataset.tool)]);
+      });
+
+      seed();
+      render();
+      // A second pass places links once node heights are measured.
+      requestAnimationFrame(render);
+    </script>
+  </body>
+</html>
