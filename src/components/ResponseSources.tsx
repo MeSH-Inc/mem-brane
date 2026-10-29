@@ -37,6 +37,8 @@ export const ResponseSources = memo(function ResponseSources({
       }),
     ),
   );
+  // A machine's output names its inputs by slot, and updating it reruns the machine.
+  const machineRun = useStore(document.store, (s) => !!s.runs[blockId]?.machine_block_id);
   if (!mine.length) return null;
   const entries = JSON.parse(summary) as [string | null, boolean][];
   const runId = mine[0].runId;
@@ -60,7 +62,7 @@ export const ResponseSources = memo(function ResponseSources({
             }
             onClick={() => onOpenSource(d.sourceBlockId)}
           >
-            {i + 1} · {label ?? 'Not on this brane'}
+            {machineRun ? d.label : i + 1} · {label ?? 'Not on this brane'}
             {stale && <em> · changed</em>}
           </button>
         );
@@ -70,7 +72,11 @@ export const ResponseSources = memo(function ResponseSources({
       </button>
       {changed && (
         <button className="text-button rerun" onClick={() => onRerun(runId)}>
-          {mine[0].kind === 'source' ? 'Develop again' : 'Reuse with current sources'}
+          {machineRun
+            ? 'Update'
+            : mine[0].kind === 'source'
+              ? 'Develop again'
+              : 'Reuse with current sources'}
         </button>
       )}
     </div>

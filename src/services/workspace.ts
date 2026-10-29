@@ -25,6 +25,8 @@ import { draftDisposition, type Draft } from './drafts';
 import type { Interaction } from '../stores/interaction';
 import type { Imports } from './imports';
 import { estimateIssue, runIssueOf, type RunIssue } from './run-issues';
+import { runMachine as runMachineSchema, type RunMachine } from '../../shared/machines';
+import { machineStaleness } from '../canvas/machines';
 
 type DraftState = Pick<
   Interaction,
@@ -60,6 +62,8 @@ export class WorkspaceController {
   readonly pendingRuns: RequestJournal<Prepared<SubmitRun>>;
   readonly spawnRequests: RequestJournal<Prepared<SpawnArtifact>>;
   readonly retryRequests: RequestJournal<string>;
+  readonly machineRequests: RequestJournal<Prepared<RunMachine>>;
+  private machines = new Map<string, Submission<Prepared<RunMachine>>>();
   private spawns = new Map<string, Submission<Prepared<SpawnArtifact>>>();
   private retries = new Map<string, Submission<string>>();
   private client: Client;
@@ -128,6 +132,11 @@ export class WorkspaceController {
     this.spawnRequests = new RequestJournal(
       JSON.stringify(['mem-brane-pending-spawns', actor, braneId]),
       (v) => validPrepared(v, spawnArtifact),
+      deps.storage,
+    );
+    this.machineRequests = new RequestJournal(
+      JSON.stringify(['mem-brane-pending-machine-runs', actor, braneId]),
+      (v) => validPrepared(v, runMachineSchema),
       deps.storage,
     );
     this.retryRequests = new RequestJournal(
@@ -637,7 +646,7 @@ export class WorkspaceController {
       edits: this.edits(composer.references ?? [], validate),
     };
   }
-  private async send<T extends SubmitRun | SpawnArtifact>(
+  private async send<T extends SubmitRun | SpawnArtifact | RunMachine>(
     submission: Submission<Prepared<T>>,
     prepare: () => T,
     transport: (request: T) => Promise<SubmissionReceipt>,
@@ -768,6 +777,89 @@ export class WorkspaceController {
       if (this.valid(epoch)) return accepted.receipt.outputBlockId;
     }).catch(() => undefined);
   };
+  // The run names the machine's current feeds explicitly and freezes them with any
+  // unsaved edits to the template or the fed cards.
+  private machineRequest(placementId: string): RunMachine {
+    const state = this.state;
+    const placement = state?.placements.find((p) => p.id === placementId);
+    if (!state || !placement) throw new Error('This machine is no longer on the brane.');
+    const draft = this.deps.drafts.getState().draftRecords[placement.block_id]?.text;
+    const view = machineStaleness(state, placementId, draft);
+    if (!view.slots.length) throw new Error('Name at least one {slot} in the machine prompt.');
+    if (view.missingSlots.length) throw new Error(`Feed the {${view.missingSlots[0]}} slot first.`);
+    const inputs = view.inputs.map(({ blockId, slot }) => ({ blockId, slot }));
+    return {
+      braneId: this.braneId,
+      key: crypto.randomUUID(),
+      machinePlacementId: placementId,
+      model: this.draft.model ?? 'mock',
+      inputs,
+      edits: this.edits([placement.block_id, ...inputs.map((i) => i.blockId)]),
+    };
+  }
+  estimateMachine = (placementId: string) => {
+    this.requireActive();
+    return this.client.estimateMachine({ ...this.machineRequest(placementId), edits: [] });
+  };
+  runMachine = (placementId: string) => {
+    this.requireActive();
+    return this.command(`machine:${placementId}`, async (progress) => {
+      const epoch = this.epoch;
+      let submission = this.machines.get(placementId);
+      if (!submission) {
+        submission = new Submission(this.machineRequests, placementId);
+        this.machines.set(placementId, submission);
+      }
+      const accepted = await this.send(
+        submission,
+        () => this.machineRequest(placementId),
+        this.client.runMachine,
+        progress,
+      );
+      if (!this.valid(epoch)) return;
+      progress('refreshing');
+      await this.refresh();
+      if (this.valid(epoch)) return accepted.receipt.outputBlockId;
+    }).catch(() => undefined);
+  };
+  createMachine = (geometry: Geometry) =>
+    this.command(`createMachine:${JSON.stringify(geometry)}`, async (progress) => {
+      const epoch = this.epoch;
+      const block = await this.client.createMachine(this.braneId, geometry);
+      if (!this.valid(epoch)) return;
+      progress('refreshing');
+      await this.refresh();
+      if (this.valid(epoch)) return block.id;
+    }).catch(() => undefined);
+  // Feeding never runs anything; it records which cards a machine's slot takes.
+  feed = (fromPlacementIds: string[], toPlacementId: string, slot: string) =>
+    this.mutate(`feed:${toPlacementId}:${slot}:${fromPlacementIds.join(',')}`, async () => {
+      const state = this.state;
+      const machine = state?.placements.find((p) => p.id === toPlacementId);
+      if (!state || !machine) throw new Error('This machine is no longer on the brane.');
+      const kinds = new Map(state.blocks.map((b) => [b.id, b.kind]));
+      const existing = new Set(
+        state.feeds
+          .filter((f) => f.to_placement_id === toPlacementId && f.slot === slot)
+          .map((f) => f.from_placement_id),
+      );
+      const sources = state.placements.filter(
+        (p) =>
+          fromPlacementIds.includes(p.id) &&
+          !existing.has(p.id) &&
+          kinds.get(p.block_id) !== 'machine',
+      );
+      if (!sources.length) throw new Error('Select one or more cards to feed this slot.');
+      for (const source of sources)
+        await this.client.createFeed({
+          braneId: this.braneId,
+          fromPlacementId: source.id,
+          toPlacementId,
+          slot,
+        });
+    }).catch(() => undefined);
+  unfeed = (feedId: string) =>
+    this.mutate(`unfeed:${feedId}`, () => this.client.removeFeed(feedId)).catch(() => undefined);
   create = (geometry?: Geometry) => {
     const captured = structuredClone(geometry ?? { x: 100, y: 100, width: 320, height: 220 });
     // Toolbar creation shares a key; separate canvas rectangles are separate intents.

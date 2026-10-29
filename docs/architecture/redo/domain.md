@@ -29,8 +29,11 @@ entry, and the worker substitutes frozen slot contents into the frozen template.
 Workshop items are machine blocks owned by the account with no placement; taking one
 out copies the block.
 
-**Manifest entries gain `slot`.** Each source and reference entry records the slot it
-filled, replacing today's `context N` labels on the receipt.
+**The slot is the entry label.** A machine run's references are labelled with the slot
+they filled, and its prompt entry is the machine's own frozen revision. The existing
+`label` column carries the slot, so manifests need no new column; the receipt and the
+response's **Based on** strip show slot names instead of ordinals. _(Implemented in
+iteration 3.)_
 
 **Manifest entry kind `relation`.** It names two entry positions in the same manifest
 and a label. The label is stored in the sealed manifest itself, which is immutable, so
@@ -40,9 +43,15 @@ of the same run.
 **Feed** (brane-scoped): exactly one of `from_placement_id` or `from_group_id`;
 `to_placement_id` (a machine); `slot`; `position` within the slot; `mode`
 (`together` | `each`). A feed is semantics, not presentation, so it is synchronized
-and versioned like a placement. A Run freezes what its feeds resolve to; later feed
-edits affect only later runs. A feed that would close a loop through trays is
-rejected on write.
+like a placement, through the offline outbox as `feed.create` and `feed.remove`. Feeds
+are immutable: changing one is a removal and a creation. A run never reads feeds: the
+client sends the machine's inputs explicitly, the server checks them against the
+template it freezes, and later feed edits affect only later runs. A feed that would
+close a loop through trays is rejected on write.
+
+_Iteration 3 implements_ `from_placement_id`, `to_placement_id` and `slot`, with
+position given by creation order. A machine cannot feed a machine yet, so no loop is
+possible and no cycle check exists. Groups and `mode` are not implemented.
 
 **Arrow** (brane-scoped): `from_placement_id`, `to_placement_id`, optional `label`.
 An arrow never causes a run. It is read only when both ends are inputs to one run.
@@ -55,13 +64,20 @@ expands, at run time, to its members in reading order.
 placement is removed and the output takes its position; the machine block stays,
 unplaced, so **Update** and **Make reusable** can reach it.
 
-## Staleness is a re-plan
+## Staleness is a projection
 
-A machine is stale when planning its run now would produce a different manifest
-than its last run sealed: other revisions, other group members, other relations, or a
-different machine revision. `run-plan.ts` already produces this plan for estimates,
-so staleness and the Update estimate come from one read-only planning call. Nothing
-is stored for staleness.
+A machine is stale when what its lever would send now differs from what its last run
+froze: per slot, the fed blocks and their live versions, and the machine's template
+version. Each workspace run carries `machine_block_id` and `machine_version`, each
+derivation its slot `label` and the source's `sourceVersion`, so the client computes
+staleness from the brane state it already holds, including unsaved and offline edits.
+Nothing is stored for staleness. The Update estimate is a separate read-only
+`/machines/estimate` call through `run-plan.ts`.
+
+_Decision (iteration 3): staleness is computed on the client, not by re-planning on the
+server._ The client's projection works offline and updates on every local edit; a
+server re-plan per visible machine would need a request per edit. Group membership
+and relations will join the same comparison when groups exist.
 
 ## Principle changes
 

@@ -1,8 +1,10 @@
 # Redo: a table of cards and machines
 
-Status: concept, iteration 2. Nothing here is implemented. This directory proposes a
-replacement for the current brane interface; once accepted, its decisions move into the
-numbered architecture documents and this directory is removed.
+Status: iteration 3. Machines, feeds and staleness run in the app beside the existing
+composer; the card back, selection chips, Ask, groups and the reduced chrome are still
+concept. This directory proposes a replacement for the current brane interface; once
+accepted, its decisions move into the numbered architecture documents and this
+directory is removed.
 
 ## Thesis
 

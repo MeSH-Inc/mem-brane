@@ -10,6 +10,7 @@ import type {
   SubmitRunRequest,
   SpawnArtifactRequest,
 } from '../../shared/types/domain';
+import type { RunMachineRequest } from '../../shared/machines';
 
 export class InvalidApiResponse extends Error {
   constructor(path: string, cause: unknown) {
@@ -40,6 +41,18 @@ export function createClient(request: typeof api) {
       request(`/branes/${braneId}`, { title }, 'PATCH'),
     createText: (braneId: string, geometry: Geometry) =>
       read(response.createdBlockResponse, '/blocks/text', { braneId, geometry }),
+    createMachine: (braneId: string, geometry: Geometry) =>
+      read(response.createdBlockResponse, '/blocks/machine', { braneId, geometry }),
+    createFeed: (body: {
+      braneId: string;
+      fromPlacementId: string;
+      toPlacementId: string;
+      slot: string;
+    }) => request('/feeds', body),
+    removeFeed: (id: string) => request(`/feeds/${id}`, undefined, 'DELETE'),
+    runMachine: (input: RunMachineRequest) => read(submissionReceipt, '/machines/run', input),
+    estimateMachine: (input: RunMachineRequest) =>
+      read(response.estimateResponse, '/machines/estimate', input),
     block: (id: string) => read(response.blockResponse, `/blocks/${id}`),
     unplacedCards: (cursor?: string) =>
       read(response.unplacedPageResponse, page('/blocks/unplaced', cursor)),

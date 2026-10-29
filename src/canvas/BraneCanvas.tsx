@@ -27,7 +27,9 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { Placement } from '../../shared/types/domain';
-import { derivationEdges } from './derivations';
+import { derivationEdges, machineEdges } from './derivations';
+import { MachineCard, FeedPort, type MachineActions } from './MachineCard';
+import { machineStaleness } from './machines';
 import { SpawnButton } from '../components/SpawnButton';
 import type { CardAction } from '../components/ArtifactActions';
 import { LiveBlockContent } from '../components/LiveBlockContent';
@@ -55,6 +57,7 @@ type CardData = ResponseActions & {
   onOpenSource: (blockId: string) => void;
   onInspect: (runId: string) => void;
   onRerun: (runId: string) => void;
+  machine: MachineActions;
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
 type CardNode = Node<CardData>;
@@ -63,82 +66,96 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
   const activity = useStore(data.document.store, (s) => s.activity[data.blockId] ?? idleActivity);
   const observer = useContext(RenderObserver);
   if (!block) return null;
-  const content = (
-    <article className={`canvas-card ${block.origin} ${selected ? 'selected' : ''}`}>
-      <Handle type="target" position={Position.Left} id="input" isConnectable={false} />
-      <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
-      {selected &&
-        data.resizable &&
-        (['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as ResizeEdge[]).map((edge) => (
-          <span
-            key={edge}
-            className={`canvas-resize ${edge}`}
-            data-resize={edge}
-            aria-hidden="true"
-          />
-        ))}
-      <header className="card-grip">
-        <span className="kind-mark">{block.origin === 'generated' ? '✳' : '◇'}</span>
-        <span>{cardKind(block)}</span>
-        <span className="card-status" />
-        <button
-          className="nodrag nopan icon-button"
-          title={data.mobile ? 'Open card in Focus' : 'Focus block'}
-          onClick={() => data.onFocus(block.id)}
-        >
-          {data.mobile ? 'Open' : '↗'}
-        </button>
-      </header>
-      <LiveBlockContent
-        document={data.document}
+  const resize =
+    selected &&
+    data.resizable &&
+    (['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as ResizeEdge[]).map((edge) => (
+      <span key={edge} className={`canvas-resize ${edge}`} data-resize={edge} aria-hidden="true" />
+    ));
+  const content =
+    block.kind === 'machine' ? (
+      <MachineCard
+        placementId={id}
         blockId={block.id}
+        document={data.document}
+        selected={!!selected}
         focusRequest={data.focusRequest}
         onFocused={data.onFocused}
         onEdit={data.onEdit}
-        onStop={data.onStop}
-        onRetry={data.onRetry}
-      />
-      {block.origin === 'generated' && (
-        <ResponseSources
+        actions={data.machine}
+      >
+        {resize}
+      </MachineCard>
+    ) : (
+      <article className={`canvas-card ${block.origin} ${selected ? 'selected' : ''}`}>
+        <Handle type="target" position={Position.Left} id="input" isConnectable={false} />
+        <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
+        {!data.mobile && <FeedPort placementId={id} onFeed={data.machine.onFeed} />}
+        {resize}
+        <header className="card-grip">
+          <span className="kind-mark">{block.origin === 'generated' ? '✳' : '◇'}</span>
+          <span>{cardKind(block)}</span>
+          <span className="card-status" />
+          <button
+            className="nodrag nopan icon-button"
+            title={data.mobile ? 'Open card in Focus' : 'Focus block'}
+            onClick={() => data.onFocus(block.id)}
+          >
+            {data.mobile ? 'Open' : '↗'}
+          </button>
+        </header>
+        <LiveBlockContent
           document={data.document}
           blockId={block.id}
-          onOpenSource={data.onOpenSource}
-          onInspect={data.onInspect}
-          onRerun={data.onRerun}
+          focusRequest={data.focusRequest}
+          onFocused={data.onFocused}
+          onEdit={data.onEdit}
+          onStop={data.onStop}
+          onRetry={data.onRetry}
         />
-      )}
-      {!data.mobile && (
-        <footer className="nodrag nopan">
-          {block.origin !== 'generated' && (
-            <SpawnButton
-              block={block}
-              busy={activity.busy}
-              phase={activity.phase}
-              retry={activity.retry}
-              onSpawn={() => data.onSpawn(block.id, id)}
-            />
-          )}
-          {block.messageId ? (
-            <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
-          ) : (
-            <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
-          )}
-          <ActionMenu label="More" align="right">
-            {block.messageId && (
+        {block.origin === 'generated' && (
+          <ResponseSources
+            document={data.document}
+            blockId={block.id}
+            onOpenSource={data.onOpenSource}
+            onInspect={data.onInspect}
+            onRerun={data.onRerun}
+          />
+        )}
+        {!data.mobile && (
+          <footer className="nodrag nopan">
+            {block.origin !== 'generated' && (
+              <SpawnButton
+                block={block}
+                busy={activity.busy}
+                phase={activity.phase}
+                retry={activity.retry}
+                onSpawn={() => data.onSpawn(block.id, id)}
+              />
+            )}
+            {block.messageId ? (
+              <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
+            ) : (
               <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
             )}
-            <button onClick={() => data.onManage(block.id, id, 'place')}>
-              Show on another brane…
-            </button>
-            <button onClick={() => data.onManage(block.id, id, 'versions')}>Version history</button>
-            <button onClick={() => data.onManage(block.id, id, 'remove')}>
-              Remove from this brane
-            </button>
-          </ActionMenu>
-        </footer>
-      )}
-    </article>
-  );
+            <ActionMenu label="More" align="right">
+              {block.messageId && (
+                <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
+              )}
+              <button onClick={() => data.onManage(block.id, id, 'place')}>
+                Show on another brane…
+              </button>
+              <button onClick={() => data.onManage(block.id, id, 'versions')}>
+                Version history
+              </button>
+              <button onClick={() => data.onManage(block.id, id, 'remove')}>
+                Remove from this brane
+              </button>
+            </ActionMenu>
+          </footer>
+        )}
+      </article>
+    );
   return observer ? (
     <Profiler id={`card:${id}`} onRender={observer}>
       {content}
@@ -163,6 +180,7 @@ interface Props extends ResponseActions {
   onManage: CardData['onManage'];
   onInspect: CardData['onInspect'];
   onRerun: CardData['onRerun'];
+  machine: MachineActions;
 }
 function Inner(props: Props) {
   const { mobile } = props;
@@ -270,6 +288,7 @@ function Inner(props: Props) {
           onRerun: props.onRerun,
           onStop: props.onStop,
           onRetry: props.onRetry,
+          machine: props.machine,
         },
       };
       const previous = nodeCache.current.get(p.id);
@@ -308,6 +327,7 @@ function Inner(props: Props) {
     props.onRerun,
     props.onStop,
     props.onRetry,
+    props.machine,
   ]);
   useEffect(() => {
     if (!request || request.kind !== 'reveal') return;
@@ -326,7 +346,32 @@ function Inner(props: Props) {
     });
     return () => cancelAnimationFrame(frame);
   }, [request, scene.placements, scene.derivations, nodes, fitView, presentation]);
-  const edges = useMemo(() => derivationEdges(scene), [scene.placements, scene.derivations]);
+  // Machine runs and the feeds whose cards changed since the last run, as stable keys.
+  const machineRuns = useStore(props.document.store, (s) =>
+    (s.state?.runs ?? [])
+      .filter((r) => r.machine_block_id)
+      .map((r) => r.id)
+      .join(' '),
+  );
+  const changedFeeds = useStore(props.document.store, (s) => {
+    const state = s.state;
+    if (!state) return '';
+    const machines = new Set(state.blocks.filter((b) => b.kind === 'machine').map((b) => b.id));
+    return state.placements
+      .filter((p) => machines.has(p.block_id))
+      .flatMap((p) => {
+        const view = machineStaleness(state, p.id);
+        return view.ran ? view.changedFeeds : [];
+      })
+      .join(' ');
+  });
+  const edges = useMemo(
+    () => [
+      ...derivationEdges(scene, new Set(machineRuns.split(' ').filter(Boolean))),
+      ...machineEdges(scene, new Set(changedFeeds.split(' ').filter(Boolean))),
+    ],
+    [scene, machineRuns, changedFeeds],
+  );
   return (
     <div
       ref={host}

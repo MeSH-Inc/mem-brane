@@ -12,6 +12,7 @@ import { imports } from '../services/imports';
 import { acceptedFiles, pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapters';
 import { ImportTray } from '../components/ImportTray';
 import { selectedBlockIds } from '../canvas/selection';
+import { openSpot } from '../canvas/machines';
 import {
   useCallback,
   useEffect,
@@ -20,6 +21,7 @@ import {
   useSyncExternalStore,
   lazy,
   Suspense,
+  useMemo,
 } from 'react';
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import type { Geometry } from '../../shared/types/domain';
@@ -276,6 +278,15 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     (runId: string) => {
       const derivation = controller.state?.derivations.find((d) => d.runId === runId);
       if (!derivation) return;
+      const run = controller.state?.runs.find((r) => r.id === runId);
+      if (run?.machine_block_id) {
+        const machine =
+          controller.state?.placements.find((p) => p.id === derivation.anchorPlacementId) ??
+          controller.state?.placements.find((p) => p.block_id === run.machine_block_id);
+        if (machine && !needsAccount()) void controller.runMachine(machine.id);
+        else if (!machine) controller.setError('Place the machine on this brane to update it.');
+        return;
+      }
       if (derivation.kind === 'source') {
         const placement = controller.state?.placements.find(
           (p) => p.block_id === derivation.sourceBlockId,
@@ -313,6 +324,23 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
   }, []);
   const pickerTarget = useRef<'canvas' | 'composer'>('canvas');
   const canvasInsertion = useRef<() => { x: number; y: number }>(() => ({ x: 100, y: 100 }));
+  const machineActions = useMemo(
+    () => ({
+      onRunMachine: (placementId: string) =>
+        needsAccount() ? Promise.resolve() : controller.runMachine(placementId),
+      onEstimateMachine: controller.estimateMachine,
+      onFeed: controller.feed,
+      onUnfeed: controller.unfeed,
+    }),
+    [controller, needsAccount],
+  );
+  const createMachine = useCallback(async () => {
+    const id = await controller.createMachine(
+      openSpot(controller.state?.placements ?? [], canvasInsertion.current(), 400, 340),
+    );
+    const placementId = controller.state?.placements.find((p) => p.block_id === id)?.id;
+    if (placementId) useInteraction.getState().setSelectedPlacements([placementId]);
+  }, [controller]);
   const acceptFiles = useCallback(
     (files: File[], target: 'canvas' | 'composer', point?: { x: number; y: number }) => {
       controller.acceptFiles(files, target, point ?? canvasInsertion.current(), !point);
@@ -403,6 +431,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
             >
               ＋ Text
             </CommandButton>
+            {!focusMode && <button onClick={() => void createMachine()}>⚙ Machine</button>}
             <button
               onClick={() => {
                 pickerTarget.current = 'canvas';
@@ -790,6 +819,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 onManage={manage}
                 onInspect={inspectRun}
                 onRerun={rerun}
+                machine={machineActions}
               />
             </Suspense>
           )}

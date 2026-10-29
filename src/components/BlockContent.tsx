@@ -61,10 +61,20 @@ export function BlockContent({
       <textarea
         ref={ref}
         maxLength={MAX_BLOCK_TEXT_CHARACTERS}
-        aria-label={block.kind === 'webpage' ? 'Webpage text' : 'Block text'}
+        aria-label={
+          block.kind === 'webpage'
+            ? 'Webpage text'
+            : block.kind === 'machine'
+              ? 'Machine prompt'
+              : 'Block text'
+        }
         className="block-editor nodrag nowheel nopan"
         value={draft ?? block.content.text}
-        placeholder="Let a thought take shape…"
+        placeholder={
+          block.kind === 'machine'
+            ? 'Write a prompt and name its inputs in braces, like {claim}.'
+            : 'Let a thought take shape…'
+        }
         onChange={(e) => onEdit(block.id, e.target.value)}
         onKeyDown={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}

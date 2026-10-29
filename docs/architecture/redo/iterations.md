@@ -72,17 +72,81 @@ The mockup at `mockup/index.html` was exercised in a browser at 1440×900:
 The mockup does not implement groups beyond stacks, the matrix display, quote to card,
 or touch input.
 
-## Recommended iteration 3
+## Iteration 3: machines and feeds in the real canvas
 
-Prototype the feed-and-slot model inside the real canvas behind a route flag, and
-measure one thing against the current composer: the time and the number of actions
-needed to complete scenarios 1, 4 and 6 with the local mock model. Concretely:
+Iteration 3 built the machine, the feed and staleness into the running app, beside the
+existing composer rather than behind a flag. Both interfaces stay usable, so they can
+be compared directly. What shipped:
 
-1. Add the `machine` block kind and the `slot` column on manifest entries
-   (migration, schema in `shared/`, worker template substitution in `server/llm/`).
-2. Add the Feed record with cycle rejection, and project staleness by calling
-   `run-plan.ts` per visible machine.
-3. Render machines, feeds and the lever in `src/canvas/`, and the receipt on the card
-   back from the existing Exact inputs data.
-4. Write one Playwright scenario per measured task, and record action counts for both
-   interfaces in this file.
+- **Migration 003.** The `blocks` table is rebuilt to admit kind `machine` (authored
+  only), and a `feeds` table is added. Each feed links a placed card to a slot of a
+  placed machine on the same brane and is removed with either placement.
+- **Commands.** `text.create` became `block.create` with a kind. `feed.create` and
+  `feed.remove` were added. All three sync through the offline outbox with
+  dependency ordering.
+- **Machine runs.** `/machines/run` and `/machines/estimate` take explicit
+  `{blockId, slot}` inputs. The server checks every slot is filled and no unknown slot
+  is named. It then freezes the machine revision as the prompt, labels each reference
+  with its slot, and places the output to the right of the machine.
+- **Canvas.** The machine card shows its prompt editor, one row per slot with chips for
+  fed cards, "+ N selected", and a lever showing the estimate. To feed a slot, drag
+  from a card's port onto the slot row. Feeds draw as edges into per-slot handles. A
+  machine run draws one tray edge instead of per-source connectors. Changed feeds draw
+  dashed amber, the machine reads _stale · evidence changed_ or _stale · prompt
+  edited_, the lever becomes **Rerun**, and older outputs offer **Update**.
+
+### Decisions taken while building
+
+| Question                                             | Decision                                             | Rationale                                                                                                                 |
+| ---------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Add a `slot` column to manifest entries?             | No: the entry `label` holds the slot.                | The label is already frozen, shown and immutable; a second column would duplicate it.                                     |
+| Should the server read feeds to run a machine?       | No: the client sends inputs explicitly.              | Keeps "submission resolves explicit context"; feeds remain the interface's record, and offline feeds need no server read. |
+| Re-plan on the server to find staleness?             | No: project it on the client.                        | Works offline and on every keystroke-save without a request per machine.                                                  |
+| Validate a feed's slot against the current template? | No: a run validates against the template it freezes. | Templates change; a feed into a renamed slot is simply not sent and shows as missing.                                     |
+| Where does a new machine go?                         | The first open space right of the view centre.       | Dropped on top of cards, a machine intercepted the drags meant for their feed ports (found by the browser test).          |
+
+### Measured: scenario 6, keep a brief current
+
+`e2e/machines.browser.ts` runs both paths in the built app with the mock model and
+counts user actions (clicks, drags and text entries; hovering is not counted). The
+path: three source cards, a brief made from them, one source edited, the brief
+brought up to date.
+
+| Path     | Build the brief                        | Each update after a source edit     |
+| -------- | -------------------------------------- | ----------------------------------- |
+| Composer | 5 (3 × Use as context, prompt, Run)    | 2 (Reuse with current sources, Run) |
+| Machine  | 7 (Add, Machine, prompt, 3 drags, Run) | 1 (Rerun)                           |
+
+The machine costs two more actions to build and saves one on every update, so it pays
+off from the third update on. It also shows, without a click, which input changed.
+Scenarios 1 and 4 were not measured: they depend on the card back, the selection
+chips and Ask, which iteration 3 did not build.
+
+### Defects found by building it
+
+- Concurrent feeds into one slot shared a command key and the later ones were
+  silently dropped. Each feed is now keyed by its source cards.
+- React Flow measures handles once, so feeds into a slot added by a template edit had
+  no anchor. The machine card now re-measures its node whenever its slots change.
+- Running inside the 650 ms autosave window would have sent the saved template's
+  slots. The lever and the run request now use the draft template.
+- A machine's older output offered "Reuse with current sources", which would have
+  loaded the template into the composer. It now offers **Update**, which reruns the
+  machine.
+
+## Recommended iteration 4
+
+Make outputs attach to what produced them, then measure scenario 1.
+
+1. **Card back.** Flip any card (`F`, or a corner fold) to its back, showing the
+   receipt (from `/runs/:id`) for generated cards and developments for authored ones.
+   Point Develop's output at the source's back by having Spawn stop creating a
+   placement.
+2. **Tray history.** On rerun, move the machine's previous output off the table and
+   onto the new output's back under _Earlier versions_. This removes the stacked
+   responses in the screenshot `test-results/machine-flow.png`.
+3. **Selection chips.** Show chips above the composer for the current selection
+   (Develop, Ask, Critique, Flip). Critique creates a machine pre-fed from the
+   selection, which brings scenario 1's build cost below the composer's.
+4. Extend `e2e/machines.browser.ts` with scenario 1 for both paths and record the counts
+   here.

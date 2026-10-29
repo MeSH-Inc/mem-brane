@@ -21,10 +21,15 @@ export interface MachineView {
 // Staleness compares what a run would send now with what the last run froze:
 // the machine's template version, and per slot the fed blocks and their versions.
 // It is a projection; nothing is stored and nothing reruns.
-export function machineStaleness(scene: MachineScene, machinePlacementId: string): MachineView {
+// An unsaved template draft decides the slots, exactly as the run will freeze it.
+export function machineStaleness(
+  scene: MachineScene,
+  machinePlacementId: string,
+  draftTemplate?: string,
+): MachineView {
   const placement = scene.placements.find((p) => p.id === machinePlacementId);
   const block = placement && scene.blocks.find((b) => b.id === placement.block_id);
-  const template = block?.kind === 'machine' ? block.content.text : '';
+  const template = block?.kind === 'machine' ? (draftTemplate ?? block.content.text) : '';
   const slots = machineSlots(template);
   const placementBlock = new Map(scene.placements.map((p) => [p.id, p.block_id]));
   const blockVersion = new Map(scene.blocks.map((b) => [b.id, b]));
@@ -76,7 +81,9 @@ export function machineStaleness(scene: MachineScene, machinePlacementId: string
       .map((d) => `${d.sourceBlockId}@${d.sourceVersion}`);
     return now.length !== then.length || now.some((key, index) => key !== then[index]);
   });
-  const templateChanged = lastRun.machine_version !== block.version;
+  const templateChanged =
+    lastRun.machine_version !== block.version ||
+    (draftTemplate !== undefined && draftTemplate !== block.content.text);
   return {
     slots,
     inputs,
@@ -88,4 +95,28 @@ export function machineStaleness(scene: MachineScene, machinePlacementId: string
     changedSlots,
     changedFeeds,
   };
+}
+
+// Slide right from the preferred point until a new card would overlap no placement,
+// so a new machine never lands on the cards it is meant to be fed from.
+export function openSpot(
+  placements: { x: number; y: number; width: number; height: number }[],
+  point: { x: number; y: number },
+  width: number,
+  height: number,
+) {
+  const gap = 40;
+  let x = point.x;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const blocker = placements.find(
+      (p) =>
+        x < p.x + p.width + gap &&
+        x + width + gap > p.x &&
+        point.y < p.y + p.height + gap &&
+        point.y + height + gap > p.y,
+    );
+    if (!blocker) break;
+    x = blocker.x + blocker.width + gap;
+  }
+  return { x, y: point.y, width, height };
 }

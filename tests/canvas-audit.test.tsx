@@ -55,6 +55,14 @@ const state: BraneState = {
   derivations: [],
 };
 const workspace = new WorkspaceDocument();
+const machine = {
+  onRunMachine: async () => {},
+  onEstimateMachine: async () => {
+    throw new Error('unused');
+  },
+  onFeed: async () => {},
+  onUnfeed: async () => {},
+};
 function render(s = state) {
   act(() => workspace.install(s));
   act(() =>
@@ -66,6 +74,7 @@ function render(s = state) {
           onContinue={noop}
           document={workspace}
           onSpawn={noop}
+          machine={machine}
           onCreate={noop}
           onEdit={noop}
           onGeometry={noop}

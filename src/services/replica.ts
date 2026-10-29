@@ -221,7 +221,10 @@ export class WorkspaceReplica {
       }
       if (this.actor !== actor) throw new Error('Account changed. Reopen this workspace.');
       const result = await this.remote(path, body, method, actor);
-      if (method === 'POST' && (path === '/runs' || path === '/artifacts/spawn'))
+      if (
+        method === 'POST' &&
+        (path === '/runs' || path === '/artifacts/spawn' || path === '/machines/run')
+      )
         await this.acknowledgeEdits(actor, result);
       return result;
     }
