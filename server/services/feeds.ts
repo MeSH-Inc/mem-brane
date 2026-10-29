@@ -71,6 +71,8 @@ export function removeFeed(db: DB, actor: string, id: string, braneId: string) {
 export function readFeeds(db: DB, actor: string, braneId: string): Feed[] {
   canReadBrane(db, actor, braneId);
   return db
-    .prepare<unknown[], Feed>('SELECT * FROM feeds WHERE brane_id=? ORDER BY created_at,id')
+    .prepare<unknown[], Feed>(
+      'SELECT id,brane_id,from_placement_id,to_placement_id,slot,created_at FROM feeds WHERE brane_id=? ORDER BY rowid',
+    )
     .all(braneId);
 }

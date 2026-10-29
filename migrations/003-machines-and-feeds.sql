@@ -31,7 +31,7 @@ CREATE TABLE feeds (
   CHECK(from_placement_id<>to_placement_id),
   UNIQUE(from_placement_id,to_placement_id,slot)
 );
-CREATE INDEX feeds_brane ON feeds(brane_id,created_at,id);
+CREATE INDEX feeds_brane ON feeds(brane_id);
 CREATE INDEX feeds_target ON feeds(to_placement_id);
 CREATE TRIGGER feeds_valid_endpoints BEFORE INSERT ON feeds
 WHEN NOT EXISTS (
