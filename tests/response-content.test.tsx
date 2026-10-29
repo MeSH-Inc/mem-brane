@@ -25,6 +25,8 @@ function render(text: string, status: Run['status'], actions = {}) {
     error: null,
     usage_json: null,
     retry_of: null,
+    machine_block_id: null,
+    machine_version: null,
     created_at: 0,
   };
   act(() => root.render(<ResponseContent text="" run={run} {...actions} />));

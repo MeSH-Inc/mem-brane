@@ -1,12 +1,20 @@
 import { z } from 'zod';
 import { id, geometry, edit, placementEdit } from './schemas/index.js';
+import { slotName } from './machines.js';
 
 const title = z.string().trim().min(1).max(200);
 export const workspaceCommand = z.discriminatedUnion('type', [
   z.object({ type: z.literal('brane.create'), id, title }).strict(),
   z.object({ type: z.literal('brane.title'), id, title, previous: z.string() }).strict(),
   z
-    .object({ type: z.literal('text.create'), braneId: id, blockId: id, placementId: id, geometry })
+    .object({
+      type: z.literal('block.create'),
+      kind: z.enum(['text', 'machine']),
+      braneId: id,
+      blockId: id,
+      placementId: id,
+      geometry,
+    })
     .strict(),
   z.object({ type: z.literal('text.edit'), ...edit.shape }).strict(),
   z
@@ -21,6 +29,17 @@ export const workspaceCommand = z.discriminatedUnion('type', [
       version: z.number().int().nonnegative(),
     })
     .strict(),
+  z
+    .object({
+      type: z.literal('feed.create'),
+      id,
+      braneId: id,
+      fromPlacementId: id,
+      toPlacementId: id,
+      slot: slotName,
+    })
+    .strict(),
+  z.object({ type: z.literal('feed.remove'), id, braneId: id }).strict(),
 ]);
 export const workspaceOperation = z.object({ key: id, command: workspaceCommand }).strict();
 export const workspaceAcknowledgement = z.object({ key: id }).strict();
@@ -28,9 +47,12 @@ export type WorkspaceCommand = z.infer<typeof workspaceCommand>;
 export type WorkspaceOperation = z.infer<typeof workspaceOperation>;
 export function commandEntity(command: WorkspaceCommand): string {
   switch (command.type) {
-    case 'text.create':
+    case 'block.create':
     case 'text.edit':
       return `block:${command.blockId}`;
+    case 'feed.create':
+    case 'feed.remove':
+      return `feed:${command.id}`;
     case 'brane.create':
     case 'brane.title':
       return `brane:${command.id}`;

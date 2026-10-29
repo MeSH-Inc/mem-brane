@@ -51,6 +51,7 @@ const state: BraneState = {
     version: 0,
   })),
   runs: [],
+  feeds: [],
   derivations: [],
 };
 const workspace = new WorkspaceDocument();

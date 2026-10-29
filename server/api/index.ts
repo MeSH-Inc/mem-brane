@@ -28,6 +28,7 @@ import { errorBody } from '../../shared/errors.js';
 import {
   createBrane,
   createTextBlock,
+  createMachineBlock,
   createBlock,
   createPlacement,
   readBrane,
@@ -41,7 +42,16 @@ import {
   now,
   uid,
 } from '../services/content.js';
-import { readSubmissionReceipt, spawnArtifact, submitRun, retryRun } from '../services/runs.js';
+import {
+  readSubmissionReceipt,
+  spawnArtifact,
+  submitRun,
+  retryRun,
+  runMachine,
+  estimateMachine,
+} from '../services/runs.js';
+import { runMachine as runMachineSchema, slotName } from '../../shared/machines.js';
+import { createFeed, removeFeed } from '../services/feeds.js';
 import { readInputs, readLineage } from '../services/context-reader.js';
 import {
   geometry,
@@ -202,6 +212,26 @@ export function createApi(
       .parse(await authorizedBody(c));
     return c.json(createTextBlock(db, c.get('actor'), body.braneId, body.geometry), 201);
   });
+  app.post('/blocks/machine', async (c) => {
+    const body = z
+      .object({ braneId: id, geometry: geometry.optional() })
+      .parse(await authorizedBody(c));
+    return c.json(createMachineBlock(db, c.get('actor'), body.braneId, body.geometry), 201);
+  });
+  app.post('/feeds', async (c) => {
+    const body = z
+      .object({ braneId: id, fromPlacementId: id, toPlacementId: id, slot: slotName })
+      .strict()
+      .parse(await authorizedBody(c));
+    return c.json(createFeed(db, c.get('actor'), { id: crypto.randomUUID(), ...body }), 201);
+  });
+  app.delete('/feeds/:id', (c) => {
+    const feedId = id.parse(c.req.param('id'));
+    const feed = db.prepare('SELECT brane_id FROM feeds WHERE id=?').get(feedId) as
+      { brane_id: string } | undefined;
+    if (feed) removeFeed(db, c.get('actor'), feedId, feed.brane_id);
+    return c.json({ ok: true });
+  });
   app.get('/blocks/unplaced', (c) => {
     const query = z
       .object({
@@ -293,6 +323,27 @@ export function createApi(
       revisions(db),
       c.get('actor'),
       runSchema.parse(await authorizedBody(c)),
+      limits,
+    );
+    hub.publish(c.get('actor'), {
+      type: 'run',
+      runId: run.id,
+      braneId: run.brane_id,
+      status: run.status,
+    });
+    return c.json(readSubmissionReceipt(db, c.get('actor'), run.id), 201);
+  });
+  app.post('/machines/estimate', async (c) =>
+    c.json(
+      estimateMachine(db, c.get('actor'), runMachineSchema.parse(await authorizedBody(c)), limits),
+    ),
+  );
+  app.post('/machines/run', async (c) => {
+    const run = runMachine(
+      db,
+      revisions(db),
+      c.get('actor'),
+      runMachineSchema.parse(await authorizedBody(c)),
       limits,
     );
     hub.publish(c.get('actor'), {

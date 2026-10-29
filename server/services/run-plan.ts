@@ -13,12 +13,19 @@ export interface RunPlanLimits {
 }
 // Unsnapshotted entries will receive UUIDs at commit; this preserves their wire byte bound.
 const pendingRevision = '00000000-0000-0000-0000-000000000000';
+// A machine run labels each reference with the slot it fills and freezes the machine's
+// own revision as the prompt, so the receipt shows which template produced the output.
+export interface MachinePlan {
+  blockId: string;
+  slots: string[];
+}
 export function planRun(
   db: DB,
   actor: string,
   input: SubmitRun,
   limits: RunPlanLimits,
   sources: string[] = [],
+  machine?: MachinePlan,
 ) {
   canRunOnBrane(db, actor, input.braneId);
   if (!limits.models.includes(input.model)) throw new DomainError(400, 'Model is not allowed');
@@ -26,7 +33,7 @@ export function planRun(
   if (new Set(input.edits.map((edit) => edit.blockId)).size !== input.edits.length)
     throw new DomainError(400, 'Only one edit per block may be submitted');
   const context = contextReader(db, actor).plan(
-    [...sources, ...input.references],
+    [...sources, ...input.references, ...(machine ? [machine.blockId] : [])],
     input.edits,
     input.continueFrom,
   );
@@ -40,9 +47,9 @@ export function planRun(
     ...input.references.map((blockId, index) => ({
       blockId,
       kind: 'reference' as const,
-      label: `Reference ${index + 1}`,
+      label: machine?.slots[index] ?? `Reference ${index + 1}`,
     })),
-    { kind: 'prompt', label: 'Prompt' },
+    { blockId: machine?.blockId, kind: 'prompt', label: 'Prompt' },
   ];
   for (const entry of entries) {
     const candidate = entry.blockId ? context.candidates.get(entry.blockId)! : undefined;

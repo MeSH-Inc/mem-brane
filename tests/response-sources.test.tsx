@@ -20,6 +20,7 @@ afterEach(() => {
 const derivation = (patch: Partial<Derivation>): Derivation => ({
   runId: 'run',
   kind: 'reference',
+  label: 'Reference 1',
   sourceBlockId: 'a',
   sourceRevisionId: 'rev-a',
   sourceVersion: 1,
@@ -57,6 +58,7 @@ const state = (versionA: number): BraneState => ({
   ],
   placements: [],
   runs: [],
+  feeds: [],
   derivations: [
     derivation({}),
     derivation({ sourceBlockId: 'c', sourceRevisionId: 'rev-c', sourceVersion: null, position: 1 }),

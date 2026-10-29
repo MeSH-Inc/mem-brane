@@ -55,6 +55,7 @@ async function fixture() {
       },
     ],
     runs: [],
+    feeds: [],
     derivations: [],
   };
   const sent: { path: string; body: any }[] = [];
@@ -201,6 +202,8 @@ it('retains SSE progress that arrives after a refresh begins', async () => {
       error: null,
       usage_json: null,
       retry_of: null,
+      machine_block_id: null,
+      machine_version: null,
       created_at: 0,
     },
   ];
@@ -331,6 +334,7 @@ it('reusing a continued run restores its prompt, current references and branch',
     {
       runId: 'continued',
       kind: 'reference',
+      label: 'Reference 1',
       sourceBlockId: f.block,
       sourceRevisionId: 'revision',
       sourceVersion: 0,
@@ -342,6 +346,7 @@ it('reusing a continued run restores its prompt, current references and branch',
     {
       runId: 'continued',
       kind: 'reference',
+      label: 'Reference 1',
       sourceBlockId: secondBlock,
       sourceRevisionId: 'second-revision',
       sourceVersion: 0,

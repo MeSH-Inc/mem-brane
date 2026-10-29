@@ -53,7 +53,7 @@ export function planTextEdit(block: BlockState, edit: Edit): SavedText {
   if (block.id !== edit.blockId) throw new Error('Mismatched edit block');
   if (edit.text.length > MAX_BLOCK_TEXT_CHARACTERS)
     throw new DomainError(400, 'Artifact text exceeds the character limit');
-  if (block.origin === 'generated' || !['text', 'webpage'].includes(block.kind))
+  if (block.origin === 'generated' || !['text', 'webpage', 'machine'].includes(block.kind))
     throw new DomainError(400, 'This block is not editable');
   if (block.live_json === null || block.version === null)
     throw new Error('Editable block has no live state');

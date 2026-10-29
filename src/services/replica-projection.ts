@@ -2,6 +2,7 @@ import type { BraneState, Block } from '../../shared/types/domain';
 import type { WorkspaceCommand } from '../../shared/workspace-commands';
 import type { ReplicaState } from './replica-storage';
 import { blockResponse } from '../../shared/contracts';
+import { MACHINE_TEMPLATE } from '../../shared/machines';
 
 export function findBlock(state: ReplicaState, id: string) {
   let found: Block | undefined;
@@ -16,7 +17,7 @@ export function findBlock(state: ReplicaState, id: string) {
 function hasPendingText(state: ReplicaState, id: string) {
   return state.pending.some(
     ({ command }) =>
-      (command.type === 'text.edit' || command.type === 'text.create') && command.blockId === id,
+      (command.type === 'text.edit' || command.type === 'block.create') && command.blockId === id,
   );
 }
 function newestBlock(previous: Block | undefined, incoming: Block): Block {
@@ -58,7 +59,14 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         updated_at: Date.now(),
       };
       state.branes = [brane, ...state.branes.filter((b) => b.id !== brane.id)];
-      state.workspaces[brane.id] = { brane, blocks: [], placements: [], runs: [], derivations: [] };
+      state.workspaces[brane.id] = {
+        brane,
+        blocks: [],
+        placements: [],
+        feeds: [],
+        runs: [],
+        derivations: [],
+      };
       return brane;
     }
     case 'brane.title': {
@@ -68,14 +76,14 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
       if (workspace) workspace.brane.title = command.title;
       return { ok: true };
     }
-    case 'text.create': {
+    case 'block.create': {
       const workspace = requireWorkspace(state, command.braneId);
       workspace.blocks.push({
         id: command.blockId,
-        kind: 'text',
+        kind: command.kind,
         origin: 'authored',
         version: 0,
-        content: { format: 'text', text: '' },
+        content: { format: 'text', text: command.kind === 'machine' ? MACHINE_TEMPLATE : '' },
       });
       workspace.placements.push({
         id: command.placementId,
@@ -144,9 +152,31 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
     case 'placement.remove':
       for (const workspace of Object.values(state.workspaces)) {
         workspace.placements = workspace.placements.filter((p) => p.id !== command.id);
+        // Feeds cascade with either end, as on the server.
+        workspace.feeds = workspace.feeds.filter(
+          (f) => f.from_placement_id !== command.id && f.to_placement_id !== command.id,
+        );
         // Retain block data locally: another pending operation may place it again.
       }
       return { ok: true };
+    case 'feed.create': {
+      const workspace = requireWorkspace(state, command.braneId);
+      const feed = {
+        id: command.id,
+        brane_id: command.braneId,
+        from_placement_id: command.fromPlacementId,
+        to_placement_id: command.toPlacementId,
+        slot: command.slot,
+        created_at: Date.now(),
+      };
+      workspace.feeds = [...workspace.feeds.filter((f) => f.id !== feed.id), feed];
+      return feed;
+    }
+    case 'feed.remove': {
+      const workspace = requireWorkspace(state, command.braneId);
+      workspace.feeds = workspace.feeds.filter((f) => f.id !== command.id);
+      return { ok: true };
+    }
   }
 }
 function requireWorkspace(state: ReplicaState, id: string): BraneState {
@@ -169,7 +199,7 @@ export function installWorkspace(state: ReplicaState, workspace: BraneState) {
     for (const block of cached.blocks) known.set(block.id, newestBlock(known.get(block.id), block));
   const pending = new Set(
     state.pending.flatMap(({ command }) =>
-      command.type === 'text.edit' || command.type === 'text.create' ? [command.blockId] : [],
+      command.type === 'text.edit' || command.type === 'block.create' ? [command.blockId] : [],
     ),
   );
   workspace.blocks = workspace.blocks.map((block) => {
@@ -198,11 +228,13 @@ export function overlayPending(state: ReplicaState, incoming: BraneState): Brane
   const local = state.workspaces[incoming.brane.id];
   if (!local || !state.pending.length) return incoming;
   const blocks = new Set<string>(),
-    placements = new Set<string>();
+    placements = new Set<string>(),
+    feeds = new Set<string>();
   let title = false;
   for (const { command: c } of state.pending) {
-    if (c.type === 'text.create' || c.type === 'text.edit') blocks.add(c.blockId);
-    if (c.type === 'text.create') placements.add(c.placementId);
+    if (c.type === 'block.create' || c.type === 'text.edit') blocks.add(c.blockId);
+    if (c.type === 'block.create') placements.add(c.placementId);
+    if (c.type === 'feed.create' || c.type === 'feed.remove') feeds.add(c.id);
     if (c.type.startsWith('placement.') && 'id' in c) placements.add(c.id);
     if ((c.type === 'brane.create' || c.type === 'brane.title') && c.id === incoming.brane.id)
       title = true;
@@ -214,10 +246,20 @@ export function overlayPending(state: ReplicaState, incoming: BraneState): Brane
       ...incoming.placements.filter((p) => !placements.has(p.id)),
       ...local.placements.filter((p) => placements.has(p.id)),
     ],
+    feeds: [
+      ...incoming.feeds.filter((f) => !feeds.has(f.id)),
+      ...local.feeds.filter((f) => feeds.has(f.id)),
+    ],
     blocks: incoming.blocks.map((block) =>
       blocks.has(block.id) ? (findBlock(state, block.id) ?? block) : block,
     ),
   };
+  // A pending placement removal also removes the feeds that touched it.
+  next.feeds = next.feeds.filter((f) =>
+    [f.from_placement_id, f.to_placement_id].every((id) =>
+      next.placements.some((p) => p.id === id),
+    ),
+  );
   for (const placement of next.placements) {
     if (next.blocks.some((block) => block.id === placement.block_id)) continue;
     const block = findBlock(state, placement.block_id);

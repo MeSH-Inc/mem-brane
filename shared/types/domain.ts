@@ -9,7 +9,7 @@ import type {
   submissionReceipt,
   runStatus,
 } from '../schemas/index';
-export type BlockKind = 'text' | 'image' | 'webpage' | 'pdf';
+export type BlockKind = 'text' | 'image' | 'webpage' | 'pdf' | 'machine';
 export type RunStatus = z.infer<typeof runStatus>;
 export interface TextContent {
   format: 'text';
@@ -120,11 +120,25 @@ export interface Run {
   usage_json: string | null;
   retry_of: string | null;
   created_at: number;
+  // The machine whose frozen revision was this run's prompt, and that revision's
+  // live version; null for composed and developed runs.
+  machine_block_id: string | null;
+  machine_version: number | null;
+}
+// One placed card fills one slot of a placed machine on the same brane.
+export interface Feed {
+  id: string;
+  brane_id: string;
+  from_placement_id: string;
+  to_placement_id: string;
+  slot: string;
+  created_at: number;
 }
 export interface BraneState {
   brane: Brane;
   blocks: Block[];
   placements: Placement[];
+  feeds: Feed[];
   runs: Run[];
   derivations: Derivation[];
 }
@@ -150,6 +164,8 @@ export interface Derivation {
   sourceRevisionId: string;
   // Live version the frozen source captured; null for immutable (generated) sources.
   sourceVersion: number | null;
+  // The frozen entry label: a machine slot name for machine runs.
+  label: string;
   outputBlockId: string;
   position: number;
   anchorPlacementId: string | null;

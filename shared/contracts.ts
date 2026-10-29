@@ -54,10 +54,15 @@ export const runSummaryResponse = z
   })
   .strict();
 export type RunSummary = z.infer<typeof runSummaryResponse>;
-export const runResponse = runSummaryResponse.extend({ partial: z.string() });
+export const runResponse = runSummaryResponse.extend({
+  partial: z.string(),
+  machine_block_id: identity.nullable(),
+  machine_version: z.number().int().nonnegative().nullable(),
+});
+const blockKind = z.enum(['text', 'image', 'webpage', 'pdf', 'machine']);
 export const blockResponse: z.ZodType<Block> = z.object({
   id: identity,
-  kind: z.enum(['text', 'image', 'webpage', 'pdf']),
+  kind: blockKind,
   origin: z.enum(['authored', 'generated']),
   content: workspaceContent,
   version: z.number().int().nonnegative(),
@@ -67,7 +72,7 @@ export const unplacedPageResponse = z.object({
   items: z.array(
     z.object({
       id: identity,
-      kind: z.enum(['text', 'image', 'webpage', 'pdf']),
+      kind: blockKind,
       origin: z.enum(['authored', 'generated']),
       created_at: z.number(),
       preview: z.string(),
@@ -80,6 +85,16 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
   brane: braneResponse,
   blocks: z.array(blockResponse),
   placements: z.array(placementResponse),
+  feeds: z.array(
+    z.object({
+      id: identity,
+      brane_id: identity,
+      from_placement_id: identity,
+      to_placement_id: identity,
+      slot: z.string(),
+      created_at: z.number(),
+    }),
+  ),
   runs: z.array(runResponse),
   derivations: z.array(
     z.object({
@@ -88,6 +103,7 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
       sourceBlockId: identity,
       sourceRevisionId: identity,
       sourceVersion: z.number().int().nonnegative().nullable(),
+      label: z.string(),
       outputBlockId: identity,
       position: z.number().int(),
       anchorPlacementId: identity.nullable(),

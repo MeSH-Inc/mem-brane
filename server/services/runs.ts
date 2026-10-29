@@ -1,5 +1,8 @@
 import { modelProvider } from '../llm/provider.js';
-import { planRun, type RunPlanLimits } from './run-plan.js';
+import { planRun, type MachinePlan, type RunPlanLimits } from './run-plan.js';
+import { machineSlots, orderMachineInputs, type RunMachine } from '../../shared/machines.js';
+import { loadBlockStates } from './block-state.js';
+import { estimateRun } from './estimate.js';
 import { decodeRecord, decodeJson, runRecord, runOptions, type RunRecord } from '../db/records.js';
 import type { Placement, Geometry } from '../../shared/types/domain.js';
 import { submissionReceipt } from '../../shared/schemas/index.js';
@@ -37,6 +40,9 @@ interface DeriveOptions {
   anchorPlacementId: string;
   action: 'develop';
 }
+interface MachineOptions extends MachinePlan {
+  placement: Placement;
+}
 export function submitRun(
   db: DB,
   snapshots: RevisionService,
@@ -44,8 +50,21 @@ export function submitRun(
   input: SubmitRun,
   limits: RunLimits,
   derivation?: DeriveOptions,
+  machine?: MachineOptions,
 ) {
-  const hash = createHash('sha256').update(JSON.stringify({ input, derivation })).digest('hex');
+  const hash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        input,
+        derivation,
+        machine: machine && {
+          blockId: machine.blockId,
+          slots: machine.slots,
+          placementId: machine.placement.id,
+        },
+      }),
+    )
+    .digest('hex');
   return db.transaction(() => {
     canRunOnBrane(db, actor, input.braneId);
     const existing = db
@@ -58,7 +77,7 @@ export function submitRun(
       return run;
     }
     checkLimits(db, actor, input.model, limits);
-    const plan = planRun(db, actor, input, limits, derivation?.sources);
+    const plan = planRun(db, actor, input, limits, derivation?.sources, machine);
     if (input.maxReservedMicrousd !== undefined && plan.quote.amount > input.maxReservedMicrousd)
       throw new DomainError(
         409,
@@ -78,9 +97,11 @@ export function submitRun(
         revisionId: snapshots.snapshotBlock(actor, blockId).id,
       };
     });
-    const anchor = derivation
-      ? readAnchor(db, actor, input.braneId, derivation.anchorPlacementId, derivation.sources[0])
-      : contextAnchor(db, input.braneId, input.references, input.continueFrom);
+    const anchor = machine
+      ? machine.placement
+      : derivation
+        ? readAnchor(db, actor, input.braneId, derivation.anchorPlacementId, derivation.sources[0])
+        : contextAnchor(db, input.braneId, input.references, input.continueFrom);
     const output = createBlock(
       db,
       actor,
@@ -286,6 +307,62 @@ export function spawnArtifact(
       action: input.action,
     },
   );
+}
+
+// Resolve a machine run into an ordinary frozen submission. The client names every
+// input; the server checks them against the template the run will freeze.
+function machineSubmission(db: DB, actor: string, input: RunMachine) {
+  canRunOnBrane(db, actor, input.braneId);
+  const placement = db
+    .prepare<unknown[], Placement>('SELECT * FROM placements WHERE id=? AND brane_id=?')
+    .get(input.machinePlacementId, input.braneId);
+  if (!placement) throw new DomainError(400, 'The machine is not placed on this brane.');
+  const state = loadBlockStates(db, actor, [placement.block_id]).get(placement.block_id)!;
+  if (state.kind !== 'machine') throw new DomainError(400, 'Only a machine can be run this way.');
+  const allowed = new Set([placement.block_id, ...input.inputs.map((i) => i.blockId)]);
+  if (input.edits.some((edit) => !allowed.has(edit.blockId)))
+    throw new DomainError(400, 'Only the machine and its inputs may be edited with a run.');
+  const draft = input.edits.find((edit) => edit.blockId === placement.block_id);
+  const template =
+    draft?.text ?? (JSON.parse(state.live_json ?? '{"text":""}') as { text: string }).text;
+  const slots = machineSlots(template);
+  if (!slots.length) throw new DomainError(400, 'Name at least one {slot} in the machine prompt.');
+  const unknown = input.inputs.find((i) => !slots.includes(i.slot));
+  if (unknown) throw new DomainError(400, `The prompt has no {${unknown.slot}} slot.`);
+  const empty = slots.find((slot) => !input.inputs.some((i) => i.slot === slot));
+  if (empty) throw new DomainError(400, `Feed the {${empty}} slot first.`);
+  const keys = input.inputs.map((i) => `${i.slot}\u0000${i.blockId}`);
+  if (new Set(keys).size !== keys.length)
+    throw new DomainError(400, 'A card may fill a slot only once.');
+  const ordered = orderMachineInputs(template, input.inputs);
+  const submission: SubmitRun = {
+    braneId: input.braneId,
+    key: input.key,
+    model: input.model,
+    prompt: template,
+    references: ordered.map((i) => i.blockId),
+    edits: input.edits,
+    maxOutputTokens: input.maxOutputTokens,
+    maxReservedMicrousd: input.maxReservedMicrousd,
+  };
+  return {
+    submission,
+    machine: { blockId: placement.block_id, slots: ordered.map((i) => i.slot), placement },
+  };
+}
+export function runMachine(
+  db: DB,
+  snapshots: RevisionService,
+  actor: string,
+  input: RunMachine,
+  limits: RunLimits,
+) {
+  const { submission, machine } = machineSubmission(db, actor, input);
+  return submitRun(db, snapshots, actor, submission, limits, undefined, machine);
+}
+export function estimateMachine(db: DB, actor: string, input: RunMachine, limits: RunLimits) {
+  const { submission, machine } = machineSubmission(db, actor, input);
+  return estimateRun(db, actor, submission, limits, machine);
 }
 
 export function readSubmissionReceipt(db: DB, actor: string, runId: string): SubmissionReceipt {

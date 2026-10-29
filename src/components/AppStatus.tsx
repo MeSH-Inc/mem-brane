@@ -184,7 +184,7 @@ export function AppStatus() {
   );
 }
 
-const creationTypes = ['text.create', 'placement.create', 'brane.create'];
+const creationTypes = ['block.create', 'placement.create', 'brane.create', 'feed.create'];
 
 function describeChange(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -193,6 +193,8 @@ function describeChange(value: unknown): string {
   if ('text' in value && typeof value.text === 'string') return value.text || '(Empty text)';
   if ('title' in value && typeof value.title === 'string') return value.title;
   if ('type' in value && value.type === 'placement.remove') return 'Remove this placement';
+  if ('type' in value && value.type === 'feed.remove') return 'Remove this feed';
+  if ('slot' in value && typeof value.slot === 'string') return `Feed into ${value.slot}`;
   if ('x' in value && 'y' in value && 'width' in value && 'height' in value)
     return `Position: ${value.x}, ${value.y}\nSize: ${value.width} × ${value.height}`;
   return 'Review this item in the workspace before retrying.';

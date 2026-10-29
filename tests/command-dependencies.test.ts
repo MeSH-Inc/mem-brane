@@ -11,7 +11,14 @@ const operations: PendingOperation[] = [
   { key: 'title', command: { type: 'brane.title', id: 'b', title: 'Next', previous: 'B' } },
   {
     key: 'text',
-    command: { type: 'text.create', braneId: 'b', blockId: 'a', placementId: 'p', geometry },
+    command: {
+      type: 'block.create',
+      kind: 'text',
+      braneId: 'b',
+      blockId: 'a',
+      placementId: 'p',
+      geometry,
+    },
   },
   { key: 'edit', command: { type: 'text.edit', blockId: 'a', text: 'A', version: 0 } },
   { key: 'move', command: { type: 'placement.edit', id: 'p', ...geometry, version: 0 } },

@@ -13,7 +13,7 @@ export function commandAccess(c: WorkspaceCommand): CommandAccess {
       return { reads: [], writes: [exists('brane', c.id), value('brane', c.id)] };
     case 'brane.title':
       return { reads: [exists('brane', c.id)], writes: [value('brane', c.id)] };
-    case 'text.create':
+    case 'block.create':
       return {
         reads: [exists('brane', c.braneId)],
         writes: [
@@ -34,6 +34,17 @@ export function commandAccess(c: WorkspaceCommand): CommandAccess {
       return { reads: [exists('placement', c.id)], writes: [value('placement', c.id)] };
     case 'placement.remove':
       return { reads: [], writes: [exists('placement', c.id), value('placement', c.id)] };
+    case 'feed.create':
+      return {
+        reads: [
+          exists('brane', c.braneId),
+          exists('placement', c.fromPlacementId),
+          exists('placement', c.toPlacementId),
+        ],
+        writes: [exists('feed', c.id)],
+      };
+    case 'feed.remove':
+      return { reads: [], writes: [exists('feed', c.id)] };
   }
 }
 export function operationDependencies(operations: PendingOperation[]) {
@@ -84,6 +95,14 @@ export function requestResources(path: string, raw: unknown): string[] {
         exists('placement', body.anchorPlacementId),
         value('placement', body.anchorPlacementId),
       );
+  }
+  if (path === '/machines/run' || path === '/machines/estimate') {
+    const blocks = new Set<string>([
+      ...(body?.inputs ?? []).map((input: { blockId: string }) => input.blockId),
+      ...(body?.edits ?? []).map((e: { blockId: string }) => e.blockId),
+    ]);
+    for (const id of blocks) resources.push(exists('block', id), value('block', id));
+    if (body?.machinePlacementId) resources.push(exists('placement', body.machinePlacementId));
   }
   const snapshot = path.match(/^\/blocks\/([^/]+)\/snapshot$/);
   if (snapshot) resources.push(exists('block', snapshot[1]), value('block', snapshot[1]));

@@ -46,9 +46,12 @@ const state: BraneState = {
       error: null,
       usage_json: null,
       retry_of: null,
+      machine_block_id: null,
+      machine_version: null,
       created_at: 0,
     },
   ],
+  feeds: [],
   derivations: [],
 };
 it('reuses equal refreshes and keeps scene identity during content, stream and command changes', () => {

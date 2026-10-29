@@ -36,8 +36,19 @@ type Status = {
   conflicts: PendingOperation[];
 };
 // A refused edit can be rebased onto server state; a refused creation can only be discarded.
-const editCommands = new Set(['text.edit', 'placement.edit', 'placement.remove', 'brane.title']);
-const creationCommands = new Set(['text.create', 'placement.create', 'brane.create']);
+const editCommands = new Set([
+  'text.edit',
+  'placement.edit',
+  'placement.remove',
+  'brane.title',
+  'feed.remove',
+]);
+const creationCommands = new Set([
+  'block.create',
+  'placement.create',
+  'brane.create',
+  'feed.create',
+]);
 const unavailable = (error: unknown) =>
   error instanceof ApiError
     ? error.status >= 500
@@ -216,7 +227,10 @@ export class WorkspaceReplica {
     }
     // Ensure destinations exist locally before entering the atomic mutation.
     if (
-      (path === '/blocks/text' || path === '/placements') &&
+      (path === '/blocks/text' ||
+        path === '/blocks/machine' ||
+        path === '/placements' ||
+        path === '/feeds') &&
       body &&
       typeof body === 'object' &&
       'braneId' in body
@@ -320,9 +334,10 @@ export class WorkspaceReplica {
         title: body?.title,
         previous: state.workspaces[id]?.brane.title ?? state.branes.find((b) => b.id === id)?.title,
       };
-    } else if (path === '/blocks/text' && method === 'POST')
+    } else if ((path === '/blocks/text' || path === '/blocks/machine') && method === 'POST')
       command = {
-        type: 'text.create',
+        type: 'block.create',
+        kind: path === '/blocks/machine' ? 'machine' : 'text',
         ...body,
         blockId: crypto.randomUUID(),
         placementId: crypto.randomUUID(),
@@ -331,7 +346,17 @@ export class WorkspaceReplica {
       command = { type: 'text.edit', ...body };
     else if (path === '/placements' && method === 'POST')
       command = { type: 'placement.create', ...body, id: crypto.randomUUID() };
-    else if (/^\/placements\/[^/]+$/.test(path)) {
+    else if (path === '/feeds' && method === 'POST')
+      command = { type: 'feed.create', ...body, id: crypto.randomUUID() };
+    else if (/^\/feeds\/[^/]+$/.test(path) && method === 'DELETE') {
+      const id = path.split('/')[2];
+      command = {
+        type: 'feed.remove',
+        id,
+        braneId: Object.values(state.workspaces).find((w) => w.feeds.some((f) => f.id === id))
+          ?.brane.id,
+      };
+    } else if (/^\/placements\/[^/]+$/.test(path)) {
       const id = path.split('/')[2];
       if (method === 'PATCH') command = { type: 'placement.edit', id, ...body };
       else if (method === 'DELETE')
@@ -575,7 +600,8 @@ export class WorkspaceReplica {
             const blockId = crypto.randomUUID();
             for (const command of [
               {
-                type: 'text.create' as const,
+                type: 'block.create' as const,
+                kind: 'text' as const,
                 braneId: placed.brane_id,
                 blockId,
                 placementId: crypto.randomUUID(),
@@ -657,9 +683,11 @@ function commandBrane(state: ReplicaState, command: WorkspaceCommand): string | 
     case 'brane.create':
     case 'brane.title':
       return command.id;
-    case 'text.create':
+    case 'block.create':
     case 'placement.create':
     case 'placement.remove':
+    case 'feed.create':
+    case 'feed.remove':
       return command.braneId;
     case 'text.edit':
       return Object.values(state.workspaces).find((w) =>
@@ -674,14 +702,21 @@ function localState(state: ReplicaState, command: WorkspaceCommand): unknown {
     case 'brane.create':
     case 'brane.title':
       return state.workspaces[command.id]?.brane ?? command;
-    case 'text.create':
+    case 'block.create':
     case 'text.edit':
       return findBlock(state, command.blockId) ?? command;
     case 'placement.create':
     case 'placement.edit':
       return findPlacement(state, command.id) ?? command;
     case 'placement.remove':
+    case 'feed.remove':
       return command;
+    case 'feed.create':
+      return (
+        Object.values(state.workspaces)
+          .flatMap((w) => w.feeds)
+          .find((f) => f.id === command.id) ?? command
+      );
   }
 }
 function serverState(current: BraneState, command: WorkspaceCommand): unknown {
@@ -689,9 +724,12 @@ function serverState(current: BraneState, command: WorkspaceCommand): unknown {
     case 'brane.create':
     case 'brane.title':
       return current.brane;
-    case 'text.create':
+    case 'block.create':
     case 'text.edit':
       return current.blocks.find((b) => b.id === command.blockId);
+    case 'feed.create':
+    case 'feed.remove':
+      return current.feeds.find((f) => f.id === command.id);
     default:
       return current.placements.find((p) => p.id === command.id);
   }
@@ -727,7 +765,9 @@ function readLocal(state: ReplicaState, path: string): unknown {
 function isLocalMutation(path: string, method: string): boolean {
   if (path === '/branes') return method === 'POST';
   if (/^\/branes\/[^/]+$/.test(path)) return method === 'PATCH';
-  if (path === '/blocks/text' || path === '/placements') return method === 'POST';
+  if (['/blocks/text', '/blocks/machine', '/placements', '/feeds'].includes(path))
+    return method === 'POST';
+  if (/^\/feeds\/[^/]+$/.test(path)) return method === 'DELETE';
   if (path === '/blocks/live') return method === 'PATCH';
   return /^\/placements\/[^/]+$/.test(path) && ['PATCH', 'DELETE'].includes(method);
 }

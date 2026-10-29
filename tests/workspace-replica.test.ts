@@ -474,7 +474,7 @@ it('discards a refused creation together with the changes that depend on it', as
   f.online();
   await f.replica.synchronize();
   const [refused] = f.replica.getSnapshot().conflicts;
-  expect(refused.command.type).toBe('text.create');
+  expect(refused.command.type).toBe('block.create');
   await expect(f.replica.resolveConflict(refused.key, 'local')).rejects.toThrow('Discard it');
   await f.replica.resolveConflict(refused.key, 'server');
   expect((await f.storage.read(f.actor)).pending).toHaveLength(0);

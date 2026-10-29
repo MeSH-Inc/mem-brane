@@ -29,6 +29,7 @@ for (const mode of ['explicit Focus', 'mobile default'] as const) {
         },
       ],
       runs: [],
+      feeds: [],
       derivations: [],
     };
     await page.route('**/api/**', (route) => {

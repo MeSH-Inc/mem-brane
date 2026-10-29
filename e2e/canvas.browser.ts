@@ -34,6 +34,7 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
       z_index: 0,
       version: 0,
     })),
+    feeds: [],
     derivations: [],
     runs: [
       {
@@ -47,6 +48,8 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
         error: null,
         usage_json: null,
         retry_of: null,
+        machine_block_id: null,
+        machine_version: null,
         created_at: 0,
       },
     ],

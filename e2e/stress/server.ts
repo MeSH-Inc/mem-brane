@@ -40,8 +40,11 @@ export function scene(): BraneState {
       error: null,
       usage_json: null,
       retry_of: null,
+      machine_block_id: null,
+      machine_version: null,
       created_at: 0,
     })),
+    feeds: [],
     derivations: [],
   };
 }

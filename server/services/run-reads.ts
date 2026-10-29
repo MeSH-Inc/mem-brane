@@ -20,9 +20,14 @@ export function readWorkspaceRuns(db: DB, actor: string, braneId: string): Run[]
     UNION
     SELECT id FROM runs INDEXED BY runs_brane_active WHERE brane_id=?
     AND status IN ('queued','claimed','running','cancel_requested')
-  ) SELECT ${fields},COALESCE(c.text,'') partial FROM selected s
+  ) SELECT ${fields},COALESCE(c.text,'') partial,
+  machine.id machine_block_id,CASE WHEN machine.id IS NULL THEN NULL ELSE pv.source_version END machine_version
+  FROM selected s
   CROSS JOIN runs r ON r.id=s.id
   LEFT JOIN run_checkpoints c ON c.run_id=r.id AND r.status!='completed'
+  LEFT JOIN context_entries pe ON pe.context_id=r.context_id AND pe.kind='prompt'
+  LEFT JOIN block_revisions pv ON pv.id=pe.revision_id
+  LEFT JOIN blocks machine ON machine.id=pv.block_id AND machine.kind='machine'
   ORDER BY r.created_at,r.id`,
     )
     .all(braneId, actor, braneId) as Run[];
@@ -34,7 +39,7 @@ export function readVisibleDerivations(db: DB, actor: string, braneId: string): 
   // the size of the owner's run history. The unique index enforces one producer.
   return db
     .prepare(
-      `SELECT r.id runId,i.kind,v.block_id sourceBlockId,i.revision_id sourceRevisionId,v.source_version sourceVersion,
+      `SELECT r.id runId,i.kind,i.label,v.block_id sourceBlockId,i.revision_id sourceRevisionId,v.source_version sourceVersion,
     r.output_block_id outputBlockId,i.position,l.anchor_placement_id anchorPlacementId,
     l.output_placement_id outputPlacementId
     FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p

@@ -12,7 +12,7 @@ export const braneRecord = z
 export const blockRecord = z
   .object({
     ...identity,
-    kind: z.enum(['text', 'image', 'webpage', 'pdf']),
+    kind: z.enum(['text', 'image', 'webpage', 'pdf', 'machine']),
     origin: z.enum(['authored', 'generated']),
   })
   .strict();

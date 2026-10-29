@@ -19,6 +19,7 @@ test.beforeEach(async ({ page }) => {
       { id: 'pa2', block_id: 'a', x: 100, y: 430 },
     ].map((p) => ({ ...p, brane_id: 'b', width: 300, height: 220, z_index: 0, version: 0 })),
     runs: [],
+    feeds: [],
     derivations: [],
   };
   await page.route('**/api/**', async (route) => {

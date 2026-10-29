@@ -4,7 +4,7 @@ import type { Block, BraneState, Placement } from '../../shared/types/domain';
 type Run = BraneState['runs'][number];
 type Activity = { busy: boolean; retry: boolean; phase?: CommandPhase };
 export const idleActivity: Activity = { busy: false, retry: false };
-export type Scene = Pick<BraneState, 'placements' | 'derivations'> & { braneId: string };
+export type Scene = Pick<BraneState, 'placements' | 'derivations' | 'feeds'> & { braneId: string };
 interface DocumentSnapshot {
   state?: BraneState;
   scene: Scene;
@@ -29,7 +29,7 @@ function entities<T extends { id: string }>(previous: T[], next: T[]) {
 export class WorkspaceDocument {
   base?: BraneState;
   readonly store = createStore<DocumentSnapshot>(() => ({
-    scene: { braneId: '', placements: [], derivations: [] },
+    scene: { braneId: '', placements: [], derivations: [], feeds: [] },
     blocks: {},
     runs: {},
     activity: {},
@@ -42,6 +42,7 @@ export class WorkspaceDocument {
           brane: same(previous.brane, next.brane) ? previous.brane : next.brane,
           blocks: entities(previous.blocks, next.blocks),
           placements: entities(previous.placements, next.placements),
+          feeds: entities(previous.feeds, next.feeds),
           runs: entities(previous.runs, next.runs),
           derivations: same(previous.derivations, next.derivations)
             ? previous.derivations
@@ -59,9 +60,15 @@ export class WorkspaceDocument {
     const scene =
       previous.scene.braneId === base.brane.id &&
       previous.scene.placements === placements &&
-      previous.scene.derivations === base.derivations
+      previous.scene.derivations === base.derivations &&
+      previous.scene.feeds === base.feeds
         ? previous.scene
-        : { braneId: base.brane.id, placements, derivations: base.derivations };
+        : {
+            braneId: base.brane.id,
+            placements,
+            derivations: base.derivations,
+            feeds: base.feeds,
+          };
     const blocks =
       previous.state?.blocks === base.blocks
         ? previous.blocks

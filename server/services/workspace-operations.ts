@@ -14,6 +14,8 @@ import {
   removePlacement,
   now,
 } from './content.js';
+import { createFeed, removeFeed } from './feeds.js';
+import { MACHINE_TEMPLATE } from '../../shared/machines.js';
 
 export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceOperation) {
   const operation = workspaceOperation.parse(input);
@@ -48,14 +50,14 @@ export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceO
           );
           break;
         }
-        case 'text.create':
+        case 'block.create':
           assertUnused(db, 'blocks', command.blockId);
           assertUnused(db, 'placements', command.placementId);
           createBlock(
             db,
             actor,
-            'text',
-            { format: 'text', text: '' },
+            command.kind,
+            { format: 'text', text: command.kind === 'machine' ? MACHINE_TEMPLATE : '' },
             command.braneId,
             command.geometry,
             'authored',
@@ -79,6 +81,13 @@ export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceO
         case 'placement.edit':
           updatePlacementGeometry(db, actor, command.id, command);
           break;
+        case 'feed.create':
+          assertUnused(db, 'feeds', command.id);
+          createFeed(db, actor, command);
+          break;
+        case 'feed.remove':
+          removeFeed(db, actor, command.id, command.braneId);
+          break;
         case 'placement.remove':
           if (getPlacement(db, actor, command.id).brane_id !== command.braneId)
             throw new DomainError(400, 'Placement does not belong to this brane.');
@@ -97,7 +106,7 @@ export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceO
     })
     .immediate();
 }
-function assertUnused(db: DB, table: 'branes' | 'blocks' | 'placements', id: string) {
+function assertUnused(db: DB, table: 'branes' | 'blocks' | 'placements' | 'feeds', id: string) {
   if (db.prepare(`SELECT 1 FROM ${table} WHERE id=?`).get(id))
     throw new DomainError(409, 'This identity is already in use.');
 }

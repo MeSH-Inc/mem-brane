@@ -8,6 +8,8 @@ import {
 import type { SavedText } from '../../shared/contracts.js';
 import { encodeContent, decodeContent, contentReader } from './representations.js';
 import { readWorkspaceRuns, readVisibleDerivations } from './run-reads.js';
+import { readFeeds } from './feeds.js';
+import { MACHINE_TEMPLATE } from '../../shared/machines.js';
 import { MAX_BRANE_PLACEMENTS, fitsArtifactContent } from '../../shared/limits.js';
 import { content as contentSchema } from '../../shared/schemas/index.js';
 import { randomUUID } from 'node:crypto';
@@ -25,6 +27,9 @@ import type {
 import type { RevisionPage, RevisionSummary } from '../../shared/types/history.js';
 import { canEditBrane, canReadBrane, DomainError, requireOwned } from '../domain/access.js';
 export const uid = () => randomUUID();
+// A machine's content is its prompt template, stored as text.
+export const contentFormat = (kind: BlockKind): Content['format'] =>
+  kind === 'machine' ? 'text' : kind;
 export const now = () => Date.now();
 export function createBrane(db: DB, actor: string, title = 'Untitled brane', id: string = uid()) {
   guestCapacity(db, actor, 'brane');
@@ -98,7 +103,8 @@ export function createBlock(
   if (!fitsArtifactContent(content))
     throw new DomainError(400, 'Artifact text exceeds the character limit');
   content = contentSchema.parse(content);
-  if (kind !== content.format) throw new DomainError(400, 'Block kind must match content format');
+  if (contentFormat(kind) !== content.format)
+    throw new DomainError(400, 'Block kind must match content format');
   return db.transaction(() => {
     guestCapacity(db, actor, 'block');
     guestTextCapacity(db, actor, content.text);
@@ -129,6 +135,21 @@ export function createTextBlock(
   geometry?: { x: number; y: number; width: number; height: number },
 ) {
   return createBlock(db, actor, 'text', { format: 'text', text: '' }, braneId, geometry);
+}
+export function createMachineBlock(
+  db: DB,
+  actor: string,
+  braneId: string,
+  geometry?: { x: number; y: number; width: number; height: number },
+) {
+  return createBlock(
+    db,
+    actor,
+    'machine',
+    { format: 'text', text: MACHINE_TEMPLATE },
+    braneId,
+    geometry ?? { x: 100, y: 100, width: 360, height: 260 },
+  );
 }
 export function planBlockEdit(db: DB, actor: string, edit: Edit): SavedText {
   return planTextEdit(loadBlockStates(db, actor, [edit.blockId]).get(edit.blockId)!, edit);
@@ -310,7 +331,8 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
   });
   const runs = readWorkspaceRuns(db, actor, id);
   const derivations = readVisibleDerivations(db, actor, id);
-  return { brane, placements, blocks, runs, derivations };
+  const feeds = readFeeds(db, actor, id);
+  return { brane, placements, blocks, feeds, runs, derivations };
 }
 
 interface WorkspaceBlockRow {
