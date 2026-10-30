@@ -33,6 +33,8 @@ export const submitRun = z.object({
   edits: z.array(edit).max(64).default([]),
   maxOutputTokens: z.number().int().positive().optional(),
   maxReservedMicrousd: z.number().int().nonnegative().safe().optional(),
+  // Where the answer is placed: an Ask's answer takes the Ask box's place.
+  outputGeometry: geometry.optional(),
 });
 
 export const spawnArtifact = z

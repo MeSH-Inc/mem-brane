@@ -12,7 +12,7 @@ import {
   uid,
 } from '../server/services/content';
 import { createFeed } from '../server/services/feeds';
-import { runMachine, spawnArtifact } from '../server/services/runs';
+import { runMachine, spawnArtifact, submitRun } from '../server/services/runs';
 import { applyWorkspaceOperation } from '../server/services/workspace-operations';
 import { backItems } from '../src/canvas/CardBack';
 
@@ -194,4 +194,43 @@ it('removes a back with its host and keeps backs one level deep', () => {
   );
   removePlacement(db, actor, host.id);
   expect(readBrane(db, actor, brane).placements.map((p) => p.id)).not.toContain(earlier.id);
+});
+
+it('places an asked answer where the Ask stood, and starts a machine from a given prompt', () => {
+  const outputGeometry = { x: 40, y: 600, width: 380, height: 300 };
+  const run = submitRun(
+    db,
+    revisions(db),
+    actor,
+    {
+      braneId: brane,
+      key: uid(),
+      model: 'mock',
+      prompt: 'What does this claim assume?',
+      references: [claim.id],
+      edits: [],
+      outputGeometry,
+    },
+    limits,
+  );
+  expect(placementOf(run.output_block_id)).toMatchObject({
+    ...outputGeometry,
+    host_placement_id: null,
+  });
+  const blockId = uid();
+  applyWorkspaceOperation(db, actor, {
+    key: uid(),
+    command: {
+      type: 'block.create',
+      kind: 'machine',
+      braneId: brane,
+      blockId,
+      placementId: uid(),
+      geometry: { x: 900, y: 600, width: 400, height: 340 },
+      template: 'What does this claim assume?\n\n{cards}',
+    },
+  });
+  expect(readBrane(db, actor, brane).blocks.find((b) => b.id === blockId)?.content.text).toBe(
+    'What does this claim assume?\n\n{cards}',
+  );
 });

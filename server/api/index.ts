@@ -51,7 +51,11 @@ import {
   runMachine,
   estimateMachine,
 } from '../services/runs.js';
-import { runMachine as runMachineSchema, slotName } from '../../shared/machines.js';
+import {
+  runMachine as runMachineSchema,
+  slotName,
+  machineTemplate,
+} from '../../shared/machines.js';
 import { createFeed, removeFeed } from '../services/feeds.js';
 import { readInputs, readLineage } from '../services/context-reader.js';
 import {
@@ -215,9 +219,12 @@ export function createApi(
   });
   app.post('/blocks/machine', async (c) => {
     const body = z
-      .object({ braneId: id, geometry: geometry.optional() })
+      .object({ braneId: id, geometry: geometry.optional(), template: machineTemplate.optional() })
       .parse(await authorizedBody(c));
-    return c.json(createMachineBlock(db, c.get('actor'), body.braneId, body.geometry), 201);
+    return c.json(
+      createMachineBlock(db, c.get('actor'), body.braneId, body.geometry, body.template),
+      201,
+    );
   });
   app.post('/feeds', async (c) => {
     const body = z

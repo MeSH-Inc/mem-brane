@@ -83,7 +83,10 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         kind: command.kind,
         origin: 'authored',
         version: 0,
-        content: { format: 'text', text: command.kind === 'machine' ? MACHINE_TEMPLATE : '' },
+        content: {
+          format: 'text',
+          text: command.kind === 'machine' ? (command.template ?? MACHINE_TEMPLATE) : '',
+        },
       });
       workspace.placements.push({
         id: command.placementId,

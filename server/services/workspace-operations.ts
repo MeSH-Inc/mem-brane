@@ -58,7 +58,10 @@ export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceO
             db,
             actor,
             command.kind,
-            { format: 'text', text: command.kind === 'machine' ? MACHINE_TEMPLATE : '' },
+            {
+              format: 'text',
+              text: command.kind === 'machine' ? (command.template ?? MACHINE_TEMPLATE) : '',
+            },
             command.braneId,
             command.geometry,
             'authored',

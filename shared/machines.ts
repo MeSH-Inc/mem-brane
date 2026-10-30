@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { id, edit } from './schemas/index.js';
+import { MAX_BLOCK_TEXT_CHARACTERS } from './limits.js';
 
 // A machine's template names its slots in braces: "Critique {claim} using {evidence}".
 // Slots are derived from the template wherever it is read, so the prompt is the only
@@ -9,6 +10,7 @@ export const MAX_MACHINE_SLOTS = 8;
 export const MACHINE_TEMPLATE =
   'Find the strongest objection to {claim}, using only {evidence}. Answer in three sentences, then name the one fact that would settle it.';
 export const MAX_SLOT_NAME = 40;
+export const machineTemplate = z.string().min(1).max(MAX_BLOCK_TEXT_CHARACTERS);
 const slotPattern = /\{([^{}\n]{1,40})\}/g;
 
 export function machineSlots(template: string): string[] {

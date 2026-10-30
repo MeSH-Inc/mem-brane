@@ -114,11 +114,13 @@ export function submitRun(
       input.braneId,
       replaced
         ? { x: replaced.x, y: replaced.y, width: replaced.width, height: replaced.height }
-        : host && anchor
-          ? { x: anchor.x + anchor.width + 80, y: anchor.y, width: 380, height: 300 }
-          : anchor
-            ? childGeometry(db, anchor)
-            : openGeometry(db, input.braneId, 520, 100),
+        : input.outputGeometry && !host
+          ? input.outputGeometry
+          : host && anchor
+            ? { x: anchor.x + anchor.width + 80, y: anchor.y, width: 380, height: 300 }
+            : anchor
+              ? childGeometry(db, anchor)
+              : openGeometry(db, input.braneId, 520, 100),
       'generated',
       undefined,
       host,

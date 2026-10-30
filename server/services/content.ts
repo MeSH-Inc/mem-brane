@@ -145,12 +145,13 @@ export function createMachineBlock(
   actor: string,
   braneId: string,
   geometry?: { x: number; y: number; width: number; height: number },
+  template = MACHINE_TEMPLATE,
 ) {
   return createBlock(
     db,
     actor,
     'machine',
-    { format: 'text', text: MACHINE_TEMPLATE },
+    { format: 'text', text: template },
     braneId,
     geometry ?? { x: 100, y: 100, width: 360, height: 260 },
   );

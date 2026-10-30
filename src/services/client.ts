@@ -41,8 +41,8 @@ export function createClient(request: typeof api) {
       request(`/branes/${braneId}`, { title }, 'PATCH'),
     createText: (braneId: string, geometry: Geometry) =>
       read(response.createdBlockResponse, '/blocks/text', { braneId, geometry }),
-    createMachine: (braneId: string, geometry: Geometry) =>
-      read(response.createdBlockResponse, '/blocks/machine', { braneId, geometry }),
+    createMachine: (braneId: string, geometry: Geometry, template?: string) =>
+      read(response.createdBlockResponse, '/blocks/machine', { braneId, geometry, template }),
     createFeed: (body: {
       braneId: string;
       fromPlacementId: string;

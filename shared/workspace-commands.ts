@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { id, geometry, edit, placementEdit } from './schemas/index.js';
-import { slotName } from './machines.js';
+import { slotName, machineTemplate } from './machines.js';
 
 const title = z.string().trim().min(1).max(200);
 export const workspaceCommand = z.discriminatedUnion('type', [
@@ -14,6 +14,8 @@ export const workspaceCommand = z.discriminatedUnion('type', [
       blockId: id,
       placementId: id,
       geometry,
+      // A machine's starting prompt, the built-in Critique when absent; text ignores it.
+      template: machineTemplate.optional(),
     })
     .strict(),
   z.object({ type: z.literal('text.edit'), ...edit.shape }).strict(),
