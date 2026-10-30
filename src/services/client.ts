@@ -63,6 +63,8 @@ export function createClient(request: typeof api) {
     createPlacement: (braneId: string, blockId: string, geometry: Geometry) =>
       read(response.placementResponse, '/placements', { braneId, blockId, geometry }),
     removePlacement: (id: string) => request(`/placements/${id}`, undefined, 'DELETE'),
+    detachPlacement: (id: string, version: number, geometry: Geometry) =>
+      read(response.placementResponse, `/placements/${id}/detach`, { version, geometry }),
     submit: (input: SubmitRunRequest) => read(submissionReceipt, '/runs', input),
     spawn: (input: SpawnArtifactRequest) => read(submissionReceipt, '/artifacts/spawn', input),
     estimate: (input: SubmitRunRequest) => read(response.estimateResponse, '/runs/estimate', input),

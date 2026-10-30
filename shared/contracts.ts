@@ -21,6 +21,7 @@ export const placementResponse: z.ZodType<Placement> = z.object({
   width: z.number(),
   height: z.number(),
   z_index: z.number(),
+  host_placement_id: identity.nullable(),
 });
 export const contentResponse: z.ZodType<Content> = content;
 export const pdfSummaryResponse = z.object({

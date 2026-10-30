@@ -52,6 +52,7 @@ async function fixture() {
         width: 320,
         height: 220,
         z_index: 0,
+        host_placement_id: null,
       },
     ],
     runs: [],

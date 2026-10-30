@@ -854,3 +854,37 @@ it('keeps two tabs and their pending operation identities on the same library af
     { operation_key: pending[0].key },
   ]);
 });
+it('puts a card from a back on the table offline and removes a back with its host', async () => {
+  const f = await fixture();
+  const host = readBrane(db, f.actor, f.brane.id).placements[0];
+  const first = createTextBlock(db, f.actor, f.brane.id);
+  const second = createTextBlock(db, f.actor, f.brane.id);
+  const held = [first, second].map(
+    (block) =>
+      createPlacement(db, f.actor, f.brane.id, block.id, undefined, uid(), host.id) as {
+        id: string;
+        version: number;
+      },
+  );
+  await f.client.workspace(f.brane.id);
+  f.offline();
+  const geometry = { x: 700, y: 40, width: 320, height: 220 };
+  await f.client.detachPlacement(held[0].id, held[0].version, geometry);
+  await f.client.removePlacement(host.id);
+  const local = await f.client.workspace(f.brane.id);
+  expect(local.placements.find((p) => p.id === held[0].id)).toMatchObject({
+    ...geometry,
+    host_placement_id: null,
+  });
+  expect(local.placements.map((p) => p.id)).not.toContain(held[1].id);
+  f.online();
+  await f.replica.synchronize();
+  const server = readBrane(db, f.actor, f.brane.id).placements;
+  expect(server.find((p) => p.id === held[0].id)).toMatchObject({
+    ...geometry,
+    host_placement_id: null,
+    version: held[0].version + 1,
+  });
+  expect(server.map((p) => p.id)).not.toContain(held[1].id);
+  expect(server.map((p) => p.id)).not.toContain(host.id);
+});

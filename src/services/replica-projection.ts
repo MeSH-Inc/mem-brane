@@ -91,6 +91,7 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         brane_id: command.braneId,
         version: 0,
         z_index: 0,
+        host_placement_id: null,
         ...command.geometry,
       });
       return { id: command.blockId };
@@ -132,6 +133,7 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         brane_id: command.braneId,
         version: 0,
         z_index: 0,
+        host_placement_id: null,
         ...command.geometry,
       };
       workspace.placements.push(placement);
@@ -151,14 +153,31 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
     }
     case 'placement.remove':
       for (const workspace of Object.values(state.workspaces)) {
-        workspace.placements = workspace.placements.filter((p) => p.id !== command.id);
-        // Feeds cascade with either end, as on the server.
+        // What is on the card's back goes with it, and feeds cascade with either end,
+        // as on the server.
+        const removed = new Set([
+          command.id,
+          ...workspace.placements
+            .filter((p) => p.host_placement_id === command.id)
+            .map((p) => p.id),
+        ]);
+        workspace.placements = workspace.placements.filter((p) => !removed.has(p.id));
         workspace.feeds = workspace.feeds.filter(
-          (f) => f.from_placement_id !== command.id && f.to_placement_id !== command.id,
+          (f) => !removed.has(f.from_placement_id) && !removed.has(f.to_placement_id),
         );
         // Retain block data locally: another pending operation may place it again.
       }
       return { ok: true };
+    case 'placement.detach': {
+      const placement = findPlacement(state, command.id);
+      if (!placement) throw new Error('Placement no longer exists.');
+      Object.assign(placement, {
+        ...command.geometry,
+        host_placement_id: null,
+        version: command.version + 1,
+      });
+      return placement;
+    }
     case 'feed.create': {
       const workspace = requireWorkspace(state, command.braneId);
       const feed = {

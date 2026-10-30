@@ -11,6 +11,7 @@ it('resolves unique context blocks and ignores missing placements', () => {
     width: 100,
     height: 100,
     z_index: 0,
+    host_placement_id: null,
     version: 0,
   }));
   expect(selectedBlockIds(placements, ['pa2', 'pa', 'pb', 'missing'])).toEqual(['a', 'b']);

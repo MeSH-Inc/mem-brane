@@ -27,6 +27,7 @@ test('delayed saves retain newer moves, conflicts pause, and explicit retry uses
         width: 320,
         height: 220,
         z_index: 0,
+        host_placement_id: null,
         version: 0,
       },
     ],

@@ -117,23 +117,26 @@ it('returns the same child on duplicate delivery but allows intentional sibling 
   expect(() => spawn({ ...input, edits: [] })).toThrow('different request');
   spawn(request());
   expect(state().runs).toHaveLength(2);
+  // Sibling developments both go on the source card's back.
   const outputs = state().placements.filter((p) => p.block_id !== block);
-  expect(outputs[0].y).not.toBe(outputs[1].y);
+  expect(outputs.map((p) => p.host_placement_id)).toEqual([placement, placement]);
 });
 it('retries frozen sources and keeps provenance after source placement removal', () => {
   const run = spawn();
   const frozen = readInputs(db, run.id);
   cancelRun(db, actor, run.id);
   updateBlockLiveState(db, actor, { blockId: block, text: 'New content', version: 1 });
+  // The stopped development was on the source's back and leaves the brane with it.
   removePlacement(db, actor, placement);
+  expect(state().placements.some((p) => p.block_id === run.output_block_id)).toBe(false);
   const retry = retryRun(db, actor, run.id, uid(), limits);
   expect(readInputs(db, retry.id).map((i) => i.revision_id)).toEqual(
     frozen.map((i) => i.revision_id),
   );
-  expect(state().derivations).toHaveLength(2);
+  expect(state().derivations).toHaveLength(1);
   expect(derivationEdges(state())).toHaveLength(0);
   createPlacement(db, actor, brane, block);
-  expect(derivationEdges(state())).toHaveLength(2);
+  expect(derivationEdges(state())).toHaveLength(1);
   expect(db.pragma('foreign_key_check')).toEqual([]);
 });
 it('uses the clicked instance, and projects links in another brane without changing provenance', () => {

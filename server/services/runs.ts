@@ -102,15 +102,28 @@ export function submitRun(
       : derivation
         ? readAnchor(db, actor, input.braneId, derivation.anchorPlacementId, derivation.sources[0])
         : contextAnchor(db, input.braneId, input.references, input.continueFrom);
+    // The output attaches to what was run: a development goes on its source's back, and
+    // a machine's output takes the tray place of the one it replaces.
+    const host = derivation && anchor ? (anchor.host_placement_id ?? anchor.id) : null;
+    const replaced = machine ? trayOutput(db, machine.placement.id) : undefined;
     const output = createBlock(
       db,
       actor,
       'text',
       { format: 'text', text: '' },
       input.braneId,
-      anchor ? childGeometry(db, anchor) : openGeometry(db, input.braneId, 520, 100),
+      replaced
+        ? { x: replaced.x, y: replaced.y, width: replaced.width, height: replaced.height }
+        : host && anchor
+          ? { x: anchor.x + anchor.width + 80, y: anchor.y, width: 380, height: 300 }
+          : anchor
+            ? childGeometry(db, anchor)
+            : openGeometry(db, input.braneId, 520, 100),
       'generated',
+      undefined,
+      host,
     );
+    if (replaced) moveToBack(db, replaced, output.placement.id);
     const conversationId = plan.conversationId ?? uid();
     if (!plan.conversationId)
       db.prepare('INSERT INTO conversations VALUES (?,?,?)').run(conversationId, actor, now());
@@ -172,10 +185,13 @@ export function retryRun(db: DB, actor: string, id: string, key: string, limits:
         { anchor_placement_id: string | null; output_placement_id: string | null }
       >('SELECT * FROM run_placements WHERE run_id=?')
       .get(id);
+    const placementOf = db.prepare<unknown[], Placement>('SELECT * FROM placements WHERE id=?');
     const anchor = layout?.anchor_placement_id
-      ? db
-          .prepare<unknown[], Placement>('SELECT * FROM placements WHERE id=?')
-          .get(layout.anchor_placement_id)
+      ? placementOf.get(layout.anchor_placement_id)
+      : undefined;
+    // A retry lands where the stopped output is: on the same back, if it was on one.
+    const stopped = layout?.output_placement_id
+      ? placementOf.get(layout.output_placement_id)
       : undefined;
     const output = createBlock(
         db,
@@ -185,6 +201,8 @@ export function retryRun(db: DB, actor: string, id: string, key: string, limits:
         old.brane_id,
         anchor ? childGeometry(db, anchor) : openGeometry(db, old.brane_id, 560, 180),
         'generated',
+        undefined,
+        stopped?.host_placement_id ?? null,
       ),
       newId = uid();
     db.prepare(
@@ -254,6 +272,52 @@ function contextAnchor(db: DB, braneId: string, references: string[], continueFr
     .get(continueFrom);
   return message ? find.get(braneId, message.block_id) : undefined;
 }
+// The machine's current tray output: its newest output still on the table.
+function trayOutput(db: DB, machinePlacementId: string) {
+  return db
+    .prepare<unknown[], Placement>(
+      `SELECT p.* FROM run_placements l JOIN runs r ON r.id=l.run_id
+       JOIN placements p ON p.id=l.output_placement_id
+       WHERE l.anchor_placement_id=? AND p.host_placement_id IS NULL
+       ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1`,
+    )
+    .get(machinePlacementId);
+}
+// The replaced output, and anything already on its back, move to the new output's
+// back. Feeds it gave other machines follow the tray, keeping their position in each
+// slot, so those machines see the new output and go stale instead of running on.
+function moveToBack(db: DB, replaced: Placement, outputPlacementId: string) {
+  const time = now();
+  const rehost = db.prepare(
+    'UPDATE placements SET host_placement_id=?,version=version+1,updated_at=? WHERE host_placement_id=?',
+  );
+  rehost.run(outputPlacementId, time, replaced.id);
+  db.prepare(
+    'UPDATE placements SET host_placement_id=?,version=version+1,updated_at=? WHERE id=?',
+  ).run(outputPlacementId, time, replaced.id);
+  const feeds = db
+    .prepare<
+      unknown[],
+      { position: number; id: string; to_placement_id: string; slot: string; created_at: number }
+    >(
+      'SELECT rowid position,id,to_placement_id,slot,created_at FROM feeds WHERE from_placement_id=?',
+    )
+    .all(replaced.id);
+  for (const feed of feeds) {
+    db.prepare('DELETE FROM feeds WHERE id=?').run(feed.id);
+    db.prepare(
+      'INSERT INTO feeds (rowid,id,brane_id,from_placement_id,to_placement_id,slot,created_at) VALUES (?,?,?,?,?,?,?)',
+    ).run(
+      feed.position,
+      uid(),
+      replaced.brane_id,
+      outputPlacementId,
+      feed.to_placement_id,
+      feed.slot,
+      feed.created_at,
+    );
+  }
+}
 function childGeometry(db: DB, anchor: Placement) {
   return openGeometry(db, anchor.brane_id, anchor.x + anchor.width + 80, anchor.y);
 }
@@ -263,7 +327,9 @@ function openGeometry(db: DB, braneId: string, x: number, preferredY: number): G
     height = 300,
     gap = 24;
   const occupied = db
-    .prepare<unknown[], Geometry>('SELECT x,y,width,height FROM placements WHERE brane_id=?')
+    .prepare<unknown[], Geometry>(
+      'SELECT x,y,width,height FROM placements WHERE brane_id=? AND host_placement_id IS NULL',
+    )
     .all(braneId)
     .filter((p) => x < p.x + p.width + gap && x + width + gap > p.x)
     .sort((a, b) => a.y - b.y);

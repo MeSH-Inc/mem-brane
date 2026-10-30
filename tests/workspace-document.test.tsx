@@ -33,6 +33,7 @@ const state: BraneState = {
     height: 220,
     version: 0,
     z_index: 0,
+    host_placement_id: null,
   })),
   runs: [
     {

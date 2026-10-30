@@ -22,6 +22,7 @@ test.beforeEach(async ({ page }) => {
       height: 260,
       version: 0,
       z_index: 0,
+      host_placement_id: null,
     })),
     runs: [],
     feeds: [],
@@ -81,6 +82,8 @@ test('Tab reaches cards and native controls; keyboard selection toggles and edit
   await page.keyboard.press('Space');
   await expect(card).toHaveClass(/selected/);
   await page.keyboard.press(forward);
+  await expect(card.getByRole('button', { name: 'Show back' })).toBeFocused();
+  await page.keyboard.press(forward);
   await expect(card.getByRole('button', { name: '↗', exact: true })).toBeFocused();
   await page.keyboard.press(forward);
   const editor = card.getByRole('textbox');
@@ -92,6 +95,7 @@ test('Tab reaches cards and native controls; keyboard selection toggles and edit
   ).toBe(1);
   await expect(editor).toHaveValue(/Editable /);
   expect(writes.filter((path) => path.includes('/placements/'))).toEqual([]);
+  await page.keyboard.press(backward);
   await page.keyboard.press(backward);
   await page.keyboard.press(backward);
   await expect(card).toBeFocused();

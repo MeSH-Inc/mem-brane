@@ -36,6 +36,7 @@ import {
   updatePlacementGeometry,
   getPlacement,
   removePlacement,
+  detachPlacement,
   revisions,
   readRevision,
   readRevisionPage,
@@ -290,6 +291,17 @@ export function createApi(
       ),
     ),
   );
+  app.post('/placements/:id/detach', async (c) => {
+    const body = z
+      .object({ version: z.number().int().nonnegative(), geometry })
+      .parse(await authorizedBody(c));
+    return c.json(
+      detachPlacement(db, c.get('actor'), id.parse(c.req.param('id')), {
+        ...body.geometry,
+        version: body.version,
+      }),
+    );
+  });
   app.delete('/placements/:id', (c) => {
     removePlacement(db, c.get('actor'), id.parse(c.req.param('id')));
     return c.json({ ok: true });

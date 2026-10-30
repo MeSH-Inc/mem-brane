@@ -40,6 +40,7 @@ const editCommands = new Set([
   'text.edit',
   'placement.edit',
   'placement.remove',
+  'placement.detach',
   'brane.title',
   'feed.remove',
 ]);
@@ -359,7 +360,15 @@ export class WorkspaceReplica {
         braneId: Object.values(state.workspaces).find((w) => w.feeds.some((f) => f.id === id))
           ?.brane.id,
       };
-    } else if (/^\/placements\/[^/]+$/.test(path)) {
+    } else if (/^\/placements\/[^/]+\/detach$/.test(path) && method === 'POST')
+      command = {
+        type: 'placement.detach',
+        id: path.split('/')[2],
+        braneId: findPlacement(state, path.split('/')[2])?.brane_id,
+        hostPlacementId: findPlacement(state, path.split('/')[2])?.host_placement_id,
+        ...body,
+      };
+    else if (/^\/placements\/[^/]+$/.test(path)) {
       const id = path.split('/')[2];
       if (method === 'PATCH') command = { type: 'placement.edit', id, ...body };
       else if (method === 'DELETE')
@@ -586,7 +595,7 @@ export class WorkspaceReplica {
               // Both sides removed it; the intent is already satisfied.
               if (!placement) continue;
               c.version = placement.version;
-            } else if (c.type === 'placement.edit') {
+            } else if (c.type === 'placement.edit' || c.type === 'placement.detach') {
               const placement = findPlacement(state, c.id);
               if (!placement)
                 throw new Error(
@@ -698,6 +707,8 @@ function commandBrane(state: ReplicaState, command: WorkspaceCommand): string | 
       )?.brane.id;
     case 'placement.edit':
       return findPlacement(state, command.id)?.brane_id;
+    case 'placement.detach':
+      return command.braneId;
   }
 }
 function localState(state: ReplicaState, command: WorkspaceCommand): unknown {
@@ -710,6 +721,7 @@ function localState(state: ReplicaState, command: WorkspaceCommand): unknown {
       return findBlock(state, command.blockId) ?? command;
     case 'placement.create':
     case 'placement.edit':
+    case 'placement.detach':
       return findPlacement(state, command.id) ?? command;
     case 'placement.remove':
     case 'feed.remove':
@@ -745,7 +757,11 @@ function validateBase(state: ReplicaState, command: WorkspaceCommand) {
         409,
         'This text changed in another window. Review the current text before saving.',
       );
-  } else if (command.type === 'placement.edit' || command.type === 'placement.remove') {
+  } else if (
+    command.type === 'placement.edit' ||
+    command.type === 'placement.remove' ||
+    command.type === 'placement.detach'
+  ) {
     if (findPlacement(state, command.id)?.version !== command.version)
       throw new ApiError(
         409,
@@ -772,5 +788,6 @@ function isLocalMutation(path: string, method: string): boolean {
     return method === 'POST';
   if (/^\/feeds\/[^/]+$/.test(path)) return method === 'DELETE';
   if (path === '/blocks/live') return method === 'PATCH';
+  if (/^\/placements\/[^/]+\/detach$/.test(path)) return method === 'POST';
   return /^\/placements\/[^/]+$/.test(path) && ['PATCH', 'DELETE'].includes(method);
 }

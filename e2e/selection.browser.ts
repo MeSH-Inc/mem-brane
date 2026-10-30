@@ -17,7 +17,15 @@ test.beforeEach(async ({ page }) => {
       { id: 'pa', block_id: 'a', x: 100, y: 100 },
       { id: 'pb', block_id: 'b', x: 500, y: 100 },
       { id: 'pa2', block_id: 'a', x: 100, y: 430 },
-    ].map((p) => ({ ...p, brane_id: 'b', width: 300, height: 220, z_index: 0, version: 0 })),
+    ].map((p) => ({
+      ...p,
+      brane_id: 'b',
+      width: 300,
+      height: 220,
+      z_index: 0,
+      host_placement_id: null,
+      version: 0,
+    })),
     runs: [],
     feeds: [],
     derivations: [],
@@ -75,7 +83,7 @@ test('marquee intersects placements independently at multiple zooms and resolves
   await node(page, 'pa2')
     .locator('.card-grip')
     .click({ modifiers: ['Shift'] });
-  await page.getByRole('button', { name: '+ Add 1 selected', exact: true }).click();
+  await page.getByRole('button', { name: 'Ask about 1', exact: true }).click();
   await expect(page.locator('.context-chips .chip')).toHaveCount(1);
   await partialDrag(page, 'pb');
   await expect(node(page, 'pa')).not.toHaveClass(/selected/);

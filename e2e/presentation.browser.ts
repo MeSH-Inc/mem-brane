@@ -20,6 +20,7 @@ test.beforeEach(async ({ page }) => {
       width: 300,
       height: 220,
       z_index: 0,
+      host_placement_id: null,
       version: 0,
     })),
     runs: [],
@@ -71,6 +72,7 @@ function created() {
     width: 300,
     height: 220,
     z_index: 0,
+    host_placement_id: null,
     version: 0,
   });
 }

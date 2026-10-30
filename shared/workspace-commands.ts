@@ -31,6 +31,17 @@ export const workspaceCommand = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({
+      type: z.literal('placement.detach'),
+      id,
+      braneId: id,
+      // The back it leaves; removing that host must wait for this command.
+      hostPlacementId: id,
+      version: z.number().int().nonnegative(),
+      geometry,
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('feed.create'),
       id,
       braneId: id,

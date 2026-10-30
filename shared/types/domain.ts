@@ -107,6 +107,8 @@ export interface Placement {
   width: number;
   height: number;
   z_index: number;
+  // The table placement whose back holds this one; null when it is on the table.
+  host_placement_id: string | null;
 }
 export interface Run {
   id: string;

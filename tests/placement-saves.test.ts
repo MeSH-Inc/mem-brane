@@ -10,6 +10,7 @@ const base: Placement = {
   width: 320,
   height: 220,
   z_index: 0,
+  host_placement_id: null,
   version: 0,
 };
 const move = (x: number): Geometry => ({ x, y: 0, width: 320, height: 220 });

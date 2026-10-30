@@ -32,6 +32,11 @@ export function commandAccess(c: WorkspaceCommand): CommandAccess {
       };
     case 'placement.edit':
       return { reads: [exists('placement', c.id)], writes: [value('placement', c.id)] };
+    case 'placement.detach':
+      return {
+        reads: [exists('placement', c.id), exists('placement', c.hostPlacementId)],
+        writes: [value('placement', c.id)],
+      };
     case 'placement.remove':
       return { reads: [], writes: [exists('placement', c.id), value('placement', c.id)] };
     case 'feed.create':

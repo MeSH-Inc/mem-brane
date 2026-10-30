@@ -28,6 +28,7 @@ export function scene(): BraneState {
       height: 240,
       version: 0,
       z_index: 0,
+      host_placement_id: null,
     })),
     runs: streamIds.map((i) => ({
       id: `run-${i}`,

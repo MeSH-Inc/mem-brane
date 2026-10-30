@@ -18,6 +18,7 @@ function fixture(clock = { now: 0 }) {
     height: 220,
     version: 0,
     z_index: 0,
+    host_placement_id: null,
   }));
   let selection = ['b'],
     view: Viewport = { x: 0, y: 0, zoom: 1 },

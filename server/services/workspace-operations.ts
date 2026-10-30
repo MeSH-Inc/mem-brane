@@ -12,6 +12,7 @@ import {
   updatePlacementGeometry,
   getPlacement,
   removePlacement,
+  detachPlacement,
   now,
 } from './content.js';
 import { createFeed, removeFeed } from './feeds.js';
@@ -80,6 +81,16 @@ export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceO
           break;
         case 'placement.edit':
           updatePlacementGeometry(db, actor, command.id, command);
+          break;
+        case 'placement.detach':
+          if (getPlacement(db, actor, command.id).brane_id !== command.braneId)
+            throw new DomainError(400, 'Placement does not belong to this brane.');
+          if (getPlacement(db, actor, command.id).host_placement_id !== command.hostPlacementId)
+            throw new DomainError(
+              409,
+              'This card moved off that back before it was put on the table.',
+            );
+          detachPlacement(db, actor, command.id, { ...command.geometry, version: command.version });
           break;
         case 'feed.create':
           assertUnused(db, 'feeds', command.id);

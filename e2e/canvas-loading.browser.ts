@@ -25,6 +25,7 @@ for (const mode of ['explicit Focus', 'mobile default'] as const) {
           width: 320,
           height: 220,
           z_index: 0,
+          host_placement_id: null,
           version: 0,
         },
       ],

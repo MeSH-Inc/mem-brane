@@ -32,6 +32,7 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
       width: 320,
       height: 220,
       z_index: 0,
+      host_placement_id: null,
       version: 0,
     })),
     feeds: [],
@@ -108,14 +109,14 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
   await second.locator('.card-grip').click({ modifiers: ['Shift'] });
   await expect(first).toHaveClass(/selected/);
   await expect(second).toHaveClass(/selected/);
-  await expect(page.getByRole('button', { name: '+ Add 2 selected', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ask about 2', exact: true })).toBeVisible();
   await second.locator('.card-grip').click({ modifiers: ['Shift'] });
   await expect(second).not.toHaveClass(/selected/);
   const duplicate = page.locator('.react-flow__node[data-id="pa2"]');
   await duplicate.locator('.card-grip').click({ modifiers: ['Shift'] });
   await expect(first).toHaveClass(/selected/);
   await expect(duplicate).toHaveClass(/selected/);
-  await page.getByRole('button', { name: '+ Add 1 selected', exact: true }).click();
+  await page.getByRole('button', { name: 'Ask about 1', exact: true }).click();
   await expect(page.locator('.context-chips .chip')).toHaveCount(1);
   const handle = first.locator('[data-resize="se"]');
   const bounds = await handle.boundingBox();

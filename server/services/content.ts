@@ -49,6 +49,7 @@ export function createPlacement(
   blockId: string,
   g = { x: 100, y: 100, width: 320, height: 220 },
   id: string = uid(),
+  hostPlacementId: string | null = null,
 ) {
   canEditBrane(db, actor, braneId);
   requireOwned(db, 'blocks', actor, blockId);
@@ -58,8 +59,8 @@ export function createPlacement(
   )
     throw new DomainError(429, 'Brane placement capacity reached', 'quota');
   db.prepare(
-    'INSERT INTO placements (id,brane_id,block_id,x,y,width,height,z_index,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
-  ).run(id, braneId, blockId, g.x, g.y, g.width, g.height, 0, now());
+    'INSERT INTO placements (id,brane_id,block_id,x,y,width,height,z_index,updated_at,host_placement_id) VALUES (?,?,?,?,?,?,?,?,?,?)',
+  ).run(id, braneId, blockId, g.x, g.y, g.width, g.height, 0, now(), hostPlacementId);
   return getPlacement(db, actor, id);
 }
 type CreatedBlock = {
@@ -79,6 +80,7 @@ export function createBlock(
   geometry?: Geometry,
   origin?: 'authored' | 'generated',
   identities?: { blockId: string; placementId: string },
+  hostPlacementId?: string | null,
 ): CreatedBlock & { placement: Placement };
 export function createBlock(
   db: DB,
@@ -89,6 +91,7 @@ export function createBlock(
   geometry?: Geometry,
   origin?: 'authored' | 'generated',
   identities?: { blockId: string; placementId: string },
+  hostPlacementId?: string | null,
 ): CreatedBlock;
 export function createBlock(
   db: DB,
@@ -99,6 +102,7 @@ export function createBlock(
   geometry?: { x: number; y: number; width: number; height: number },
   origin: 'authored' | 'generated' = 'authored',
   identities?: { blockId: string; placementId: string },
+  hostPlacementId: string | null = null,
 ): CreatedBlock {
   if (!fitsArtifactContent(content))
     throw new DomainError(400, 'Artifact text exceeds the character limit');
@@ -123,7 +127,7 @@ export function createBlock(
         now(),
       );
     const placement = braneId
-      ? createPlacement(db, actor, braneId, id, geometry, identities?.placementId)
+      ? createPlacement(db, actor, braneId, id, geometry, identities?.placementId, hostPlacementId)
       : undefined;
     return { id, kind, origin, content, version: 0, placement };
   })();
@@ -286,6 +290,27 @@ export function updatePlacementGeometry(
     );
   return result;
 }
+// Put a placement from its host's back onto the table at the given geometry.
+export function detachPlacement(
+  db: DB,
+  actor: string,
+  id: string,
+  edit: Geometry & { version: number },
+): Placement {
+  const placement = getPlacement(db, actor, id);
+  canEditBrane(db, actor, placement.brane_id);
+  if (!placement.host_placement_id)
+    throw new DomainError(409, 'This card is already on the table.');
+  const updated = db
+    .prepare(
+      `UPDATE placements SET host_placement_id=NULL,x=?,y=?,width=?,height=?,
+       version=version+1,updated_at=? WHERE id=? AND version=? RETURNING *`,
+    )
+    .get(edit.x, edit.y, edit.width, edit.height, now(), id, edit.version) as Placement | undefined;
+  if (!updated)
+    throw new DomainError(409, 'This card changed before it could be put on the table.');
+  return updated;
+}
 export function removePlacement(db: DB, actor: string, id: string) {
   const p = getPlacement(db, actor, id);
   canEditBrane(db, actor, p.brane_id);
@@ -301,7 +326,7 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
   };
   const placements = db
     .prepare(
-      'SELECT id,brane_id,block_id,x,y,width,height,z_index,version FROM placements WHERE brane_id=? ORDER BY z_index,updated_at',
+      'SELECT id,brane_id,block_id,x,y,width,height,z_index,version,host_placement_id FROM placements WHERE brane_id=? ORDER BY z_index,updated_at',
     )
     .all(id) as Placement[];
   const blockRows = db

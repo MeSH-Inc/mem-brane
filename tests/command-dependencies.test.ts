@@ -46,3 +46,22 @@ it('preserves creation and entity order without coupling title, text and geometr
   expect(requestResources('/runs/id/cancel', {})).toEqual([]);
   expect(requestResources('/runs/id/retry', { key: 'retry' })).toEqual([]);
 });
+
+it('orders putting a card on the table before removing the back it leaves', () => {
+  const detach = {
+    key: 'detach',
+    command: {
+      type: 'placement.detach' as const,
+      id: 'held',
+      braneId: 'brane',
+      hostPlacementId: 'host',
+      version: 0,
+      geometry: { x: 0, y: 0, width: 320, height: 220 },
+    },
+  };
+  const remove = {
+    key: 'remove',
+    command: { type: 'placement.remove' as const, id: 'host', braneId: 'brane', version: 0 },
+  };
+  expect(operationDependencies([detach, remove]).get('remove')).toEqual(new Set(['detach']));
+});
