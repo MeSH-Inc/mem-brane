@@ -234,6 +234,8 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
       canvasAsk && box ? { x: box.x, y: box.y, width: ASK_WIDTH, height: ASK_HEIGHT } : undefined,
     );
     if (id && box) setAskAt((current) => (current?.id === box.id ? undefined : current));
+    // The sheet closes with its question; a question written meanwhile keeps it open.
+    if (id && !canvasAsk && !controller.draft.prompt?.trim()) setAskSheet(false);
     if (!id || reconciling) return;
     const placementId = controller.state?.placements.find((p) => p.block_id === id)?.id;
     if (
@@ -313,7 +315,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     controller.setContinue(messageId);
     if (!messageId) return;
     const block = controller.state?.blocks.find((b) => b.messageId === messageId);
-    if (askAt) focusPrompt();
+    if (asking) focusPrompt();
     else openAskAt(block ? placementsOf([block.id]) : []);
   };
   const attentionRef = useRef<HTMLElement>(null);
@@ -378,9 +380,25 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
       ? state?.blocks.find((b) => b.id === selectedCards[0].block_id)?.messageId
       : undefined;
   // On the desktop canvas the prompt lives in an Ask box on the table, beside what it
-  // asks about, and its answer takes the box's place. Focus and phones dock it below.
+  // asks about, and its answer takes the box's place. Focus and phones, which have no
+  // table to place it on, open it as a sheet over the bottom of the view.
   const canvasAsk = !focusMode && !mobile;
   const [askAt, setAskAt] = useState<AskPosition>();
+  // An unsent question or an unconfirmed Run is never left behind a closed sheet: the
+  // sheet opens with the brane when either is there.
+  const [askSheet, setAskSheet] = useState(
+    () =>
+      !!prompt.trim() ||
+      references.length > 0 ||
+      !!continueFrom ||
+      submission.state.status === 'uncertain',
+  );
+  // A box open on the table becomes the sheet when the view loses its table.
+  useEffect(() => {
+    if (canvasAsk || !askAt) return;
+    setAskAt(undefined);
+    setAskSheet(true);
+  }, [canvasAsk, askAt]);
   const focusPrompt = () =>
     requestAnimationFrame(() =>
       document.querySelector<HTMLTextAreaElement>('[aria-label="Run prompt"]')?.focus(),
@@ -388,7 +406,10 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
   // Beside the placements, or below them when that is nearer to open space; at the view's
   // centre when there are none.
   const openAskAt = (around: Placement[]) => {
-    if (!canvasAsk) return focusPrompt();
+    if (!canvasAsk) {
+      setAskSheet(true);
+      return focusPrompt();
+    }
     const table = tablePlacements();
     let spot = openSpot(table, canvasInsertion.current(), ASK_WIDTH, ASK_HEIGHT);
     if (around.length) {
@@ -413,7 +434,11 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     ui.setContinue(undefined);
     openAskAt(selectedCards);
   };
-  const closeAsk = useCallback(() => setAskAt(undefined), []);
+  const closeAsk = useCallback(() => {
+    setAskAt(undefined);
+    setAskSheet(false);
+  }, []);
+  const asking = canvasAsk ? !!askAt : askSheet;
   // Cards receive stable callbacks so typing a prompt never re-renders the table.
   const latestAsk = useRef({ addContext: (_: string[]) => {}, continueBranch: (_?: string) => {} });
   const canvasContext = useCallback((ids: string[]) => latestAsk.current.addContext(ids), []);
@@ -424,7 +449,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
   // Adding a card from its menu opens the box beside it if none is open.
   const addContext = (ids: string[]) => {
     controller.addReferences(ids);
-    if (!askAt) openAskAt(placementsOf(ids));
+    if (!asking) openAskAt(placementsOf(ids));
     else focusPrompt();
   };
   // Make reusable: a machine whose prompt is the question and whose one slot is fed
@@ -467,6 +492,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     () => ({
       onDetach: controller.detach,
       onReuse: makeReusable,
+      onUpdate: controller.update,
       onOpenSource: focusBlock,
       onInspect: inspectRun,
       onRerun: rerun,
@@ -720,7 +746,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
         if (event.key === 'f' && selectedCards.length) {
           event.preventDefault();
           flipSelection();
-        } else if (event.key === '/' && canvasAsk) {
+        } else if (event.key === '/') {
           event.preventDefault();
           if (selectedCards.length) openAsk();
           else openAskAt([]);
@@ -752,15 +778,13 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
           )}
         </div>
         <div className="toolbar-actions">
-          {canvasAsk && (
-            <button
-              className="ask-button"
-              title="Ask about the selection, or ask anything (/)"
-              onClick={() => (selectedCards.length ? openAsk() : openAskAt([]))}
-            >
-              Ask
-            </button>
-          )}
+          <button
+            className="ask-button"
+            title="Ask about the selection, or ask anything (/)"
+            onClick={() => (selectedCards.length ? openAsk() : openAskAt([]))}
+          >
+            Ask
+          </button>
           <ActionMenu label="＋ Add">
             <CommandButton
               tasks={commands}
@@ -1089,16 +1113,12 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                       <button onClick={() => continueBranch(focused.messageId)}>⑂ Continue</button>
                     ) : (
                       focused.kind !== 'machine' && (
-                        <button onClick={() => ui.addReferences([focused.id])}>
-                          + Use as context
-                        </button>
+                        <button onClick={() => addContext([focused.id])}>+ Use as context</button>
                       )
                     )}
                     <ActionMenu label="More" align="right">
                       {focused.messageId && (
-                        <button onClick={() => ui.addReferences([focused.id])}>
-                          + Use as context
-                        </button>
+                        <button onClick={() => addContext([focused.id])}>+ Use as context</button>
                       )}
                       {(['place', 'versions', 'remove'] as const).map((view) => (
                         <button
@@ -1174,6 +1194,9 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 onRerun={rerun}
                 onDetach={controller.detach}
                 onReuse={makeReusable}
+                onUpdate={controller.update}
+                onRelate={controller.relate}
+                onUnrelate={controller.unrelate}
                 ask={canvasAsk && askAt ? { ...askAt, content: promptPanel } : undefined}
                 onCloseAsk={closeAsk}
                 machine={machineActions}
@@ -1222,7 +1245,26 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 </button>
               </div>
             )}
-            {!canvasAsk && promptPanel}
+            {!canvasAsk && askSheet && (
+              <section
+                className="ask-sheet"
+                aria-label="Ask"
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    closeAsk();
+                  }
+                }}
+              >
+                <header>
+                  <span className="eyebrow">Ask</span>
+                  <button className="text-button" aria-label="Close Ask" onClick={closeAsk}>
+                    ×
+                  </button>
+                </header>
+                {promptPanel}
+              </section>
+            )}
             <div className="composer-meta">
               <ActionMenu label={model === 'mock' ? 'Local mock' : model} className="model-menu">
                 <label>

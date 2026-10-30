@@ -53,6 +53,7 @@ const state: BraneState = {
   })),
   runs: [],
   feeds: [],
+  relations: [],
   derivations: [],
 };
 const workspace = new WorkspaceDocument();
@@ -85,6 +86,9 @@ function render(s = state) {
           onRerun={noop}
           onDetach={noop}
           onReuse={noop}
+          onUpdate={async () => {}}
+          onRelate={noop}
+          onUnrelate={noop}
           onCloseAsk={noop}
         />
       </StrictMode>,

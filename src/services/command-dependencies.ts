@@ -50,6 +50,18 @@ export function commandAccess(c: WorkspaceCommand): CommandAccess {
       };
     case 'feed.remove':
       return { reads: [], writes: [exists('feed', c.id)] };
+    // A run reads the brane's arrows among its inputs, so every arrow change writes them.
+    case 'relation.create':
+      return {
+        reads: [
+          exists('brane', c.braneId),
+          exists('placement', c.fromPlacementId),
+          exists('placement', c.toPlacementId),
+        ],
+        writes: [exists('relation', c.id), value('relations', c.braneId)],
+      };
+    case 'relation.remove':
+      return { reads: [], writes: [exists('relation', c.id), value('relations', c.braneId)] };
   }
 }
 export function operationDependencies(operations: PendingOperation[]) {
@@ -88,6 +100,8 @@ export function requestResources(path: string, raw: unknown): string[] {
   }
   const resources: string[] = [];
   if (typeof body?.braneId === 'string') resources.push(exists('brane', body.braneId));
+  if ((path === '/runs' || path === '/machines/run') && typeof body?.braneId === 'string')
+    resources.push(value('relations', body.braneId));
   if (path === '/runs' || path === '/artifacts/spawn' || path === '/runs/estimate') {
     const sources = new Set<string>([
       ...(body?.references ?? []),

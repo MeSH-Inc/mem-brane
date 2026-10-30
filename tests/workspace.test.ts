@@ -57,6 +57,7 @@ async function fixture() {
     ],
     runs: [],
     feeds: [],
+    relations: [],
     derivations: [],
   };
   const sent: { path: string; body: any }[] = [];
@@ -416,6 +417,17 @@ it('reusing a continued run restores its prompt, current references and branch',
     continueFrom: 'parent',
   });
   expect(f.c.lineage.map((message) => message.id)).toEqual(['parent']);
+  // Update asks the same question over the same sources in the answer's place, and
+  // leaves whatever is being written in the Ask box alone.
+  f.c.updateDraft({ prompt: 'Something else', references: [], continueFrom: undefined });
+  await f.c.update('continued', 'answer-placement');
+  expect(f.sent.find((r) => r.path === '/runs')!.body).toMatchObject({
+    prompt: 'Go on',
+    references: [f.block, secondBlock],
+    continueFrom: 'parent',
+    replacesPlacementId: 'answer-placement',
+  });
+  expect(f.c.draft).toMatchObject({ prompt: 'Something else', references: [] });
   // Removing a source must not silently turn a reused request into a narrower one.
   f.c.updateDraft({ prompt: 'Keep my unfinished prompt', references: [], continueFrom: undefined });
   f.state.blocks = f.state.blocks.filter((block) => block.id !== secondBlock);

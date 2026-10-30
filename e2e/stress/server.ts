@@ -46,6 +46,7 @@ export function scene(): BraneState {
       created_at: 0,
     })),
     feeds: [],
+    relations: [],
     derivations: [],
   };
 }

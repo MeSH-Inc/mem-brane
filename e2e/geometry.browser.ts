@@ -33,6 +33,7 @@ test('delayed saves retain newer moves, conflicts pause, and explicit retry uses
     ],
     runs: [],
     feeds: [],
+    relations: [],
     derivations: [],
   };
   let releaseFirst!: () => void;

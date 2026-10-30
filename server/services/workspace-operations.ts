@@ -16,6 +16,7 @@ import {
   now,
 } from './content.js';
 import { createFeed, removeFeed } from './feeds.js';
+import { createRelation, removeRelation } from './relations.js';
 import { MACHINE_TEMPLATE } from '../../shared/machines.js';
 
 export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceOperation) {
@@ -102,6 +103,13 @@ export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceO
         case 'feed.remove':
           removeFeed(db, actor, command.id, command.braneId);
           break;
+        case 'relation.create':
+          assertUnused(db, 'relations', command.id);
+          createRelation(db, actor, command);
+          break;
+        case 'relation.remove':
+          removeRelation(db, actor, command.id, command.braneId);
+          break;
         case 'placement.remove':
           if (getPlacement(db, actor, command.id).brane_id !== command.braneId)
             throw new DomainError(400, 'Placement does not belong to this brane.');
@@ -120,7 +128,11 @@ export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceO
     })
     .immediate();
 }
-function assertUnused(db: DB, table: 'branes' | 'blocks' | 'placements' | 'feeds', id: string) {
+function assertUnused(
+  db: DB,
+  table: 'branes' | 'blocks' | 'placements' | 'feeds' | 'relations',
+  id: string,
+) {
   if (db.prepare(`SELECT 1 FROM ${table} WHERE id=?`).get(id))
     throw new DomainError(409, 'This identity is already in use.');
 }

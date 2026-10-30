@@ -21,6 +21,7 @@ it('applies the baseline once and reopens without changes', () => {
     '002-run-failure-reason.sql',
     '003-machines-and-feeds.sql',
     '004-card-backs.sql',
+    '005-relations.sql',
   ]);
   expect(db.prepare('SELECT enabled FROM guest_policy').pluck().get()).toBe(1);
   db.close();

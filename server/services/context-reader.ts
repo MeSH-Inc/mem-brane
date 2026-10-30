@@ -39,7 +39,7 @@ const referenceRecord = z
   .strict();
 const entryRecord = z
   .object({
-    kind: z.enum(['source', 'reference', 'prompt']),
+    kind: z.enum(['source', 'reference', 'relation', 'prompt']),
     label: z.string(),
     role: z.literal('user'),
     revision_id: z.string(),

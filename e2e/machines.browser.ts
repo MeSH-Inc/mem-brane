@@ -108,11 +108,20 @@ test('a machine keeps a brief current with one press per update', async ({ page 
       await act('update', () =>
         response.getByRole('button', { name: /Show back · an input changed/ }).click(),
       );
+      const before = await state(braneId);
+      const asked = before.placements.find((p) => p.block_id === before.runs[0].output_block_id)!;
+      // Update asks the question again in the answer's place; the old answer goes on its back.
       await act('update', () =>
-        page.getByRole('button', { name: 'Reuse with current sources' }).click(),
+        response.getByRole('button', { name: 'Update', exact: true }).click(),
       );
-      await act('update', () => page.getByRole('button', { name: 'Run ↗', exact: true }).click());
       await completed(braneId, 2);
+      const after = await state(braneId);
+      const updated = after.placements.find(
+        (p) => p.block_id === after.runs.find((r) => r.id !== before.runs[0].id)!.output_block_id,
+      )!;
+      expect([updated.x, updated.y, updated.host_placement_id]).toEqual([asked.x, asked.y, null]);
+      expect(after.placements.find((p) => p.id === asked.id)?.host_placement_id).toBe(updated.id);
+      await expect(page.locator('.canvas-card.generated')).toHaveCount(1);
     }
   });
   record('brief', counts);
@@ -158,8 +167,10 @@ test('Develop goes to the claim’s back and Critique arrives pre-fed', async ({
         'Prompt',
       ]);
       await expect(page.locator('.canvas-card.generated')).toHaveCount(1);
+      await arrow(page, act, braneId, state, run.output_block_id, cards[0]);
       counts.redo.tableCards = await page.locator('.react-flow__node').count();
       await page.screenshot({ path: 'test-results/claim-redo.png' });
+      await expectRelationSent(page, api, braneId, [cards[0].id, run.output_block_id]);
     }
 
     // The Ask path: write the critique as a question.
@@ -180,6 +191,12 @@ test('Develop goes to the claim’s back and Critique arrives pre-fed', async ({
       await act(() => page.getByRole('textbox', { name: 'Run prompt' }).fill(critiquePrompt));
       await act(() => page.getByRole('button', { name: 'Run ↗', exact: true }).click());
       await completed(braneId, 2);
+      // The development is on the claim's back; the answer is the run on the table.
+      const asked = await state(braneId);
+      const answer = asked.runs.find((r) =>
+        asked.placements.some((p) => p.block_id === r.output_block_id && !p.host_placement_id),
+      )!;
+      await arrow(page, act, braneId, state, answer.output_block_id, cards[0]);
       counts.ask.tableCards = await page.locator('.react-flow__node').count();
     }
   });
@@ -239,6 +256,70 @@ test('Ask answers a region where it was asked, and Make reusable turns it into a
   record('region', counts);
 });
 
+// Drag the objection's port onto the claim and name the arrow: two gestures.
+async function arrow(
+  page: Page,
+  act: (work: () => Promise<unknown>) => Promise<void>,
+  braneId: string,
+  state: Server['state'],
+  objectionBlockId: string,
+  claim: { placementId: string },
+) {
+  const objection = (await state(braneId)).placements.find(
+    (p) => p.block_id === objectionBlockId && !p.host_placement_id,
+  )!;
+  const target = page.locator(`.react-flow__node[data-id="${claim.placementId}"]`);
+  await page.locator(`.react-flow__node[data-id="${objection.id}"]`).hover();
+  await act(() =>
+    drag(
+      page,
+      `.react-flow__node[data-id="${objection.id}"] .card-port`,
+      target.locator('.card-grip'),
+    ),
+  );
+  await act(() =>
+    page
+      .getByRole('dialog', { name: 'Name the arrow' })
+      .getByRole('button', { name: 'answers' })
+      .click(),
+  );
+  await expect(page.locator('.relation-label')).toContainText('answers');
+  await expect
+    .poll(async () => (await state(braneId)).relations)
+    .toEqual([
+      expect.objectContaining({
+        from_placement_id: objection.id,
+        to_placement_id: claim.placementId,
+        label: 'answers',
+      }),
+    ]);
+}
+// A run over both ends of the arrow sends it as a relation entry.
+async function expectRelationSent(
+  page: Page,
+  api: Server['api'],
+  braneId: string,
+  references: string[],
+) {
+  const receipt = await (
+    await page.request.post(api('/runs'), {
+      data: {
+        braneId,
+        key: crypto.randomUUID(),
+        model: 'mock',
+        prompt: 'Which holds?',
+        references,
+      },
+    })
+  ).json();
+  const detail = await (await page.request.get(api(`/runs/${receipt.runId}`))).json();
+  expect(
+    detail.inputs
+      .filter((i: { kind: string }) => i.kind === 'relation')
+      .map((i: { content: { text: string } }) => i.content.text),
+  ).toEqual(['Reference 2 answers Reference 1.']);
+}
+
 // One reverse marquee from the empty table right of the cards selects all of them.
 async function marquee(page: Page, cards: { placementId: string }[]) {
   const node = (id: string) => page.locator(`.react-flow__node[data-id="${id}"]`);
@@ -262,6 +343,7 @@ interface BraneRead {
     y: number;
   }[];
   blocks: { id: string; kind: string; version: number }[];
+  relations: { from_placement_id: string; to_placement_id: string; label: string }[];
   runs: { id: string; status: string; output_block_id: string; machine_block_id: string | null }[];
 }
 interface Server {

@@ -29,15 +29,21 @@ export function buildMessages(inputs: RunInput[]): ModelMessage[] {
     content:
       input.kind === 'source' || input.kind === 'reference' || input.kind === 'lineage_reference'
         ? `[Reference material: ${input.label}; revision ${input.revision_id}]\n${representationText(input.content)}${input.content.url ? `\nSource: ${input.content.url}` : ''}${input.content.format === 'image' ? '\n[Attached image from frozen revision; detail: low]' : ''}\n[End reference]`
-        : representationText(input.content),
+        : input.kind === 'relation'
+          ? `[Relation between reference materials] ${representationText(input.content)}`
+          : representationText(input.content),
   }));
 }
 export const executeModel: ModelExecutor = async (request, onChunk) => {
   if (request.model === 'mock') {
     const prompt = request.inputs.filter((i) => i.kind === 'prompt').at(-1)?.content.text ?? '';
     const refs = request.inputs.filter((i) => i.kind === 'source' || i.kind === 'reference');
+    const relations = request.inputs
+      .filter((i) => i.kind === 'relation')
+      .map((i) => `Relation: ${representationText(i.content)}\n\n`)
+      .join('');
     const text =
-      `A little room to think.\n\n${prompt}\n\n${refs.length ? refs.map((r) => `${r.label}: ${representationText(r.content)}`).join('\n\n') : 'Add a block with “Use as context” to explore your notes.'}\n\nThis is a deterministic mock response. Your submitted context is frozen; you can keep editing the brane.`.slice(
+      `A little room to think.\n\n${prompt}\n\n${refs.length ? refs.map((r) => `${r.label}: ${representationText(r.content)}`).join('\n\n') : 'Add a block with “Use as context” to explore your notes.'}\n\n${relations}This is a deterministic mock response. Your submitted context is frozen; you can keep editing the brane.`.slice(
         0,
         request.maxOutputTokens * 4,
       );

@@ -132,7 +132,7 @@ it('moves a machine’s replaced output, its back and its feeds to the new outpu
   );
   const runs = Object.fromEntries(state.runs.map((r) => [r.output_block_id, r]));
   expect(
-    backItems(state.placements, runs, thirdPlacement.id)
+    backItems(state.placements, runs, state.derivations, thirdPlacement.id)
       .map((item) => [item.blockId, item.earlier])
       .sort(),
   ).toEqual(

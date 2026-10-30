@@ -54,6 +54,7 @@ test('image paste, native text paste, mixed picker, drop, navigation and lost-re
     await page.request.post(`${origin}/api/blocks/text`, { data: { braneId: a.id } });
     await page.goto(`${origin}/b/${a.id}?view=focus`);
     const prompt = page.getByRole('textbox', { name: 'Run prompt' });
+    await page.getByRole('button', { name: 'Ask', exact: true }).click();
     await prompt.fill('Read screenshot');
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {

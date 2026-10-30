@@ -18,6 +18,7 @@ const state = (version: number, text: string): BraneState => ({
   placements: [],
   runs: [],
   feeds: [],
+  relations: [],
   derivations: [],
 });
 it('keeps acknowledged text when a pre-save GET arrives late', async () => {

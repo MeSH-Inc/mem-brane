@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DB } from '../db/index.js';
 
 export interface ContextEntry {
-  kind: 'source' | 'reference' | 'prompt';
+  kind: 'source' | 'reference' | 'relation' | 'prompt';
   label: string;
   role: 'user';
   revisionId: string;

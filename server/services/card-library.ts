@@ -4,10 +4,10 @@ import type { UnplacedPage } from '../../shared/contracts.js';
 import { DomainError } from '../domain/access.js';
 import { contentReader } from './representations.js';
 
-// Prompt-only blocks are internal frozen request material, not recoverable cards.
+// Prompt and relation blocks are internal frozen request material, not recoverable cards.
 const card = `NOT EXISTS (
   SELECT 1 FROM block_revisions p JOIN context_entries e ON e.revision_id=p.id
-  WHERE p.block_id=b.id AND e.kind='prompt'
+  WHERE p.block_id=b.id AND e.kind IN ('prompt','relation')
 )`;
 const joins = `FROM blocks b
   LEFT JOIN block_live_state l ON l.block_id=b.id

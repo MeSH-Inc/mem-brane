@@ -43,12 +43,14 @@ const editCommands = new Set([
   'placement.detach',
   'brane.title',
   'feed.remove',
+  'relation.remove',
 ]);
 const creationCommands = new Set([
   'block.create',
   'placement.create',
   'brane.create',
   'feed.create',
+  'relation.create',
 ]);
 const unavailable = (error: unknown) =>
   error instanceof ApiError
@@ -234,7 +236,8 @@ export class WorkspaceReplica {
       (path === '/blocks/text' ||
         path === '/blocks/machine' ||
         path === '/placements' ||
-        path === '/feeds') &&
+        path === '/feeds' ||
+        path === '/relations') &&
       body &&
       typeof body === 'object' &&
       'braneId' in body
@@ -358,6 +361,16 @@ export class WorkspaceReplica {
         type: 'feed.remove',
         id,
         braneId: Object.values(state.workspaces).find((w) => w.feeds.some((f) => f.id === id))
+          ?.brane.id,
+      };
+    } else if (path === '/relations' && method === 'POST')
+      command = { type: 'relation.create', ...body, id: crypto.randomUUID() };
+    else if (/^\/relations\/[^/]+$/.test(path) && method === 'DELETE') {
+      const id = path.split('/')[2];
+      command = {
+        type: 'relation.remove',
+        id,
+        braneId: Object.values(state.workspaces).find((w) => w.relations.some((r) => r.id === id))
           ?.brane.id,
       };
     } else if (/^\/placements\/[^/]+\/detach$/.test(path) && method === 'POST')
@@ -700,6 +713,8 @@ function commandBrane(state: ReplicaState, command: WorkspaceCommand): string | 
     case 'placement.remove':
     case 'feed.create':
     case 'feed.remove':
+    case 'relation.create':
+    case 'relation.remove':
       return command.braneId;
     case 'text.edit':
       return Object.values(state.workspaces).find((w) =>
@@ -725,7 +740,14 @@ function localState(state: ReplicaState, command: WorkspaceCommand): unknown {
       return findPlacement(state, command.id) ?? command;
     case 'placement.remove':
     case 'feed.remove':
+    case 'relation.remove':
       return command;
+    case 'relation.create':
+      return (
+        Object.values(state.workspaces)
+          .flatMap((w) => w.relations)
+          .find((r) => r.id === command.id) ?? command
+      );
     case 'feed.create':
       return (
         Object.values(state.workspaces)
@@ -745,6 +767,9 @@ function serverState(current: BraneState, command: WorkspaceCommand): unknown {
     case 'feed.create':
     case 'feed.remove':
       return current.feeds.find((f) => f.id === command.id);
+    case 'relation.create':
+    case 'relation.remove':
+      return current.relations.find((r) => r.id === command.id);
     default:
       return current.placements.find((p) => p.id === command.id);
   }
@@ -784,9 +809,9 @@ function readLocal(state: ReplicaState, path: string): unknown {
 function isLocalMutation(path: string, method: string): boolean {
   if (path === '/branes') return method === 'POST';
   if (/^\/branes\/[^/]+$/.test(path)) return method === 'PATCH';
-  if (['/blocks/text', '/blocks/machine', '/placements', '/feeds'].includes(path))
+  if (['/blocks/text', '/blocks/machine', '/placements', '/feeds', '/relations'].includes(path))
     return method === 'POST';
-  if (/^\/feeds\/[^/]+$/.test(path)) return method === 'DELETE';
+  if (/^\/(feeds|relations)\/[^/]+$/.test(path)) return method === 'DELETE';
   if (path === '/blocks/live') return method === 'PATCH';
   if (/^\/placements\/[^/]+\/detach$/.test(path)) return method === 'POST';
   return /^\/placements\/[^/]+$/.test(path) && ['PATCH', 'DELETE'].includes(method);

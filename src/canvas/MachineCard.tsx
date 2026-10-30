@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
 import { useStore } from 'zustand';
 import type { WorkspaceDocument } from '../services/workspace-document';
@@ -105,22 +105,28 @@ export const MachineCard = memo(function MachineCard({
   );
 });
 
-// Drag from a card's feed port onto a machine's slot row to feed it. The port is a
-// native surface, so the canvas gesture recognizer never sees this drag.
-export function FeedPort({
+// Drag from a card's port onto a machine's slot row to feed it, or onto another card
+// to draw an arrow to it. The port is a native surface, so the canvas gesture
+// recognizer never sees this drag.
+export function CardPort({
   placementId,
   onFeed,
+  onArrow,
 }: {
   placementId: string;
   onFeed: MachineActions['onFeed'];
+  onArrow: (toPlacementId: string, point: { x: number; y: number }) => void;
 }) {
   const [line, setLine] = useState<{ x1: number; y1: number; x2: number; y2: number }>();
+  // The drag's start is read from a ref: a quick drag can end before React has drawn
+  // the line its start set.
+  const start = useRef<{ x1: number; y1: number }>(undefined);
   return (
     <>
       <span
-        className="feed-port"
+        className="card-port"
         data-canvas-native
-        title="Drag onto a machine slot to feed it"
+        title="Drag onto a machine slot to feed it, or onto a card to draw an arrow"
         onPointerDown={(event) => {
           event.stopPropagation();
           event.preventDefault();
@@ -128,24 +134,32 @@ export function FeedPort({
           const bounds = event.currentTarget.getBoundingClientRect();
           const x1 = bounds.left + bounds.width / 2,
             y1 = bounds.top + bounds.height / 2;
+          start.current = { x1, y1 };
           setLine({ x1, y1, x2: event.clientX, y2: event.clientY });
         }}
         onPointerMove={(event) =>
-          line && setLine({ ...line, x2: event.clientX, y2: event.clientY })
+          start.current && setLine({ ...start.current, x2: event.clientX, y2: event.clientY })
         }
         onPointerUp={(event) => {
-          if (!line) return;
+          if (!start.current) return;
+          start.current = undefined;
           setLine(undefined);
-          const target = globalThis.document
-            .elementFromPoint(event.clientX, event.clientY)
-            ?.closest<HTMLElement>('[data-feed-slot]');
-          if (target?.dataset.feedMachine && target.dataset.feedSlot)
-            void onFeed([placementId], target.dataset.feedMachine, target.dataset.feedSlot);
+          const under = globalThis.document.elementFromPoint(event.clientX, event.clientY);
+          const slot = under?.closest<HTMLElement>('[data-feed-slot]');
+          if (slot?.dataset.feedMachine && slot.dataset.feedSlot) {
+            void onFeed([placementId], slot.dataset.feedMachine, slot.dataset.feedSlot);
+            return;
+          }
+          const card = under?.closest<HTMLElement>('.react-flow__node-card')?.dataset.id;
+          if (card && card !== placementId) onArrow(card, { x: event.clientX, y: event.clientY });
         }}
-        onPointerCancel={() => setLine(undefined)}
+        onPointerCancel={() => {
+          start.current = undefined;
+          setLine(undefined);
+        }}
       />
       {line && (
-        <svg className="feed-draft" aria-hidden="true">
+        <svg className="port-draft" aria-hidden="true">
           <line {...line} />
         </svg>
       )}

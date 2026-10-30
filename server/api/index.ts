@@ -57,6 +57,8 @@ import {
   machineTemplate,
 } from '../../shared/machines.js';
 import { createFeed, removeFeed } from '../services/feeds.js';
+import { createRelation, removeRelation } from '../services/relations.js';
+import { relationLabel } from '../../shared/relations.js';
 import { readInputs, readLineage } from '../services/context-reader.js';
 import {
   geometry,
@@ -238,6 +240,20 @@ export function createApi(
     const feed = db.prepare('SELECT brane_id FROM feeds WHERE id=?').get(feedId) as
       { brane_id: string } | undefined;
     if (feed) removeFeed(db, c.get('actor'), feedId, feed.brane_id);
+    return c.json({ ok: true });
+  });
+  app.post('/relations', async (c) => {
+    const body = z
+      .object({ braneId: id, fromPlacementId: id, toPlacementId: id, label: relationLabel })
+      .strict()
+      .parse(await authorizedBody(c));
+    return c.json(createRelation(db, c.get('actor'), { id: crypto.randomUUID(), ...body }), 201);
+  });
+  app.delete('/relations/:id', (c) => {
+    const relationId = id.parse(c.req.param('id'));
+    const relation = db.prepare('SELECT brane_id FROM relations WHERE id=?').get(relationId) as
+      { brane_id: string } | undefined;
+    if (relation) removeRelation(db, c.get('actor'), relationId, relation.brane_id);
     return c.json({ ok: true });
   });
   app.get('/blocks/unplaced', (c) => {

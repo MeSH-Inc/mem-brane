@@ -98,6 +98,8 @@ test('built app saves through navigation, corrects rejected submissions, reconci
       },
       { times: 1 },
     );
+    // Focus opens the prompt as a sheet.
+    await page.getByRole('button', { name: 'Ask', exact: true }).click();
     await page.getByRole('textbox', { name: 'Run prompt' }).fill('Rejected prompt');
     await page.getByRole('button', { name: 'Run ↗', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('Fixture rejection');

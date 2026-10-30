@@ -192,7 +192,8 @@ it('keeps planning query count fixed as the current reference set grows alongsid
     ),
   );
   expect(samples[0].queries.length).toBe(samples[1].queries.length);
-  expect(samples[0].queries).toHaveLength(5);
+  // One of them reads the brane's arrows, once, whatever the number of references.
+  expect(samples[0].queries).toHaveLength(6);
 });
 it.each(['missing', 'foreign'])(
   'rejects mixed owned and %s blocks before hydrating any representation',

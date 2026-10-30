@@ -45,6 +45,7 @@ test('uncertain compose and Spawn retry their original requests after reload wit
     await page.goto(`${origin}/b/${brane.id}?view=focus`);
     await expect(page.getByRole('textbox', { name: 'Block text', exact: true })).toBeVisible();
     const prompt = page.getByRole('textbox', { name: 'Run prompt' });
+    await page.getByRole('button', { name: 'Ask', exact: true }).click();
     const read = async () =>
       await (await page.request.get(`${origin}/api/branes/${brane.id}`)).json();
     const requests: any[] = [];

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { id, geometry, edit, placementEdit } from './schemas/index.js';
 import { slotName, machineTemplate } from './machines.js';
+import { relationLabel } from './relations.js';
 
 const title = z.string().trim().min(1).max(200);
 export const workspaceCommand = z.discriminatedUnion('type', [
@@ -53,6 +54,17 @@ export const workspaceCommand = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('feed.remove'), id, braneId: id }).strict(),
+  z
+    .object({
+      type: z.literal('relation.create'),
+      id,
+      braneId: id,
+      fromPlacementId: id,
+      toPlacementId: id,
+      label: relationLabel,
+    })
+    .strict(),
+  z.object({ type: z.literal('relation.remove'), id, braneId: id }).strict(),
 ]);
 export const workspaceOperation = z.object({ key: id, command: workspaceCommand }).strict();
 export const workspaceAcknowledgement = z.object({ key: id }).strict();
@@ -66,6 +78,9 @@ export function commandEntity(command: WorkspaceCommand): string {
     case 'feed.create':
     case 'feed.remove':
       return `feed:${command.id}`;
+    case 'relation.create':
+    case 'relation.remove':
+      return `relation:${command.id}`;
     case 'brane.create':
     case 'brane.title':
       return `brane:${command.id}`;

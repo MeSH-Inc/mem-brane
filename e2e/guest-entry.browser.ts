@@ -69,6 +69,8 @@ test('guest work, an interrupted import, composer and two tabs survive existing-
     expect(Math.abs(bounds.x + bounds.width / 2 - 195)).toBeLessThan(1);
     expect(Math.abs(bounds.y + bounds.height / 2 - 422)).toBeLessThan(1);
     await mobileAccount.getByRole('button', { name: 'Close sign in' }).click();
+    // Phones open the prompt as a sheet; it stays open across Canvas and Focus.
+    await page.getByRole('button', { name: 'Ask', exact: true }).click();
     // Emulate both keyboard resize and Safari's visual-viewport offset. This
     // verifies layout response; the physical-device run verifies the real IME.
     for (const mode of ['Canvas', 'Focus']) {
@@ -147,10 +149,13 @@ test('guest work, an interrupted import, composer and two tabs survive existing-
       .setInputFiles({ name: 'guest.png', mimeType: 'image/png', buffer: png });
     await expect(page.getByRole('button', { name: 'Retry import' })).toBeVisible();
     // The authentication callback commits ownership; its response is lost.
+    let signedIn!: () => void;
+    const signInCommitted = new Promise<void>((resolve) => (signedIn = resolve));
     await page.route(
       '**/api/auth/sign-in/email',
       async (route) => {
         await route.fetch();
+        signedIn();
         await route.abort('failed');
       },
       { times: 1 },
@@ -161,6 +166,9 @@ test('guest work, an interrupted import, composer and two tabs survive existing-
     await dialog.getByLabel('Password', { exact: true }).fill(credentials.password);
     await dialog.getByRole('button', { name: 'Open your space ↗' }).click();
     // Reload must finish the durable claim even though the form never received success.
+    // Polling only after the sign-in commits: a session read sent with the guest cookie
+    // and answered after sign-in removed that guest would clear the new session cookie.
+    await signInCommitted;
     await expect
       .poll(
         async () =>

@@ -65,3 +65,31 @@ it('orders putting a card on the table before removing the back it leaves', () =
   };
   expect(operationDependencies([detach, remove]).get('remove')).toEqual(new Set(['detach']));
 });
+
+it('makes a run wait for the arrows drawn on its brane, and an arrow for its cards', () => {
+  const relate = {
+    key: 'relate',
+    command: {
+      type: 'relation.create' as const,
+      id: 'r',
+      braneId: 'b',
+      fromPlacementId: 'p',
+      toPlacementId: 'q',
+      label: 'answers',
+    },
+  };
+  const graph = operationDependencies([...operations, relate]);
+  expect([...graph.get('relate')!]).toEqual(['brane', 'remove']);
+  expect(
+    requiredOperations([relate], requestResources('/runs', { braneId: 'b', references: [] })),
+  ).toEqual(['relate']);
+  expect(
+    requiredOperations(
+      [relate],
+      requestResources('/machines/run', { braneId: 'b', machinePlacementId: 'm', inputs: [] }),
+    ),
+  ).toEqual(['relate']);
+  expect(
+    requiredOperations([relate], requestResources('/runs', { braneId: 'other', references: [] })),
+  ).toEqual([]);
+});

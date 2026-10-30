@@ -64,6 +64,7 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         blocks: [],
         placements: [],
         feeds: [],
+        relations: [],
         runs: [],
         derivations: [],
       };
@@ -168,6 +169,9 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         workspace.feeds = workspace.feeds.filter(
           (f) => !removed.has(f.from_placement_id) && !removed.has(f.to_placement_id),
         );
+        workspace.relations = workspace.relations.filter(
+          (r) => !removed.has(r.from_placement_id) && !removed.has(r.to_placement_id),
+        );
         // Retain block data locally: another pending operation may place it again.
       }
       return { ok: true };
@@ -197,6 +201,24 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
     case 'feed.remove': {
       const workspace = requireWorkspace(state, command.braneId);
       workspace.feeds = workspace.feeds.filter((f) => f.id !== command.id);
+      return { ok: true };
+    }
+    case 'relation.create': {
+      const workspace = requireWorkspace(state, command.braneId);
+      const relation = {
+        id: command.id,
+        brane_id: command.braneId,
+        from_placement_id: command.fromPlacementId,
+        to_placement_id: command.toPlacementId,
+        label: command.label,
+        created_at: Date.now(),
+      };
+      workspace.relations = [...workspace.relations.filter((r) => r.id !== relation.id), relation];
+      return relation;
+    }
+    case 'relation.remove': {
+      const workspace = requireWorkspace(state, command.braneId);
+      workspace.relations = workspace.relations.filter((r) => r.id !== command.id);
       return { ok: true };
     }
   }
@@ -251,12 +273,14 @@ export function overlayPending(state: ReplicaState, incoming: BraneState): Brane
   if (!local || !state.pending.length) return incoming;
   const blocks = new Set<string>(),
     placements = new Set<string>(),
-    feeds = new Set<string>();
+    feeds = new Set<string>(),
+    relations = new Set<string>();
   let title = false;
   for (const { command: c } of state.pending) {
     if (c.type === 'block.create' || c.type === 'text.edit') blocks.add(c.blockId);
     if (c.type === 'block.create') placements.add(c.placementId);
     if (c.type === 'feed.create' || c.type === 'feed.remove') feeds.add(c.id);
+    if (c.type === 'relation.create' || c.type === 'relation.remove') relations.add(c.id);
     if (c.type.startsWith('placement.') && 'id' in c) placements.add(c.id);
     if ((c.type === 'brane.create' || c.type === 'brane.title') && c.id === incoming.brane.id)
       title = true;
@@ -272,16 +296,21 @@ export function overlayPending(state: ReplicaState, incoming: BraneState): Brane
       ...incoming.feeds.filter((f) => !feeds.has(f.id)),
       ...local.feeds.filter((f) => feeds.has(f.id)),
     ],
+    relations: [
+      ...incoming.relations.filter((r) => !relations.has(r.id)),
+      ...local.relations.filter((r) => relations.has(r.id)),
+    ],
     blocks: incoming.blocks.map((block) =>
       blocks.has(block.id) ? (findBlock(state, block.id) ?? block) : block,
     ),
   };
-  // A pending placement removal also removes the feeds that touched it.
-  next.feeds = next.feeds.filter((f) =>
-    [f.from_placement_id, f.to_placement_id].every((id) =>
+  // A pending placement removal also removes the feeds and arrows that touched it.
+  const present = (ends: { from_placement_id: string; to_placement_id: string }) =>
+    [ends.from_placement_id, ends.to_placement_id].every((id) =>
       next.placements.some((p) => p.id === id),
-    ),
-  );
+    );
+  next.feeds = next.feeds.filter(present);
+  next.relations = next.relations.filter(present);
   for (const placement of next.placements) {
     if (next.blocks.some((block) => block.id === placement.block_id)) continue;
     const block = findBlock(state, placement.block_id);

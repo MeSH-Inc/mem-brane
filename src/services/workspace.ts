@@ -63,6 +63,8 @@ export class WorkspaceController {
   readonly spawnRequests: RequestJournal<Prepared<SpawnArtifact>>;
   readonly retryRequests: RequestJournal<string>;
   readonly machineRequests: RequestJournal<Prepared<RunMachine>>;
+  readonly updateRequests: RequestJournal<Prepared<SubmitRun>>;
+  private updates = new Map<string, Submission<Prepared<SubmitRun>>>();
   private machines = new Map<string, Submission<Prepared<RunMachine>>>();
   private spawns = new Map<string, Submission<Prepared<SpawnArtifact>>>();
   private retries = new Map<string, Submission<string>>();
@@ -137,6 +139,11 @@ export class WorkspaceController {
     this.machineRequests = new RequestJournal(
       JSON.stringify(['mem-brane-pending-machine-runs', actor, braneId]),
       (v) => validPrepared(v, runMachineSchema),
+      deps.storage,
+    );
+    this.updateRequests = new RequestJournal(
+      JSON.stringify(['mem-brane-pending-updates', actor, braneId]),
+      (v) => validPrepared(v, submitRun),
       deps.storage,
     );
     this.retryRequests = new RequestJournal(
@@ -886,6 +893,31 @@ export class WorkspaceController {
     }).catch(() => undefined);
   unfeed = (feedId: string) =>
     this.mutate(`unfeed:${feedId}`, () => this.client.removeFeed(feedId)).catch(() => undefined);
+  // An arrow says how one card stands to another; a run sends it when both are inputs.
+  relate = (fromPlacementId: string, toPlacementId: string, label: string) =>
+    this.mutate(`relate:${fromPlacementId}:${toPlacementId}`, async () => {
+      const table = new Set(
+        this.state?.placements.filter((p) => !p.host_placement_id).map((p) => p.id),
+      );
+      if (!table.has(fromPlacementId) || !table.has(toPlacementId))
+        throw new Error('Both cards must be on the table to draw an arrow.');
+      if (
+        this.state?.relations.some(
+          (r) => r.from_placement_id === fromPlacementId && r.to_placement_id === toPlacementId,
+        )
+      )
+        throw new Error('An arrow already joins these cards.');
+      await this.client.createRelation({
+        braneId: this.braneId,
+        fromPlacementId,
+        toPlacementId,
+        label: label.trim(),
+      });
+    }).catch(() => undefined);
+  unrelate = (relationId: string) =>
+    this.mutate(`unrelate:${relationId}`, () => this.client.removeRelation(relationId)).catch(
+      () => undefined,
+    );
   create = (geometry?: Geometry) => {
     const captured = structuredClone(geometry ?? { x: 100, y: 100, width: 320, height: 220 });
     // Toolbar creation shares a key; separate canvas rectangles are separate intents.
@@ -930,27 +962,63 @@ export class WorkspaceController {
   reuseInputs = async (runId: string) => {
     this.requireActive();
     const epoch = this.epoch;
+    const asked = await this.askedInputs(runId);
+    if (this.valid(epoch)) this.updateDraft(asked);
+  };
+  // Update asks an answer's question again over its sources' current text. The new
+  // answer takes the old one's place, and the old one goes on its back.
+  update = (runId: string, placementId: string) =>
+    this.command(`update:${placementId}`, async (progress) => {
+      const epoch = this.epoch;
+      let submission = this.updates.get(placementId);
+      if (!submission) {
+        submission = new Submission(this.updateRequests, placementId);
+        this.updates.set(placementId, submission);
+      }
+      const asked =
+        submission.state.status === 'uncertain' ? undefined : await this.askedInputs(runId);
+      if (!this.valid(epoch)) return;
+      const accepted = await this.send(
+        submission,
+        () => ({
+          braneId: this.braneId,
+          key: crypto.randomUUID(),
+          model: this.draft.model ?? 'mock',
+          prompt: asked!.prompt,
+          references: asked!.references,
+          continueFrom: asked!.continueFrom,
+          edits: this.edits(asked!.references, true),
+          replacesPlacementId: placementId,
+        }),
+        this.client.submit,
+        progress,
+      );
+      if (!this.valid(epoch)) return;
+      progress('refreshing');
+      await this.refresh();
+      if (this.valid(epoch)) return accepted.receipt.outputBlockId;
+    }).catch(() => undefined);
+  private askedInputs = async (runId: string) => {
     const detail = await this.client.run(runId);
-    if (!this.valid(epoch)) return;
     const present = new Set(this.state?.blocks.map((b) => b.id));
     const sources = (this.state?.derivations ?? [])
       .filter((d) => d.runId === runId && d.kind === 'reference')
       .sort((a, b) => a.position - b.position);
     const inputs = detail.inputs.filter((input) => input.kind === 'reference');
     if (sources.length !== inputs.length)
-      throw new Error(
-        'Show this response on the brane before reusing its sources. Your prompt was kept.',
-      );
+      throw new Error('Show this response on the brane before asking its question again.');
     const missing = sources.flatMap((source, index) =>
       present.has(source.sourceBlockId) ? [] : [index + 1],
     );
     if (missing.length)
       throw new Error(
-        `${missing.length === 1 ? 'Source' : 'Sources'} ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} no longer on this brane. Restore unplaced cards or show them here from their other brane, then reuse inputs. Your prompt was kept.`,
+        `${missing.length === 1 ? 'Source' : 'Sources'} ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} no longer on this brane. Restore unplaced cards or show them here from their other brane, then try again.`,
       );
-    const references = sources.map((source) => source.sourceBlockId);
-    const prompt = detail.inputs.find((input) => input.kind === 'prompt')?.content.text ?? '';
-    this.updateDraft({ prompt, references, continueFrom: detail.continue_from ?? undefined });
+    return {
+      prompt: detail.inputs.find((input) => input.kind === 'prompt')?.content.text ?? '',
+      references: sources.map((source) => source.sourceBlockId),
+      continueFrom: detail.continue_from ?? undefined,
+    };
   };
   importWebpage = (url: string) =>
     this.mutate('webpage', () => this.client.importWebpage(this.braneId, url));

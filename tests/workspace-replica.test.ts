@@ -888,3 +888,36 @@ it('puts a card from a back on the table offline and removes a back with its hos
   expect(server.map((p) => p.id)).not.toContain(held[1].id);
   expect(server.map((p) => p.id)).not.toContain(host.id);
 });
+
+it('draws an arrow offline, removes it with its card, and replays both', async () => {
+  const f = await fixture();
+  const [claim] = readBrane(db, f.actor, f.brane.id).placements;
+  const objection = createTextBlock(db, f.actor, f.brane.id);
+  const answer = createTextBlock(db, f.actor, f.brane.id);
+  await f.client.workspace(f.brane.id);
+  f.offline();
+  for (const [from, to] of [
+    [objection.placement.id, claim.id],
+    [answer.placement.id, objection.placement.id],
+  ])
+    await f.client.createRelation({
+      braneId: f.brane.id,
+      fromPlacementId: from,
+      toPlacementId: to,
+      label: 'answers',
+    });
+  await f.client.removePlacement(answer.placement.id);
+  const local = await f.client.workspace(f.brane.id);
+  expect(local.relations.map((r) => [r.from_placement_id, r.to_placement_id])).toEqual([
+    [objection.placement.id, claim.id],
+  ]);
+  f.online();
+  await f.replica.synchronize();
+  expect(
+    readBrane(db, f.actor, f.brane.id).relations.map((r) => [
+      r.from_placement_id,
+      r.to_placement_id,
+      r.label,
+    ]),
+  ).toEqual([[objection.placement.id, claim.id, 'answers']]);
+});

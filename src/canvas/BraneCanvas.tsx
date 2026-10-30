@@ -29,7 +29,8 @@ import {
 import '@xyflow/react/dist/style.css';
 import type { Placement } from '../../shared/types/domain';
 import { derivationEdges, machineEdges } from './derivations';
-import { MachineCard, FeedPort, type MachineActions } from './MachineCard';
+import { MachineCard, CardPort, type MachineActions } from './MachineCard';
+import { RelationEdge, RelationPicker, relationEdges, type ArrowDraft } from './RelationEdge';
 import { machineStaleness } from './machines';
 import { CardBack, type BackActions } from './CardBack';
 import { AskBox, ASK_WIDTH, type AskNode, type AskPosition } from './AskBox';
@@ -61,6 +62,12 @@ type CardData = ResponseActions & {
   onRerun: (runId: string) => void;
   onDetach: (placementId: string) => void;
   onReuse: (runId: string, question: string) => void;
+  onUpdate: (runId: string, placementId: string) => Promise<unknown>;
+  onArrow: (
+    fromPlacementId: string,
+    toPlacementId: string,
+    point: { x: number; y: number },
+  ) => void;
   machine: MachineActions;
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
@@ -89,6 +96,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
     () => ({
       onDetach: data.onDetach,
       onReuse: data.onReuse,
+      onUpdate: data.onUpdate,
       onOpenSource: data.onOpenSource,
       onInspect: data.onInspect,
       onRerun: data.onRerun,
@@ -98,6 +106,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
     [
       data.onDetach,
       data.onReuse,
+      data.onUpdate,
       data.onOpenSource,
       data.onInspect,
       data.onRerun,
@@ -133,7 +142,13 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
       >
         <Handle type="target" position={Position.Left} id="input" isConnectable={false} />
         <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
-        {!data.mobile && <FeedPort placementId={id} onFeed={data.machine.onFeed} />}
+        {!data.mobile && (
+          <CardPort
+            placementId={id}
+            onFeed={data.machine.onFeed}
+            onArrow={(to, point) => data.onArrow(id, to, point)}
+          />
+        )}
         {resize}
         <header className="card-grip">
           <span className="kind-mark">{block.origin === 'generated' ? '✳' : '◇'}</span>
@@ -221,6 +236,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
   );
 });
 const nodeTypes = { card: Card, ask: AskBox };
+const edgeTypes = { relation: RelationEdge };
 interface Props extends ResponseActions {
   mobile: boolean;
   onContext: (ids: string[]) => void;
@@ -239,6 +255,9 @@ interface Props extends ResponseActions {
   onDetach: CardData['onDetach'];
   machine: MachineActions;
   onReuse: CardData['onReuse'];
+  onUpdate: CardData['onUpdate'];
+  onRelate: (fromPlacementId: string, toPlacementId: string, label: string) => void;
+  onUnrelate: (relationId: string) => void;
   // The open Ask box: where it stands and the prompt panel it holds.
   ask?: AskPosition & { content: ReactNode };
   onCloseAsk: () => void;
@@ -280,6 +299,13 @@ function Inner(props: Props) {
     [fitView],
   );
   const host = useRef<HTMLDivElement>(null);
+  // An arrow dropped on a card waits here for its word.
+  const [arrow, setArrow] = useState<ArrowDraft>();
+  const drawArrow = useCallback<CardData['onArrow']>(
+    (from, to, point) => setArrow({ from, to, ...point }),
+    [],
+  );
+  const closeArrow = useCallback(() => setArrow(undefined), []);
   const placements = scene.placements;
   const {
     geometry,
@@ -357,6 +383,8 @@ function Inner(props: Props) {
           onRerun: props.onRerun,
           onDetach: props.onDetach,
           onReuse: props.onReuse,
+          onUpdate: props.onUpdate,
+          onArrow: drawArrow,
           onStop: props.onStop,
           onRetry: props.onRetry,
           machine: props.machine,
@@ -398,6 +426,8 @@ function Inner(props: Props) {
     props.onRerun,
     props.onDetach,
     props.onReuse,
+    props.onUpdate,
+    drawArrow,
     props.onStop,
     props.onRetry,
     props.machine,
@@ -498,8 +528,9 @@ function Inner(props: Props) {
     () => [
       ...derivationEdges(scene, new Set(machineRuns.split(' ').filter(Boolean))),
       ...machineEdges(scene, new Set(changedFeeds.split(' ').filter(Boolean))),
+      ...relationEdges(scene, props.onUnrelate),
     ],
-    [scene, machineRuns, changedFeeds],
+    [scene, machineRuns, changedFeeds, props.onUnrelate],
   );
   return (
     <div
@@ -529,6 +560,7 @@ function Inner(props: Props) {
         nodes={allNodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         nodesDraggable={false}
         elementsSelectable={false}
         selectionOnDrag={false}
@@ -554,6 +586,16 @@ function Inner(props: Props) {
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#cfcec6" />
         <Controls showInteractive={false} />
       </ReactFlow>
+      {arrow && (
+        <RelationPicker
+          draft={arrow}
+          onPick={(label) => {
+            props.onRelate(arrow.from, arrow.to, label);
+            setArrow(undefined);
+          }}
+          onClose={closeArrow}
+        />
+      )}
       {rect && (
         <div
           className="selection-rectangle"

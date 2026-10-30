@@ -4,7 +4,9 @@ import type { Block, BraneState, Placement } from '../../shared/types/domain';
 type Run = BraneState['runs'][number];
 type Activity = { busy: boolean; retry: boolean; phase?: CommandPhase };
 export const idleActivity: Activity = { busy: false, retry: false };
-export type Scene = Pick<BraneState, 'placements' | 'derivations' | 'feeds'> & { braneId: string };
+export type Scene = Pick<BraneState, 'placements' | 'derivations' | 'feeds' | 'relations'> & {
+  braneId: string;
+};
 interface DocumentSnapshot {
   state?: BraneState;
   scene: Scene;
@@ -29,7 +31,7 @@ function entities<T extends { id: string }>(previous: T[], next: T[]) {
 export class WorkspaceDocument {
   base?: BraneState;
   readonly store = createStore<DocumentSnapshot>(() => ({
-    scene: { braneId: '', placements: [], derivations: [], feeds: [] },
+    scene: { braneId: '', placements: [], derivations: [], feeds: [], relations: [] },
     blocks: {},
     runs: {},
     activity: {},
@@ -43,6 +45,7 @@ export class WorkspaceDocument {
           blocks: entities(previous.blocks, next.blocks),
           placements: entities(previous.placements, next.placements),
           feeds: entities(previous.feeds, next.feeds),
+          relations: entities(previous.relations, next.relations),
           runs: entities(previous.runs, next.runs),
           derivations: same(previous.derivations, next.derivations)
             ? previous.derivations
@@ -61,13 +64,15 @@ export class WorkspaceDocument {
       previous.scene.braneId === base.brane.id &&
       previous.scene.placements === placements &&
       previous.scene.derivations === base.derivations &&
-      previous.scene.feeds === base.feeds
+      previous.scene.feeds === base.feeds &&
+      previous.scene.relations === base.relations
         ? previous.scene
         : {
             braneId: base.brane.id,
             placements,
             derivations: base.derivations,
             feeds: base.feeds,
+            relations: base.relations,
           };
     const blocks =
       previous.state?.blocks === base.blocks

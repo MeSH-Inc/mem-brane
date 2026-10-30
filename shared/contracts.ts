@@ -96,6 +96,16 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
       created_at: z.number(),
     }),
   ),
+  relations: z.array(
+    z.object({
+      id: identity,
+      brane_id: identity,
+      from_placement_id: identity,
+      to_placement_id: identity,
+      label: z.string(),
+      created_at: z.number(),
+    }),
+  ),
   runs: z.array(runResponse),
   derivations: z.array(
     z.object({
@@ -152,7 +162,7 @@ export const savedTextResponse = z.object({
 export type SavedText = z.infer<typeof savedTextResponse>;
 export const runInputResponse = z.object({
   position: z.number().int(),
-  kind: z.enum(['source', 'reference', 'lineage_reference', 'lineage', 'prompt']),
+  kind: z.enum(['source', 'reference', 'relation', 'lineage_reference', 'lineage', 'prompt']),
   label: z.string(),
   role: z.enum(['user', 'assistant']),
   revision_id: identity,

@@ -36,6 +36,7 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
       version: 0,
     })),
     feeds: [],
+    relations: [],
     derivations: [],
     runs: [
       {

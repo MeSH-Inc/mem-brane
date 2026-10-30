@@ -1,5 +1,5 @@
 import { modelProvider } from '../llm/provider.js';
-import { planRun, type MachinePlan, type RunPlanLimits } from './run-plan.js';
+import { planRun, relationEntryText, type MachinePlan, type RunPlanLimits } from './run-plan.js';
 import { machineSlots, orderMachineInputs, type RunMachine } from '../../shared/machines.js';
 import { loadBlockStates } from './block-state.js';
 import { estimateRun } from './estimate.js';
@@ -87,25 +87,39 @@ export function submitRun(
       blockId: edit.blockId,
       ...updateBlockLiveState(db, actor, edit),
     }));
-    const frozen: ContextEntry[] = plan.entries.map((entry) => {
-      const blockId =
-        entry.blockId ?? createBlock(db, actor, 'text', { format: 'text', text: input.prompt }).id;
-      return {
-        kind: entry.kind,
-        label: entry.label,
-        role: 'user',
-        revisionId: snapshots.snapshotBlock(actor, blockId).id,
-      };
+    // Inputs freeze first; a relation entry then names their frozen revisions.
+    const revisions: string[] = [];
+    const freeze = (blockId: string) => snapshots.snapshotBlock(actor, blockId).id;
+    plan.entries.forEach((entry, index) => {
+      if (entry.relation) return;
+      revisions[index] = freeze(
+        entry.blockId ?? createBlock(db, actor, 'text', { format: 'text', text: input.prompt }).id,
+      );
     });
+    plan.entries.forEach((entry, index) => {
+      if (!entry.relation) return;
+      const text = relationEntryText(plan.entries, revisions, entry.relation);
+      revisions[index] = freeze(createBlock(db, actor, 'text', { format: 'text', text }).id);
+    });
+    const frozen: ContextEntry[] = plan.entries.map((entry, index) => ({
+      kind: entry.kind,
+      label: entry.label,
+      role: 'user',
+      revisionId: revisions[index],
+    }));
     const anchor = machine
       ? machine.placement
       : derivation
         ? readAnchor(db, actor, input.braneId, derivation.anchorPlacementId, derivation.sources[0])
         : contextAnchor(db, input.braneId, input.references, input.continueFrom);
     // The output attaches to what was run: a development goes on its source's back, and
-    // a machine's output takes the tray place of the one it replaces.
+    // a machine's output or an updated answer takes the place of the one it replaces.
     const host = derivation && anchor ? (anchor.host_placement_id ?? anchor.id) : null;
-    const replaced = machine ? trayOutput(db, machine.placement.id) : undefined;
+    const replaced = machine
+      ? trayOutput(db, machine.placement.id)
+      : input.replacesPlacementId
+        ? replacedAnswer(db, input.braneId, input.replacesPlacementId)
+        : undefined;
     const output = createBlock(
       db,
       actor,
@@ -285,9 +299,21 @@ function trayOutput(db: DB, machinePlacementId: string) {
     )
     .get(machinePlacementId);
 }
+// An answer being updated must still be a generated card on this brane's table.
+function replacedAnswer(db: DB, braneId: string, placementId: string) {
+  const placement = db
+    .prepare<unknown[], Placement>(
+      `SELECT p.* FROM placements p JOIN blocks b ON b.id=p.block_id
+       WHERE p.id=? AND p.brane_id=? AND p.host_placement_id IS NULL AND b.origin='generated'`,
+    )
+    .get(placementId, braneId);
+  if (!placement) throw new DomainError(409, 'This answer is no longer on the table.');
+  return placement;
+}
 // The replaced output, and anything already on its back, move to the new output's
 // back. Feeds it gave other machines follow the tray, keeping their position in each
-// slot, so those machines see the new output and go stale instead of running on.
+// slot, so those machines see the new output and go stale instead of running on;
+// arrows follow it too.
 function moveToBack(db: DB, replaced: Placement, outputPlacementId: string) {
   const time = now();
   const rehost = db.prepare(
@@ -319,6 +345,15 @@ function moveToBack(db: DB, replaced: Placement, outputPlacementId: string) {
       feed.created_at,
     );
   }
+  // Arrows to and from the replaced card now join the card that replaced it.
+  db.prepare('UPDATE relations SET from_placement_id=? WHERE from_placement_id=?').run(
+    outputPlacementId,
+    replaced.id,
+  );
+  db.prepare('UPDATE relations SET to_placement_id=? WHERE to_placement_id=?').run(
+    outputPlacementId,
+    replaced.id,
+  );
 }
 function childGeometry(db: DB, anchor: Placement) {
   return openGeometry(db, anchor.brane_id, anchor.x + anchor.width + 80, anchor.y);

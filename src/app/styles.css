@@ -2170,7 +2170,7 @@ summary:focus-visible {
   color: #7c8173;
   font-weight: 500;
 }
-.feed-port {
+.card-port {
   position: absolute;
   right: 4px;
   top: 50%;
@@ -2186,10 +2186,10 @@ summary:focus-visible {
   transition: opacity 0.12s;
   touch-action: none;
 }
-.canvas-card:is(.selected, :hover) .feed-port {
+.canvas-card:is(.selected, :hover) .card-port {
   opacity: 1;
 }
-.feed-draft {
+.port-draft {
   position: fixed;
   inset: 0;
   width: 100vw;
@@ -2197,7 +2197,7 @@ summary:focus-visible {
   pointer-events: none;
   z-index: 50;
 }
-.feed-draft line {
+.port-draft line {
   stroke: var(--green);
   stroke-width: 2;
   stroke-dasharray: 4 4;
@@ -2377,5 +2377,87 @@ summary:focus-visible {
 }
 /* An open card menu draws above the neighbouring cards it overlaps. */
 .react-flow__node:has(.action-menu[open]) {
-  z-index: 1000 !important;
+  z-index: 1002 !important;
+}
+/* Arrows: a labelled line between two cards, drawn from a card's port. */
+/* An arrow's word stays readable where its line passes under a card, selected cards
+   (z-index 1000) included; an open card menu still draws above it. */
+.react-flow__edgelabel-renderer {
+  z-index: 1001;
+}
+.relation-edge {
+  stroke: #5a6b8c;
+  stroke-width: 1.75;
+}
+.relation-label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px 1px 8px;
+  border: 1px solid #c3cbdb;
+  border-radius: 999px;
+  background: #f7f8fb;
+  color: #3d4a66;
+  font-size: 11px;
+  pointer-events: all;
+}
+.relation-label .text-button {
+  padding: 0 3px;
+  opacity: 0.4;
+}
+.relation-label:is(:hover, :focus-within) .text-button {
+  opacity: 1;
+}
+.relation-picker {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 260px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffefa;
+  box-shadow: 0 4px 16px #363d2224;
+  transform: translate(-50%, 8px);
+}
+.relation-picker button {
+  border: 1px solid #c3cbdb;
+  border-radius: 999px;
+  background: #f7f8fb;
+  color: #3d4a66;
+  font-size: 12px;
+  padding: 3px 10px;
+}
+.relation-picker input {
+  flex: 1 0 100%;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+.back-question .update-button {
+  font-weight: 600;
+  color: #9a6510;
+}
+/* Focus and phones open the prompt as a sheet rising from the bottom bar. */
+.ask-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #fffefa;
+  box-shadow: 0 -6px 18px #363d2214;
+}
+.ask-sheet > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ask-sheet .eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }

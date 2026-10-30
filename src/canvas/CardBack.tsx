@@ -11,6 +11,8 @@ export interface BackActions extends ResponseActions {
   onDetach: (placementId: string) => void;
   // Turn an asked answer back into a machine fed with the same cards.
   onReuse: (runId: string, question: string) => void;
+  // Ask an answer's question again over its current sources, in its place.
+  onUpdate: (runId: string, placementId: string) => Promise<unknown>;
   onOpenSource: (blockId: string) => void;
   onInspect: (runId: string) => void;
   onRerun: (runId: string) => void;
@@ -41,7 +43,7 @@ export const CardBack = memo(function CardBack({
   });
   // A primitive key keeps the back still while unrelated cards stream or move.
   const heldKey = useStore(document.store, (s) =>
-    JSON.stringify(backItems(s.scene.placements, s.runs, placementId)),
+    JSON.stringify(backItems(s.scene.placements, s.runs, s.scene.derivations, placementId)),
   );
   const held = useMemo(() => JSON.parse(heldKey) as BackItem[], [heldKey]);
   // An answer composed from a prompt (not a machine's, not a development) shows the
@@ -54,6 +56,17 @@ export const CardBack = memo(function CardBack({
       ? run.id
       : '';
   });
+  // A source edited since the answer was asked offers Update.
+  const stale = useStore(document.store, (s) =>
+    s.scene.derivations.some(
+      (d) =>
+        d.outputBlockId === blockId &&
+        d.sourceVersion !== null &&
+        !!s.blocks[d.sourceBlockId] &&
+        s.blocks[d.sourceBlockId].version !== d.sourceVersion,
+    ),
+  );
+  const [updating, setUpdating] = useState(false);
   const [question, setQuestion] = useState('');
   // Based on lists the sources with Exact inputs; a run without sources still has them.
   const unsourced = useStore(document.store, (s) =>
@@ -84,6 +97,19 @@ export const CardBack = memo(function CardBack({
           {question && (
             <blockquote className="back-question" aria-label="Question">
               {question}
+              {stale && (
+                <button
+                  className="text-button update-button"
+                  title="Ask this again over the current sources; this answer goes on the new one’s back"
+                  disabled={updating}
+                  onClick={() => {
+                    setUpdating(true);
+                    void actions.onUpdate(askedRun, placementId).finally(() => setUpdating(false));
+                  }}
+                >
+                  Update
+                </button>
+              )}
               <button
                 className="text-button"
                 title="A machine with this question as its prompt, fed with the same cards"
@@ -150,9 +176,12 @@ interface BackItem {
   createdAt: number;
   earlier: boolean;
 }
+// A development is a developed output; every other generated card on a back is an
+// earlier version that a rerun or an Update replaced.
 export function backItems(
   placements: { id: string; block_id: string; host_placement_id: string | null }[],
-  runs: Record<string, { id: string; created_at: number; machine_block_id: string | null }>,
+  runs: Record<string, { id: string; created_at: number }>,
+  derivations: { outputBlockId: string; kind: string }[],
   hostPlacementId: string,
 ): BackItem[] {
   return placements
@@ -164,7 +193,8 @@ export function backItems(
         blockId: p.block_id,
         runId: run?.id,
         createdAt: run?.created_at ?? 0,
-        earlier: !!run?.machine_block_id,
+        earlier:
+          !!run && !derivations.some((d) => d.outputBlockId === p.block_id && d.kind === 'source'),
       };
     })
     .sort((a, b) => b.createdAt - a.createdAt);

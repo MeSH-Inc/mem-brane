@@ -50,6 +50,13 @@ export function createClient(request: typeof api) {
       slot: string;
     }) => request('/feeds', body),
     removeFeed: (id: string) => request(`/feeds/${id}`, undefined, 'DELETE'),
+    createRelation: (body: {
+      braneId: string;
+      fromPlacementId: string;
+      toPlacementId: string;
+      label: string;
+    }) => request('/relations', body),
+    removeRelation: (id: string) => request(`/relations/${id}`, undefined, 'DELETE'),
     runMachine: (input: RunMachineRequest) => read(submissionReceipt, '/machines/run', input),
     estimateMachine: (input: RunMachineRequest) =>
       read(response.estimateResponse, '/machines/estimate', input),

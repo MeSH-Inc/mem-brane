@@ -66,13 +66,17 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
 
     const other = await page.context().newPage();
     await other.goto(`${origin}/b/${brane.id}?view=focus`);
+    // A tab with no question of its own opens with the sheet closed.
+    await expect(other.getByRole('region', { name: 'Ask' })).toHaveCount(0);
+    await other.getByRole('button', { name: 'Ask', exact: true }).click();
     await expect(other.getByRole('textbox', { name: 'Run prompt' })).toHaveValue('');
     await other.getByRole('textbox', { name: 'Run prompt' }).fill('Independent tab question');
     const second = await (
       await page.request.post(`${origin}/api/branes`, { data: { title: 'Separate workspace' } })
     ).json();
     await page.goto(`${origin}/b/${second.id}?view=focus`);
-    await expect(prompt).toHaveValue('');
+    // The other brane has no question of its own, so its sheet stays closed.
+    await expect(page.getByRole('region', { name: 'Ask' })).toHaveCount(0);
     await page.goto(`${origin}/b/${brane.id}?view=focus`);
     await expect(prompt).toHaveValue('Plan a safe route using the evidence');
 
@@ -147,8 +151,11 @@ test('mixed-media workflows preserve independent workspace drafts and frozen pro
         .filter((i: any) => i.kind === 'reference')
         .map((i: any) => i.content.format),
     ).toEqual(['text', ...media.map((b: any) => b.content.format)]);
-    await expect(prompt).toHaveValue('');
+    // The accepted question is done: the sheet closes, and opens empty after a reload.
+    await expect(page.getByRole('region', { name: 'Ask' })).toHaveCount(0);
     await page.reload();
+    await expect(page.getByRole('region', { name: 'Ask' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Ask', exact: true }).click();
     await expect(prompt).toHaveValue('');
 
     // Branch, inspect frozen provenance, then reopen the source's older snapshot.

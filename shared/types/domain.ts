@@ -136,17 +136,27 @@ export interface Feed {
   slot: string;
   created_at: number;
 }
+// An arrow between two cards on the table, in the user's word: "answers", "supports".
+export interface Relation {
+  id: string;
+  brane_id: string;
+  from_placement_id: string;
+  to_placement_id: string;
+  label: string;
+  created_at: number;
+}
 export interface BraneState {
   brane: Brane;
   blocks: Block[];
   placements: Placement[];
   feeds: Feed[];
+  relations: Relation[];
   runs: Run[];
   derivations: Derivation[];
 }
 export interface RunInput {
   position: number;
-  kind: 'source' | 'reference' | 'lineage_reference' | 'lineage' | 'prompt';
+  kind: 'source' | 'reference' | 'relation' | 'lineage_reference' | 'lineage' | 'prompt';
   label: string;
   role: 'user' | 'assistant';
   revision_id: string;

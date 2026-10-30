@@ -35,6 +35,9 @@ export const submitRun = z.object({
   maxReservedMicrousd: z.number().int().nonnegative().safe().optional(),
   // Where the answer is placed: an Ask's answer takes the Ask box's place.
   outputGeometry: geometry.optional(),
+  // Update: the answer this run replaces takes the new answer's back, as a machine's
+  // earlier output does.
+  replacesPlacementId: id.optional(),
 });
 
 export const spawnArtifact = z

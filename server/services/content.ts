@@ -9,6 +9,7 @@ import type { SavedText } from '../../shared/contracts.js';
 import { encodeContent, decodeContent, contentReader } from './representations.js';
 import { readWorkspaceRuns, readVisibleDerivations } from './run-reads.js';
 import { readFeeds } from './feeds.js';
+import { readRelations } from './relations.js';
 import { MACHINE_TEMPLATE } from '../../shared/machines.js';
 import { MAX_BRANE_PLACEMENTS, fitsArtifactContent } from '../../shared/limits.js';
 import { content as contentSchema } from '../../shared/schemas/index.js';
@@ -358,7 +359,8 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
   const runs = readWorkspaceRuns(db, actor, id);
   const derivations = readVisibleDerivations(db, actor, id);
   const feeds = readFeeds(db, actor, id);
-  return { brane, placements, blocks, feeds, runs, derivations };
+  const relations = readRelations(db, actor, id);
+  return { brane, placements, blocks, feeds, relations, runs, derivations };
 }
 
 interface WorkspaceBlockRow {
