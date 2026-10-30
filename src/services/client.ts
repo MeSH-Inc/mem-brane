@@ -59,7 +59,12 @@ export function createClient(request: typeof api) {
       toPlacementId: string;
       slot: string;
     }) => request('/feeds', body),
+    setFeedMode: (id: string, braneId: string, mode: 'together' | 'each') =>
+      request(`/feeds/${id}`, { braneId, mode }, 'PATCH'),
     removeFeed: (id: string) => request(`/feeds/${id}`, undefined, 'DELETE'),
+    workshop: () => read(response.workshopResponse, '/workshop'),
+    saveToWorkshop: (name: string, template: string) => request('/workshop', { name, template }),
+    removeFromWorkshop: (id: string) => request(`/workshop/${id}`, undefined, 'DELETE'),
     createRelation: (body: {
       braneId: string;
       fromPlacementId: string;

@@ -79,6 +79,7 @@ export function createFeed(db: DB, actor: string, input: FeedRequest): Feed {
     from_group_id: input.fromGroupId ?? null,
     to_placement_id: input.toPlacementId,
     slot: input.slot,
+    mode: 'together',
     created_at: Date.now(),
   };
   db.prepare(
@@ -95,6 +96,32 @@ export function createFeed(db: DB, actor: string, input: FeedRequest): Feed {
   return feed;
 }
 
+// A group feed runs its machine with all its cards at once, or once per card. Only one
+// slot of a machine runs each, so one press fans out over one list of cards.
+export function setFeedMode(
+  db: DB,
+  actor: string,
+  id: string,
+  braneId: string,
+  mode: Feed['mode'],
+) {
+  canEditBrane(db, actor, braneId);
+  const feed = db
+    .prepare<unknown[], Feed>('SELECT * FROM feeds WHERE id=? AND brane_id=?')
+    .get(id, braneId);
+  if (!feed) throw new DomainError(404, 'This feed is no longer on the brane.');
+  if (mode === 'each' && !feed.from_group_id)
+    throw new DomainError(400, 'Only a group can feed a slot one card at a time.');
+  if (
+    mode === 'each' &&
+    db
+      .prepare("SELECT 1 FROM feeds WHERE to_placement_id=? AND slot<>? AND mode='each'")
+      .get(feed.to_placement_id, feed.slot)
+  )
+    throw new DomainError(409, 'Another slot of this machine already runs each.');
+  db.prepare('UPDATE feeds SET mode=? WHERE id=?').run(mode, id);
+}
+
 // Removing a feed that a placement removal already cascaded away satisfies the intent.
 export function removeFeed(db: DB, actor: string, id: string, braneId: string) {
   canEditBrane(db, actor, braneId);
@@ -105,7 +132,7 @@ export function readFeeds(db: DB, actor: string, braneId: string): Feed[] {
   canReadBrane(db, actor, braneId);
   return db
     .prepare<unknown[], Feed>(
-      'SELECT id,brane_id,from_placement_id,from_group_id,to_placement_id,slot,created_at FROM feeds WHERE brane_id=? ORDER BY rowid',
+      'SELECT id,brane_id,from_placement_id,from_group_id,to_placement_id,slot,mode,created_at FROM feeds WHERE brane_id=? ORDER BY rowid',
     )
     .all(braneId);
 }

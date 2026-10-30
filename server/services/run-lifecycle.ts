@@ -242,7 +242,14 @@ export function claimRun(db: DB, workerId: string, leaseMs: number, time = now()
   return db
     .transaction(() => {
       const row = db
-        .prepare("SELECT * FROM runs WHERE status='queued' ORDER BY created_at LIMIT 1")
+        // Fairness: the oldest queued run of the owner with the fewest runs under way, so
+        // one press that admits a dozen runs does not hold every worker.
+        .prepare(
+          `SELECT * FROM runs r WHERE status='queued' ORDER BY (
+            SELECT count(*) FROM runs o WHERE o.owner_id=r.owner_id
+            AND o.status IN ('claimed','running','cancel_requested')
+          ),created_at LIMIT 1`,
+        )
         .get();
       if (!row) return null;
       const run = decodeRecord(runRecord, row);

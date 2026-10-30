@@ -48,6 +48,8 @@ export function commandAccess(c: WorkspaceCommand): CommandAccess {
         ],
         writes: [exists('feed', c.id)],
       };
+    case 'feed.mode':
+      return { reads: [exists('feed', c.id)], writes: [value('feed', c.id)] };
     case 'feed.remove':
       return { reads: [], writes: [exists('feed', c.id)] };
     // A run reads the brane's arrows among its inputs, so every arrow change writes them.

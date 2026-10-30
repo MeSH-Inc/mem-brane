@@ -385,6 +385,129 @@ test('a grouped region is asked about, and its answer goes stale when an arrow c
   record('grouped-region', counts);
 });
 
+test('a stack fed each runs Extract once per paper and the outputs arrive as a stack', async ({
+  page,
+}) => {
+  const counts = { actions: 0 };
+  await serve(page, 4206, async ({ seed, completed, state, api, origin }) => {
+    const papers = Array.from({ length: 12 }, (_, i) => `Paper ${i + 1}: one finding.`);
+    const { braneId, cards } = await seed('Pile, each', papers, grid);
+    counts.actions++; // the drop
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    await act(() => lasso(page, cards));
+    await act(() => page.keyboard.press('g'));
+    await act(() => page.getByRole('button', { name: 'Stack', exact: true }).click());
+    const extract = await takeOut(page, act, state, braneId, 'Extract');
+    await act(() =>
+      drag(
+        page,
+        '.react-flow__node[data-id^="group:"] .card-port',
+        extract.locator('[data-feed-slot="source"]'),
+      ),
+    );
+    await act(() => extract.getByRole('button', { name: /one card at a time/ }).click());
+    const lever = extract.locator('.machine-lever');
+    await expect(lever).toHaveText(/^Run ×12/);
+    await act(() => lever.click());
+    await completed(braneId, 12);
+    const read = await state(braneId);
+    expect(new Set(read.runs.map((r) => r.batch_id)).size).toBe(1);
+    // Each run sent one paper, in the stack's order; the outputs are one stack.
+    const ordered = [...read.runs].sort((a, b) => a.batch_position! - b.batch_position!);
+    const first = await (await page.request.get(api(`/runs/${ordered[0].id}`))).json();
+    const last = await (await page.request.get(api(`/runs/${ordered[11].id}`))).json();
+    expect(first.inputs[0].content.text).toBe(papers[0]);
+    expect(last.inputs[0].content.text).toBe(papers[11]);
+    await expect(page.getByRole('region', { name: 'Each source' })).toContainText('Stack · 12');
+    await expect(extract.locator('.machine-state')).toHaveText('ran');
+  });
+  record('pile-each', counts);
+});
+
+test('three Extract machines over one stack make a stack of answers each', async ({ page }) => {
+  const counts = { actions: 0, typed: 0 };
+  const questions = ['what method it uses', 'its sample size', 'its main finding'];
+  await serve(page, 4207, async ({ seed, completed, state, origin }) => {
+    const papers = Array.from({ length: 4 }, (_, i) => `Paper ${i + 1}: survey of 40 cities.`);
+    const { braneId, cards } = await seed('Matrix', papers, grid);
+    counts.actions++; // the drop
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    await act(() => lasso(page, cards));
+    await act(() => page.keyboard.press('g'));
+    await act(() => page.getByRole('button', { name: 'Stack', exact: true }).click());
+    for (const [index, question] of questions.entries()) {
+      const extract = await takeOut(page, act, state, braneId, 'Extract');
+      const prompt = `From {source}, answer in one short sentence: ${question}?`;
+      counts.typed += prompt.length;
+      await act(() => extract.getByRole('textbox', { name: 'Machine prompt' }).fill(prompt));
+      // The new machine was brought into view; fitting the view brings the stack back too.
+      await page.locator('.react-flow__controls-fitview').click();
+      await act(() =>
+        drag(
+          page,
+          '.react-flow__node[data-id^="group:"]:has([aria-label="Group 1"]) .card-port',
+          extract.locator('[data-feed-slot="source"]'),
+        ),
+      );
+      await act(() => extract.getByRole('button', { name: /one card at a time/ }).click());
+      await expect(extract.locator('.machine-lever')).toHaveText(/^Run ×4/);
+      await act(() => extract.locator('.machine-lever').click());
+      await completed(braneId, 4 * (index + 1));
+    }
+    const read = await state(braneId);
+    expect(new Set(read.runs.map((r) => r.batch_id)).size).toBe(3);
+    await expect(page.getByRole('region', { name: 'Each source' })).toHaveCount(3);
+  });
+  record('matrix', counts);
+});
+
+// Take a machine out of the Workshop: Add, Workshop, the machine. Returns its node.
+async function takeOut(
+  page: Page,
+  act: (work: () => Promise<unknown>) => Promise<void>,
+  state: Server['state'],
+  braneId: string,
+  name: string,
+) {
+  const before = new Set(
+    (await state(braneId)).blocks.filter((b) => b.kind === 'machine').map((b) => b.id),
+  );
+  await act(() => page.getByRole('button', { name: '＋ Add' }).click());
+  await act(() => page.getByRole('button', { name: '⚒ Workshop' }).click());
+  await act(() =>
+    page
+      .getByRole('region', { name: 'Workshop' })
+      .getByRole('button', { name: new RegExp(`^${name}`) })
+      .first()
+      .click(),
+  );
+  let placementId = '';
+  await expect
+    .poll(async () => {
+      const read = await state(braneId);
+      const block = read.blocks.find((b) => b.kind === 'machine' && !before.has(b.id));
+      placementId = read.placements.find((p) => p.block_id === block?.id)?.id ?? '';
+      return placementId;
+    })
+    .not.toBe('');
+  return page.locator(`.react-flow__node[data-id="${placementId}"]`);
+}
+// Papers dropped in a grid, four to a row.
+const grid = (index: number) => ({
+  x: 40 + (index % 4) * 220,
+  y: 40 + Math.floor(index / 4) * 140,
+  width: 200,
+  height: 120,
+});
+
 // Drag the objection's port onto the claim and name the arrow: two gestures.
 async function arrow(
   page: Page,
@@ -497,7 +620,14 @@ interface BraneRead {
   blocks: { id: string; kind: string; version: number }[];
   relations: { from_placement_id: string; to_placement_id: string; label: string }[];
   groups: { label: string; members: string[] }[];
-  runs: { id: string; status: string; output_block_id: string; machine_block_id: string | null }[];
+  runs: {
+    id: string;
+    status: string;
+    output_block_id: string;
+    machine_block_id: string | null;
+    batch_id: string | null;
+    batch_position: number | null;
+  }[];
 }
 interface Server {
   origin: string;
@@ -594,6 +724,10 @@ function record(scenario: string, counts: unknown) {
 }
 
 async function drag(page: Page, from: string, to: Locator) {
+  // A view that was just fitted or moved draws its new positions on the next frames.
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
   const start = await page.locator(from).boundingBox();
   const end = await to.boundingBox();
   if (!start || !end) throw new Error('Feed endpoints are not visible');

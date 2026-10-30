@@ -66,6 +66,8 @@ const machine = {
   },
   onFeed: async () => {},
   onUnfeed: async () => {},
+  onFeedMode: async () => {},
+  onSaveToWorkshop: () => {},
 };
 function render(s = state) {
   act(() => workspace.install(s));

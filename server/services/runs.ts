@@ -1,10 +1,15 @@
 import { modelProvider } from '../llm/provider.js';
 import { planRun, relationEntryText, type MachinePlan, type RunPlanLimits } from './run-plan.js';
-import { machineSlots, orderMachineInputs, type RunMachine } from '../../shared/machines.js';
+import {
+  machineSlots,
+  orderMachineInputs,
+  MAX_EACH_RUNS,
+  type RunMachine,
+} from '../../shared/machines.js';
 import { loadBlockStates } from './block-state.js';
 import { estimateRun } from './estimate.js';
 import { decodeRecord, decodeJson, runRecord, runOptions, type RunRecord } from '../db/records.js';
-import type { Placement, Geometry } from '../../shared/types/domain.js';
+import type { Placement, Geometry, EditReceipt } from '../../shared/types/domain.js';
 import { submissionReceipt } from '../../shared/schemas/index.js';
 import { createContext, type ContextEntry } from './contexts.js';
 import { readInputs } from './context-reader.js';
@@ -18,16 +23,22 @@ export interface RunLimits extends RunPlanLimits {
   userConcurrency: number;
   queueLimit?: number;
 }
+// The runs one press admits together count once against the limits: they are one
+// request, which the workers share fairly with other owners' runs.
 function checkLimits(db: DB, actor: string, model: string, limits: RunLimits) {
   if (!limits.models.includes(model)) throw new DomainError(400, 'Model is not allowed');
   const active = db
     .prepare(
-      "SELECT count(*) n FROM runs WHERE owner_id=? AND status IN ('queued','claimed','running','cancel_requested')",
+      `SELECT count(DISTINCT COALESCE(b.batch_id,r.id)) n FROM runs r
+       LEFT JOIN run_batches b ON b.run_id=r.id
+       WHERE r.owner_id=? AND r.status IN ('queued','claimed','running','cancel_requested')`,
     )
     .get(actor) as { n: number };
   const queued = db
     .prepare(
-      "SELECT count(*) n FROM runs WHERE status IN ('queued','claimed','running','cancel_requested')",
+      `SELECT count(DISTINCT COALESCE(b.batch_id,r.id)) n FROM runs r
+       LEFT JOIN run_batches b ON b.run_id=r.id
+       WHERE r.status IN ('queued','claimed','running','cancel_requested')`,
     )
     .get() as { n: number };
   if (queued.n >= (limits.queueLimit ?? 8))
@@ -43,6 +54,16 @@ interface DeriveOptions {
 interface MachineOptions extends MachinePlan {
   placement: Placement;
 }
+// Where a machine run's output goes when the press decides it: in place of a card of the
+// machine's tray, or at the given geometry; and the batch the run belongs to.
+interface OutputPlan {
+  replaces: Placement | null;
+  geometry: Geometry;
+  batch?: { id: string; position: number };
+  // A batch checks the limits and applies its edits once, before its first run.
+  admitted: boolean;
+  appliedEdits: EditReceipt[];
+}
 export function submitRun(
   db: DB,
   snapshots: RevisionService,
@@ -51,6 +72,7 @@ export function submitRun(
   limits: RunLimits,
   derivation?: DeriveOptions,
   machine?: MachineOptions,
+  outputPlan?: OutputPlan,
 ) {
   const hash = createHash('sha256')
     .update(
@@ -76,17 +98,20 @@ export function submitRun(
         throw new DomainError(409, 'Submission key was used for a different request');
       return run;
     }
-    checkLimits(db, actor, input.model, limits);
+    if (!outputPlan?.admitted) checkLimits(db, actor, input.model, limits);
     const plan = planRun(db, actor, input, limits, derivation?.sources, machine);
     if (input.maxReservedMicrousd !== undefined && plan.quote.amount > input.maxReservedMicrousd)
       throw new DomainError(
         409,
         'Run reservation exceeds the accepted cost cap. Request a new estimate.',
       );
-    const edits = input.edits.map((edit) => ({
-      blockId: edit.blockId,
-      ...updateBlockLiveState(db, actor, edit),
-    }));
+    const edits = [
+      ...(outputPlan?.appliedEdits ?? []),
+      ...input.edits.map((edit) => ({
+        blockId: edit.blockId,
+        ...updateBlockLiveState(db, actor, edit),
+      })),
+    ];
     // Inputs freeze first; a relation entry then names their frozen revisions.
     const revisions: string[] = [];
     const freeze = (blockId: string) => snapshots.snapshotBlock(actor, blockId).id;
@@ -116,11 +141,13 @@ export function submitRun(
     // The output attaches to what was run: a development goes on its source's back, and
     // a machine's output or an updated answer takes the place of the one it replaces.
     const host = derivation && anchor ? (anchor.host_placement_id ?? anchor.id) : null;
-    const replaced = machine
-      ? trayOutput(db, machine.placement.id)
-      : input.replacesPlacementId
-        ? replacedAnswer(db, input.braneId, input.replacesPlacementId)
-        : undefined;
+    const replaced = outputPlan
+      ? (outputPlan.replaces ?? undefined)
+      : machine
+        ? trayOutput(db, machine.placement.id)
+        : input.replacesPlacementId
+          ? replacedAnswer(db, input.braneId, input.replacesPlacementId)
+          : undefined;
     const output = createBlock(
       db,
       actor,
@@ -129,13 +156,15 @@ export function submitRun(
       input.braneId,
       replaced
         ? { x: replaced.x, y: replaced.y, width: replaced.width, height: replaced.height }
-        : input.outputGeometry && !host
-          ? input.outputGeometry
-          : host && anchor
-            ? { x: anchor.x + anchor.width + 80, y: anchor.y, width: 380, height: 300 }
-            : anchor
-              ? childGeometry(db, anchor)
-              : openGeometry(db, input.braneId, 520, 100),
+        : outputPlan
+          ? outputPlan.geometry
+          : input.outputGeometry && !host
+            ? input.outputGeometry
+            : host && anchor
+              ? { x: anchor.x + anchor.width + 80, y: anchor.y, width: 380, height: 300 }
+              : anchor
+                ? childGeometry(db, anchor)
+                : openGeometry(db, input.braneId, 520, 100),
       'generated',
       undefined,
       host,
@@ -170,6 +199,12 @@ export function submitRun(
         runId,
         anchor.id,
         output.placement.id,
+      );
+    if (outputPlan?.batch)
+      db.prepare('INSERT INTO run_batches VALUES (?,?,?)').run(
+        runId,
+        outputPlan.batch.id,
+        outputPlan.batch.position,
       );
     reserveCost(db, actor, runId, plan.quote, limits.costPolicy);
     db.prepare('INSERT INTO submission_receipts VALUES (?,?)').run(
@@ -245,6 +280,10 @@ export function retryRun(db: DB, actor: string, id: string, key: string, limits:
         anchor?.id ?? null,
         output.placement.id,
       );
+    // A retry takes its run's place in the run's batch.
+    db.prepare(
+      'INSERT INTO run_batches SELECT ?,batch_id,position FROM run_batches WHERE run_id=?',
+    ).run(newId, id);
     reserveCost(
       db,
       actor,
@@ -419,8 +458,15 @@ export function spawnArtifact(
 }
 
 // Resolve a machine run into an ordinary frozen submission. The client names every
-// input; the server checks them against the template the run will freeze.
-function machineSubmission(db: DB, actor: string, input: RunMachine) {
+// input; the server checks them against the template the run will freeze. A batch run
+// resolves each of its runs over a part of the inputs.
+function machineSubmission(
+  db: DB,
+  actor: string,
+  input: RunMachine,
+  inputs: RunMachine['inputs'] = input.inputs,
+  edits: RunMachine['edits'] = input.edits,
+) {
   canRunOnBrane(db, actor, input.braneId);
   const placement = db
     .prepare<unknown[], Placement>('SELECT * FROM placements WHERE id=? AND brane_id=?')
@@ -436,21 +482,21 @@ function machineSubmission(db: DB, actor: string, input: RunMachine) {
     draft?.text ?? (JSON.parse(state.live_json ?? '{"text":""}') as { text: string }).text;
   const slots = machineSlots(template);
   if (!slots.length) throw new DomainError(400, 'Name at least one {slot} in the machine prompt.');
-  const unknown = input.inputs.find((i) => !slots.includes(i.slot));
+  const unknown = inputs.find((i) => !slots.includes(i.slot));
   if (unknown) throw new DomainError(400, `The prompt has no {${unknown.slot}} slot.`);
-  const empty = slots.find((slot) => !input.inputs.some((i) => i.slot === slot));
+  const empty = slots.find((slot) => !inputs.some((i) => i.slot === slot));
   if (empty) throw new DomainError(400, `Feed the {${empty}} slot first.`);
-  const keys = input.inputs.map((i) => `${i.slot}\u0000${i.blockId}`);
+  const keys = inputs.map((i) => `${i.slot}\u0000${i.blockId}`);
   if (new Set(keys).size !== keys.length)
     throw new DomainError(400, 'A card may fill a slot only once.');
-  const ordered = orderMachineInputs(template, input.inputs);
+  const ordered = orderMachineInputs(template, inputs);
   const submission: SubmitRun = {
     braneId: input.braneId,
     key: input.key,
     model: input.model,
     prompt: template,
     references: ordered.map((i) => i.blockId),
-    edits: input.edits,
+    edits,
     maxOutputTokens: input.maxOutputTokens,
     maxReservedMicrousd: input.maxReservedMicrousd,
   };
@@ -459,6 +505,68 @@ function machineSubmission(db: DB, actor: string, input: RunMachine) {
     machine: { blockId: placement.block_id, slots: ordered.map((i) => i.slot), placement },
   };
 }
+// The runs of a press that fans a slot out: the cards of the 'each' slot, one per run,
+// each with every card of the other slots. A machine run admitted alone is one part.
+function machineParts(input: RunMachine) {
+  if (!input.each) return [input.inputs];
+  const fanned = input.inputs.filter((i) => i.slot === input.each);
+  if (!fanned.length) throw new DomainError(400, `Feed the {${input.each}} slot first.`);
+  if (fanned.length > MAX_EACH_RUNS)
+    throw new DomainError(400, `One press runs each for at most ${MAX_EACH_RUNS} cards.`);
+  const shared = input.inputs.filter((i) => i.slot !== input.each);
+  return fanned.map((card) => [...shared, card]);
+}
+// Run i of a batch has its own submission key, derived from the press's key.
+function batchKey(key: string, position: number) {
+  if (position === 0) return key;
+  const hex = createHash('sha256').update(`${key}:${position}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+// The machine's tray: its newest output still on the table, or, when that output is in
+// a group of this machine's outputs (the stack an 'each' press made), the whole group.
+function machineTray(db: DB, machinePlacementId: string) {
+  const newest = trayOutput(db, machinePlacementId);
+  if (!newest) return { members: [] as Placement[] };
+  const group = db
+    .prepare<unknown[], { group_id: string }>(
+      'SELECT group_id FROM group_members WHERE placement_id=?',
+    )
+    .get(newest.id);
+  const members = group
+    ? db
+        .prepare<unknown[], Placement & { produced: number }>(
+          `SELECT p.*,EXISTS(SELECT 1 FROM run_placements l WHERE l.output_placement_id=p.id
+           AND l.anchor_placement_id=?) produced
+           FROM group_members m JOIN placements p ON p.id=m.placement_id
+           WHERE m.group_id=? ORDER BY m.position`,
+        )
+        .all(machinePlacementId, group.group_id)
+    : [];
+  return group && members.every((m) => m.produced)
+    ? { groupId: group.group_id, members: members.map(({ produced: _, ...p }) => p as Placement) }
+    : { members: [newest] };
+}
+// A tray card the new press has no place for goes on the back of the press's first
+// output, without the links it had as a result on the table.
+function retire(db: DB, placement: Placement, hostPlacementId: string) {
+  const time = now();
+  db.prepare('DELETE FROM group_members WHERE placement_id=?').run(placement.id);
+  db.prepare('DELETE FROM feeds WHERE from_placement_id=?').run(placement.id);
+  db.prepare('DELETE FROM relations WHERE from_placement_id=? OR to_placement_id=?').run(
+    placement.id,
+    placement.id,
+  );
+  db.prepare(
+    'UPDATE placements SET host_placement_id=?,version=version+1,updated_at=? WHERE host_placement_id=?',
+  ).run(hostPlacementId, time, placement.id);
+  db.prepare(
+    'UPDATE placements SET host_placement_id=?,version=version+1,updated_at=? WHERE id=?',
+  ).run(hostPlacementId, time, placement.id);
+}
+// One press of a machine's lever. Fed together, it admits one run whose output takes
+// the tray's place. Fed each, it admits one run per card in one transaction, all frozen
+// and reserved at once or none: their outputs replace the tray stack's cards in order,
+// or arrive as a new stack beside the machine.
 export function runMachine(
   db: DB,
   snapshots: RevisionService,
@@ -466,12 +574,120 @@ export function runMachine(
   input: RunMachine,
   limits: RunLimits,
 ) {
-  const { submission, machine } = machineSubmission(db, actor, input);
-  return submitRun(db, snapshots, actor, submission, limits, undefined, machine);
+  return db.transaction(() => {
+    machineSubmission(db, actor, input);
+    const parts = machineParts(input);
+    const batch = input.each ? { id: input.key } : undefined;
+    const submit = (position: number, plan: OutputPlan) => {
+      // Edits are applied once, before the first run; every run reads the saved text.
+      const part = machineSubmission(db, actor, input, parts[position], []);
+      return submitRun(
+        db,
+        snapshots,
+        actor,
+        { ...part.submission, key: batchKey(input.key, position) },
+        limits,
+        undefined,
+        part.machine,
+        plan,
+      );
+    };
+    // A repeated press returns the runs it admitted.
+    if (
+      db.prepare('SELECT 1 FROM runs WHERE owner_id=? AND submission_key=?').get(actor, input.key)
+    ) {
+      const runs = parts.map((_, position) => submit(position, replayPlan(batch, position)));
+      return runs[0];
+    }
+    checkLimits(db, actor, input.model, limits);
+    const placement = machineSubmission(db, actor, input).machine.placement;
+    const tray = machineTray(db, placement.id);
+    const appliedEdits = input.edits.map((edit) => ({
+      blockId: edit.blockId,
+      ...updateBlockLiveState(db, actor, edit),
+    }));
+    // New outputs past the tray's cards pile on the first one, as a stack does.
+    const first = tray.members[0] ?? childGeometry(db, placement);
+    const runs = parts.map((_, position) => {
+      const offset = Math.min(position, 3) * 10;
+      return submit(position, {
+        replaces: tray.members[position] ?? null,
+        geometry: {
+          x: first.x + offset,
+          y: first.y + offset,
+          width: first.width,
+          height: first.height,
+        },
+        batch: batch && { ...batch, position },
+        admitted: true,
+        appliedEdits: position ? [] : appliedEdits,
+      });
+    });
+    const outputs = runs.map((run) => outputPlacement(db, run.id));
+    for (const surplus of tray.members.slice(parts.length)) retire(db, surplus, outputs[0]);
+    if (!batch) {
+      // A run together after a stack leaves one card where the stack was.
+      if (tray.groupId) db.prepare('DELETE FROM groups WHERE id=?').run(tray.groupId);
+    } else if (tray.groupId) {
+      const add = db.prepare(
+        'INSERT INTO group_members VALUES (?,?,(SELECT coalesce(max(position),-1)+1 FROM group_members WHERE group_id=?))',
+      );
+      for (const output of outputs.slice(tray.members.length))
+        add.run(tray.groupId, output, tray.groupId);
+    } else {
+      const groupId = uid();
+      db.prepare('INSERT INTO groups VALUES (?,?,?,?,?)').run(
+        groupId,
+        input.braneId,
+        `Each ${input.each}`.slice(0, 60),
+        'stack',
+        now(),
+      );
+      const add = db.prepare('INSERT INTO group_members VALUES (?,?,?)');
+      outputs.forEach((output, position) => add.run(groupId, output, position));
+    }
+    return runs[0];
+  })();
+}
+// A repeated press resolves to the runs it admitted; the plan is never applied again.
+function replayPlan(batch: { id: string } | undefined, position: number): OutputPlan {
+  return {
+    replaces: null,
+    geometry: { x: 0, y: 0, width: 1, height: 1 },
+    batch: batch && { ...batch, position },
+    admitted: true,
+    appliedEdits: [],
+  };
+}
+function outputPlacement(db: DB, runId: string) {
+  return (
+    db.prepare('SELECT output_placement_id FROM run_placements WHERE run_id=?').get(runId) as {
+      output_placement_id: string;
+    }
+  ).output_placement_id;
 }
 export function estimateMachine(db: DB, actor: string, input: RunMachine, limits: RunLimits) {
-  const { submission, machine } = machineSubmission(db, actor, input);
-  return estimateRun(db, actor, submission, limits, machine);
+  machineSubmission(db, actor, input);
+  const estimates = machineParts(input).map((part, position) => {
+    const { submission, machine } = machineSubmission(
+      db,
+      actor,
+      input,
+      part,
+      position ? [] : input.edits,
+    );
+    return estimateRun(db, actor, submission, limits, machine);
+  });
+  // The press reserves every run's bound at once, so it is affordable only in total.
+  const reserved = estimates.reduce((sum, e) => sum + e.reservedMicrousd, 0);
+  return {
+    ...estimates[0],
+    runs: estimates.length,
+    estimatedInputTokens: estimates.reduce((sum, e) => sum + e.estimatedInputTokens, 0),
+    reservedMicrousd: reserved,
+    canAfford:
+      estimates.every((e) => e.canAfford) && reserved <= estimates[0].budget.availableMicrousd,
+  };
 }
 
 export function readSubmissionReceipt(db: DB, actor: string, runId: string): SubmissionReceipt {

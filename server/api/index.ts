@@ -55,8 +55,10 @@ import {
   runMachine as runMachineSchema,
   slotName,
   machineTemplate,
+  MAX_WORKSHOP_NAME,
 } from '../../shared/machines.js';
-import { createFeed, removeFeed } from '../services/feeds.js';
+import { createFeed, removeFeed, setFeedMode } from '../services/feeds.js';
+import { readWorkshop, removeWorkshopMachine, saveWorkshopMachine } from '../services/workshop.js';
 import { createRelation, relabelRelation, removeRelation } from '../services/relations.js';
 import { createGroup, editGroup, removeGroup } from '../services/groups.js';
 import { groupDisplay, groupLabel } from '../../shared/groups.js';
@@ -242,6 +244,26 @@ export function createApi(
       .strict()
       .parse(await authorizedBody(c));
     return c.json(createFeed(db, c.get('actor'), { id: crypto.randomUUID(), ...body }), 201);
+  });
+  app.patch('/feeds/:id', async (c) => {
+    const body = z
+      .object({ braneId: id, mode: z.enum(['together', 'each']) })
+      .strict()
+      .parse(await authorizedBody(c));
+    setFeedMode(db, c.get('actor'), id.parse(c.req.param('id')), body.braneId, body.mode);
+    return c.json({ ok: true });
+  });
+  app.get('/workshop', (c) => c.json(readWorkshop(db, c.get('actor'))));
+  app.post('/workshop', async (c) => {
+    const body = z
+      .object({ name: z.string().trim().min(1).max(MAX_WORKSHOP_NAME), template: machineTemplate })
+      .strict()
+      .parse(await authorizedBody(c));
+    return c.json(saveWorkshopMachine(db, c.get('actor'), body.name, body.template), 201);
+  });
+  app.delete('/workshop/:id', (c) => {
+    removeWorkshopMachine(db, c.get('actor'), id.parse(c.req.param('id')));
+    return c.json({ ok: true });
   });
   app.delete('/feeds/:id', (c) => {
     const feedId = id.parse(c.req.param('id'));

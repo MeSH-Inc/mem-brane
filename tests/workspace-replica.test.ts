@@ -989,3 +989,30 @@ it('rewords an arrow offline and replays the new word', async () => {
   await f.replica.synchronize();
   expect(readBrane(db, f.actor, f.brane.id).relations[0].label).toBe('contradicts');
 });
+
+it('switches a group feed to each offline and replays it', async () => {
+  const f = await fixture();
+  const [first] = readBrane(db, f.actor, f.brane.id).placements;
+  const second = createTextBlock(db, f.actor, f.brane.id);
+  const machine = createMachineBlock(db, f.actor, f.brane.id);
+  await f.client.workspace(f.brane.id);
+  const group = (await f.client.createGroup({
+    braneId: f.brane.id,
+    label: 'Group 1',
+    display: 'stack',
+    members: [first.id, second.placement.id],
+  })) as { id: string };
+  const feed = (await f.client.createFeed({
+    braneId: f.brane.id,
+    fromGroupId: group.id,
+    toPlacementId: machine.placement.id,
+    slot: 'claim',
+  })) as { id: string };
+  await f.replica.synchronize();
+  f.offline();
+  await f.client.setFeedMode(feed.id, f.brane.id, 'each');
+  expect((await f.client.workspace(f.brane.id)).feeds[0].mode).toBe('each');
+  f.online();
+  await f.replica.synchronize();
+  expect(readBrane(db, f.actor, f.brane.id).feeds[0].mode).toBe('each');
+});

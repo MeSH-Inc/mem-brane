@@ -1,4 +1,4 @@
-import type { BraneState, Feed } from '../../shared/types/domain';
+import type { BraneState, Feed, Run } from '../../shared/types/domain';
 import { machineSlots, type MachineInput } from '../../shared/machines';
 
 type MachineScene = Pick<
@@ -19,7 +19,19 @@ export interface MachineView {
   // group contributes its members in member order, all under the group's feed.
   inputs: (MachineInput & { feedId: string; placementId: string })[];
   // The feeds behind those inputs, once each: what a slot row lists.
-  feeds: { feedId: string; slot: string; groupId: string | null; count: number }[];
+  feeds: {
+    feedId: string;
+    slot: string;
+    groupId: string | null;
+    count: number;
+    mode: 'together' | 'each';
+  }[];
+  // The slot whose cards each get their own run, if a group feeds it 'each'; and how many
+  // runs the lever's press admits.
+  eachSlot: string | null;
+  runs: number;
+  // More than one slot is fed 'each'; the lever cannot fan out over two lists at once.
+  eachConflict: boolean;
   missingSlots: string[];
   lastRunId: string | null;
   ran: boolean;
@@ -130,11 +142,30 @@ export function machineStaleness(
           return [{ blockId, slot, feedId: f.id, placementId }];
         });
         if (fed.length || f.from_group_id)
-          feeds.push({ feedId: f.id, slot, groupId: f.from_group_id, count: fed.length });
+          feeds.push({
+            feedId: f.id,
+            slot,
+            groupId: f.from_group_id,
+            count: fed.length,
+            mode: f.mode,
+          });
         return fed;
       });
   });
   const missingSlots = slots.filter((slot) => !inputs.some((i) => i.slot === slot));
+  const eachSlots = [...new Set(feeds.filter((f) => f.mode === 'each').map((f) => f.slot))];
+  const eachSlot = eachSlots[0] ?? null;
+  // What one press sends: one list of inputs, or one per card of the 'each' slot.
+  const parts = eachSlot
+    ? inputs
+        .filter((i) => i.slot === eachSlot)
+        .map((card) => inputs.filter((i) => i.slot !== eachSlot || i === card))
+    : [inputs];
+  const fanned = {
+    eachSlot,
+    runs: Math.max(parts.length, 1),
+    eachConflict: eachSlots.length > 1,
+  };
   const lastRun = block
     ? scene.runs
         .filter((r) => r.machine_block_id === block.id)
@@ -146,6 +177,7 @@ export function machineStaleness(
       slots,
       inputs,
       feeds,
+      ...fanned,
       missingSlots,
       lastRunId: null,
       ran: false,
@@ -155,7 +187,23 @@ export function machineStaleness(
       changedFeeds: [],
       arrowsChanged: false,
     };
-  const frozen = scene.derivations.filter((d) => d.runId === lastRun.id);
+  // The last press: every run of its batch, the newest at each position (a retry
+  // replaces its run), in position order.
+  const batch = lastRun.batch_id
+    ? [
+        ...scene.runs
+          .filter((r) => r.batch_id === lastRun.batch_id)
+          .sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id))
+          .reduce((byPosition, r) => byPosition.set(r.batch_position!, r), new Map<number, Run>())
+          .entries(),
+      ]
+        .sort(([a], [b]) => a - b)
+        .map(([, r]) => r)
+    : [lastRun];
+  const batchIds = new Set(batch.map((r) => r.id));
+  const frozen = scene.derivations.filter((d) => batchIds.has(d.runId));
+  const frozenOf = (runId: string) =>
+    scene.derivations.filter((d) => d.runId === runId).sort((a, b) => a.position - b.position);
   // Generated blocks are immutable: their frozen version is null and identity suffices.
   const current = (blockId: string) => {
     const b = blockVersion.get(blockId);
@@ -173,13 +221,17 @@ export function machineStaleness(
         .map((input) => input.feedId),
     ),
   ];
+  // Per slot, what every run of the press would send, run after run, against what the
+  // last press's runs froze; a change of mode changes how often each slot is sent.
   const changedSlots = slots.filter((slot) => {
-    const now = inputs
-      .filter((i) => i.slot === slot)
-      .map((i) => `${i.blockId}@${current(i.blockId)}`);
-    const then = frozen
-      .filter((d) => d.label === slot)
-      .map((d) => `${d.sourceBlockId}@${d.sourceVersion}`);
+    const now = parts.flatMap((part) =>
+      part.filter((i) => i.slot === slot).map((i) => `${i.blockId}@${current(i.blockId)}`),
+    );
+    const then = batch.flatMap((run) =>
+      frozenOf(run.id)
+        .filter((d) => d.label === slot)
+        .map((d) => `${d.sourceBlockId}@${d.sourceVersion}`),
+    );
     return now.length !== then.length || now.some((key, index) => key !== then[index]);
   });
   // A group feed that lost cards changes its slot without naming a changed card.
@@ -190,16 +242,19 @@ export function machineStaleness(
     lastRun.machine_version !== block.version ||
     (draftTemplate !== undefined && draftTemplate !== block.content.text);
   const arrowsChanged = !sameList(
-    sentArrows(
-      scene,
-      inputs.map((i) => i.blockId),
+    parts.flatMap((part) =>
+      sentArrows(
+        scene,
+        part.map((i) => i.blockId),
+      ),
     ),
-    frozenArrows(scene, lastRun.id),
+    batch.flatMap((run) => frozenArrows(scene, run.id)),
   );
   return {
     slots,
     inputs,
     feeds,
+    ...fanned,
     missingSlots,
     lastRunId: lastRun.id,
     ran: true,

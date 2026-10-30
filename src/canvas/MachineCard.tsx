@@ -75,6 +75,7 @@ export const MachineCard = memo(function MachineCard({
             align="right"
             className="card-menu nodrag nopan"
           >
+            <button onClick={() => actions.onSaveToWorkshop(blockId)}>Save to Workshop</button>
             <button onClick={() => onManage('versions')}>Version history</button>
             <button onClick={() => onManage('remove')}>Remove from this brane</button>
           </ActionMenu>

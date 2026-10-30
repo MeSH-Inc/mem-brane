@@ -15,6 +15,7 @@ export function estimateRun(
     const { quote } = planRun(db, actor, input, limits, [], machine);
     const budget = budgetState(db, actor, limits.costPolicy);
     return {
+      runs: 1,
       estimatedInputTokens: quote.inputTokens,
       reservedMicrousd: quote.amount,
       canAfford: canAffordQuote(quote, budget, limits.costPolicy),

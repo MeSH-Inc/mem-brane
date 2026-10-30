@@ -94,6 +94,7 @@ async function fixture() {
     if (path === '/runs' || path === '/artifacts/spawn') return receipt(body.edits);
     if (path === '/runs/estimate')
       return {
+        runs: 1,
         estimatedInputTokens: 1,
         reservedMicrousd: 1,
         canAfford: true,
@@ -208,6 +209,8 @@ it('retains SSE progress that arrives after a refresh begins', async () => {
       retry_of: null,
       machine_block_id: null,
       machine_version: null,
+      batch_id: null,
+      batch_position: null,
       created_at: 0,
     },
   ];

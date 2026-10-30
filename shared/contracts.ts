@@ -59,6 +59,8 @@ export const runResponse = runSummaryResponse.extend({
   partial: z.string(),
   machine_block_id: identity.nullable(),
   machine_version: z.number().int().nonnegative().nullable(),
+  batch_id: identity.nullable(),
+  batch_position: z.number().int().nonnegative().nullable(),
 });
 const blockKind = z.enum(['text', 'image', 'webpage', 'pdf', 'machine']);
 export const blockResponse: z.ZodType<Block> = z.object({
@@ -94,6 +96,7 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
       from_group_id: identity.nullable(),
       to_placement_id: identity,
       slot: z.string(),
+      mode: z.enum(['together', 'each']),
       created_at: z.number(),
     }),
   ),
@@ -162,6 +165,8 @@ export const modelPriceResponse = z.object({
   verifiedAt: z.string(),
 });
 export const estimateResponse = z.object({
+  // How many runs the press admits: more than one when a slot is fed 'each'.
+  runs: z.number().int().positive(),
   estimatedInputTokens: z.number(),
   reservedMicrousd: z.number(),
   canAfford: z.boolean(),
@@ -169,6 +174,13 @@ export const estimateResponse = z.object({
   price: modelPriceResponse,
 });
 export type Estimate = z.infer<typeof estimateResponse>;
+export const workshopResponse = z.object({
+  builtIn: z.array(z.object({ name: z.string(), template: z.string() })),
+  saved: z.array(
+    z.object({ id: identity, name: z.string(), template: z.string(), created_at: z.number() }),
+  ),
+});
+export type Workshop = z.infer<typeof workshopResponse>;
 export const savedTextResponse = z.object({
   version: z.number().int().nonnegative(),
   content: z.union([content.options[0], content.options[1]]),

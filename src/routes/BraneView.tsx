@@ -41,6 +41,7 @@ import { FirstSteps } from '../components/FirstSteps';
 import { RunHistory } from '../components/RunHistory';
 import { RunInputs } from '../components/RunInputs';
 import { UnplacedCards } from '../components/UnplacedCards';
+import { Workshop } from '../components/Workshop';
 import { draftDisposition } from '../services/drafts';
 import { useMobile } from '../lib/useMobile';
 import { formatUsd } from '../lib/format';
@@ -157,6 +158,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
   const [inspectorTab, setInspectorTab] = useState<'context' | 'history'>('context');
   const [webOpen, setWebOpen] = useState(false),
     [unplacedOpen, setUnplacedOpen] = useState(false),
+    [workshopOpen, setWorkshopOpen] = useState(false),
     [url, setUrl] = useState(''),
     [managed, setManaged] = useState<{ blockId: string; placementId?: string; view: CardAction }>();
   const mobile = useMobile();
@@ -337,18 +339,29 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
       onEstimateMachine: controller.estimateMachine,
       onFeed: controller.feed,
       onUnfeed: controller.unfeed,
+      onFeedMode: controller.setFeedMode,
+      onSaveToWorkshop: (blockId: string) =>
+        void controller.saveToWorkshop(blockId).then((saved) => saved && setWorkshopOpen(true)),
     }),
     [controller, needsAccount, presentation],
   );
   const tablePlacements = () =>
     (controller.state?.placements ?? []).filter((p) => !p.host_placement_id);
-  const createMachine = useCallback(async () => {
-    const id = await controller.createMachine(
-      openSpot(tablePlacements(), canvasInsertion.current(), 400, 340),
-    );
-    const placementId = controller.state?.placements.find((p) => p.block_id === id)?.id;
-    if (placementId) useInteraction.getState().setSelectedPlacements([placementId]);
-  }, [controller]);
+  const createMachine = useCallback(
+    async (template?: string) => {
+      const attention = presentation.getState().attention;
+      const id = await controller.createMachine(
+        openSpot(tablePlacements(), canvasInsertion.current(), 400, 340),
+        template,
+      );
+      const placementId = controller.state?.placements.find((p) => p.block_id === id)?.id;
+      if (!id || !placementId) return;
+      useInteraction.getState().setSelectedPlacements([placementId]);
+      // The open space beside the view's centre may lie outside the view; bring it in.
+      presentation.getState().reveal(attention, { blockId: id, placementId, kind: 'reveal' });
+    },
+    [controller, presentation],
+  );
   // Focus lists and opens cards on the table; what is on a back is read on its host.
   const tableBlocks = (state?.blocks ?? []).filter((b) =>
     state?.placements.some((p) => p.block_id === b.id && !p.host_placement_id),
@@ -815,6 +828,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
             </button>
             <button onClick={() => setWebOpen(!webOpen)}>↗ Webpage</button>
             <button onClick={() => setUnplacedOpen(true)}>Unplaced cards</button>
+            {!focusMode && <button onClick={() => setWorkshopOpen(true)}>⚒ Workshop</button>}
           </ActionMenu>
           <div className="view-toggle">
             <button
@@ -1564,6 +1578,15 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
             onShowHere={showCardHere}
             onOpenOutput={focusBlock}
             onClose={closeInputs}
+          />
+        )}
+        {workshopOpen && (
+          <Workshop
+            onTakeOut={(template) => {
+              setWorkshopOpen(false);
+              void createMachine(template);
+            }}
+            onClose={() => setWorkshopOpen(false)}
           />
         )}
         {unplacedOpen && (

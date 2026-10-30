@@ -198,10 +198,28 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         from_group_id: command.fromGroupId ?? null,
         to_placement_id: command.toPlacementId,
         slot: command.slot,
+        mode: 'together' as const,
         created_at: Date.now(),
       };
       workspace.feeds = [...workspace.feeds.filter((f) => f.id !== feed.id), feed];
       return feed;
+    }
+    case 'feed.mode': {
+      const workspace = requireWorkspace(state, command.braneId);
+      const feed = workspace.feeds.find((f) => f.id === command.id);
+      if (!feed) throw new Error('This feed is no longer on the brane.');
+      if (
+        command.mode === 'each' &&
+        workspace.feeds.some(
+          (f) =>
+            f.to_placement_id === feed.to_placement_id && f.slot !== feed.slot && f.mode === 'each',
+        )
+      )
+        throw new Error('Another slot of this machine already runs each.');
+      workspace.feeds = workspace.feeds.map((f) =>
+        f.id === command.id ? { ...f, mode: command.mode } : f,
+      );
+      return { ok: true };
     }
     case 'feed.remove': {
       const workspace = requireWorkspace(state, command.braneId);
@@ -333,7 +351,7 @@ export function overlayPending(state: ReplicaState, incoming: BraneState): Brane
   for (const { command: c } of state.pending) {
     if (c.type === 'block.create' || c.type === 'text.edit') blocks.add(c.blockId);
     if (c.type === 'block.create') placements.add(c.placementId);
-    if (c.type === 'feed.create' || c.type === 'feed.remove') feeds.add(c.id);
+    if (c.type.startsWith('feed.') && 'id' in c) feeds.add(c.id);
     if (c.type.startsWith('relation.') && 'id' in c) relations.add(c.id);
     if (c.type.startsWith('group.') && 'id' in c) groups.add(c.id);
     if (c.type.startsWith('placement.') && 'id' in c) placements.add(c.id);

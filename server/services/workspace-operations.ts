@@ -15,7 +15,7 @@ import {
   detachPlacement,
   now,
 } from './content.js';
-import { createFeed, removeFeed } from './feeds.js';
+import { createFeed, removeFeed, setFeedMode } from './feeds.js';
 import { createRelation, relabelRelation, removeRelation } from './relations.js';
 import { createGroup, editGroup, removeGroup } from './groups.js';
 import { MACHINE_TEMPLATE } from '../../shared/machines.js';
@@ -100,6 +100,9 @@ export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceO
         case 'feed.create':
           assertUnused(db, 'feeds', command.id);
           createFeed(db, actor, command);
+          break;
+        case 'feed.mode':
+          setFeedMode(db, actor, command.id, command.braneId, command.mode);
           break;
         case 'feed.remove':
           removeFeed(db, actor, command.id, command.braneId);

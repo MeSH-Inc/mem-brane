@@ -12,6 +12,8 @@ export interface MachineActions {
   onEstimateMachine: (placementId: string) => Promise<Estimate>;
   onFeed: (fromPlacementIds: string[], toPlacementId: string, slot: string) => Promise<unknown>;
   onUnfeed: (feedId: string) => Promise<unknown>;
+  onFeedMode: (feedId: string, mode: 'together' | 'each') => Promise<unknown>;
+  onSaveToWorkshop: (blockId: string) => void;
 }
 
 export function useMachineView(document: WorkspaceDocument, placementId: string, draft?: string) {
@@ -90,13 +92,15 @@ export function MachineControls({
       ? 'Name a {slot} in the prompt'
       : missing
         ? `Feed ${missing}`
-        : refused
-          ? 'Over today’s allowance'
-          : `${view?.stale ? 'Rerun' : 'Run'}${
-              estimate && estimate !== 'unavailable' && estimate.reservedMicrousd > 0
-                ? ` · ${formatUsd(estimate.reservedMicrousd)}`
-                : ''
-            }`;
+        : view?.eachConflict
+          ? 'One slot runs each'
+          : refused
+            ? 'Over today’s allowance'
+            : `${view?.stale ? 'Rerun' : 'Run'}${view && view.runs > 1 ? ` ×${view.runs}` : ''}${
+                estimate && estimate !== 'unavailable' && estimate.reservedMicrousd > 0
+                  ? ` · ${formatUsd(estimate.reservedMicrousd)}`
+                  : ''
+              }`;
   return (
     <>
       <ul className="machine-slots" aria-label="Slots">
@@ -118,6 +122,26 @@ export function MachineControls({
                     className={`slot-chip${feed.groupId ? ' group' : ''}${view?.changedFeeds.includes(feed.feedId) && view.ran ? ' changed' : ''}`}
                   >
                     <span className="slot-chip-label">{labels[feed.feedId]}</span>
+                    {feed.groupId && (
+                      <button
+                        className={`slot-mode${feed.mode === 'each' ? ' each' : ''}`}
+                        aria-pressed={feed.mode === 'each'}
+                        aria-label={`Run ${labels[feed.feedId]} one card at a time`}
+                        title={
+                          feed.mode === 'each'
+                            ? 'Each: one run per card. Press to send them together in one run.'
+                            : 'Together: one run with every card. Press to run once per card.'
+                        }
+                        onClick={() =>
+                          void actions.onFeedMode(
+                            feed.feedId,
+                            feed.mode === 'each' ? 'together' : 'each',
+                          )
+                        }
+                      >
+                        {feed.mode === 'each' ? 'each' : 'together'}
+                      </button>
+                    )}
                     <button
                       aria-label={`Remove ${labels[feed.feedId]} from ${slot}`}
                       onClick={() => void actions.onUnfeed(feed.feedId)}
@@ -142,7 +166,7 @@ export function MachineControls({
       <footer className="machine-footer nodrag nopan">
         <button
           className={`machine-lever${view?.stale ? ' stale' : ''}`}
-          disabled={running || !ready || !!refused}
+          disabled={running || !ready || !!refused || !!view?.eachConflict}
           onClick={() => {
             setRunning(true);
             void actions.onRunMachine(placementId).finally(() => setRunning(false));

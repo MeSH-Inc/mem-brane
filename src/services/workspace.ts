@@ -812,6 +812,7 @@ export class WorkspaceController {
     const view = machineStaleness(state, placementId, draft);
     if (!view.slots.length) throw new Error('Name at least one {slot} in the machine prompt.');
     if (view.missingSlots.length) throw new Error(`Feed the {${view.missingSlots[0]}} slot first.`);
+    if (view.eachConflict) throw new Error('Only one slot can run each card on its own.');
     const inputs = view.inputs.map(({ blockId, slot }) => ({ blockId, slot }));
     return {
       braneId: this.braneId,
@@ -819,6 +820,7 @@ export class WorkspaceController {
       machinePlacementId: placementId,
       model: this.draft.model ?? 'mock',
       inputs,
+      ...(view.eachSlot ? { each: view.eachSlot } : {}),
       edits: this.edits([placement.block_id, ...inputs.map((i) => i.blockId)]),
     };
   }
@@ -899,6 +901,25 @@ export class WorkspaceController {
       );
       await this.client.detachPlacement(placementId, placement.version, geometry);
     }).catch(() => undefined);
+  // Each runs the machine once per card of a group feed; together, once with all of them.
+  setFeedMode = (feedId: string, mode: 'together' | 'each') =>
+    this.mutate(`feedMode:${feedId}`, () =>
+      this.client.setFeedMode(feedId, this.braneId, mode),
+    ).catch(() => undefined);
+  // The Workshop keeps a copy of the machine's saved prompt, named by its opening words.
+  saveToWorkshop = (blockId: string) =>
+    this.command(`workshop:${blockId}`, async () => {
+      const template = this.state?.blocks.find((b) => b.id === blockId)?.content.text ?? '';
+      if (!template.trim()) throw new Error('Write a prompt before saving this machine.');
+      const name =
+        template
+          .split('{')[0]
+          .trim()
+          .replace(/[\s,:;]+$/, '')
+          .slice(0, 60) || template.trim().slice(0, 60);
+      await this.client.saveToWorkshop(name, template);
+      return true;
+    }).catch(() => false);
   unfeed = (feedId: string) =>
     this.mutate(`unfeed:${feedId}`, () => this.client.removeFeed(feedId)).catch(() => undefined);
   // An arrow says how one card stands to another; a run sends it when both are inputs.

@@ -43,6 +43,8 @@ export function scene(): BraneState {
       retry_of: null,
       machine_block_id: null,
       machine_version: null,
+      batch_id: null,
+      batch_position: null,
       created_at: 0,
     })),
     feeds: [],
@@ -136,6 +138,7 @@ export class StressServer {
     if (path.startsWith('/context/lineage/')) return json([]);
     if (path === '/runs/estimate')
       return json({
+        runs: 1,
         estimatedInputTokens: 1,
         reservedMicrousd: 0,
         canAfford: true,

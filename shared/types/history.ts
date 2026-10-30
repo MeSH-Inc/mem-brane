@@ -12,6 +12,9 @@ export interface RevisionPage {
   nextCursor: string | null;
 }
 export interface RunPage {
-  items: Omit<Run, 'partial' | 'machine_block_id' | 'machine_version'>[];
+  items: Omit<
+    Run,
+    'partial' | 'machine_block_id' | 'machine_version' | 'batch_id' | 'batch_position'
+  >[];
   nextCursor: string | null;
 }

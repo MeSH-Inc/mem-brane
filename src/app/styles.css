@@ -2552,3 +2552,52 @@ summary:focus-visible {
 .card-arrows {
   margin-top: 12px;
 }
+/* Each: a group feed's chip says whether it runs once with every card or once per card. */
+.slot-mode {
+  border: 1px solid #c7cbbb;
+  border-radius: 999px;
+  background: #fffefa;
+  color: #4e5547;
+  font-size: 10px;
+  padding: 0 6px;
+}
+.slot-mode.each {
+  border-color: var(--green);
+  background: var(--lime);
+  color: var(--green);
+  font-weight: 600;
+}
+/* The Workshop: machines to take out onto the table. */
+.workshop ul {
+  margin: 4px 0 14px;
+  padding: 0;
+  list-style: none;
+}
+.workshop-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.workshop-take {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  margin: 3px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  text-align: left;
+  cursor: pointer;
+}
+.workshop-take:hover {
+  border-color: var(--green);
+}
+.workshop-slots {
+  color: var(--green);
+  font-size: 12px;
+}
+.workshop-template {
+  color: var(--muted);
+  font-size: 12px;
+}

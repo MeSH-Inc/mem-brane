@@ -64,6 +64,14 @@ export const workspaceCommand = z.discriminatedUnion('type', [
   z.object({ type: z.literal('feed.remove'), id, braneId: id }).strict(),
   z
     .object({
+      type: z.literal('feed.mode'),
+      id,
+      braneId: id,
+      mode: z.enum(['together', 'each']),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('relation.create'),
       id,
       braneId: id,
@@ -107,6 +115,7 @@ export function commandEntity(command: WorkspaceCommand): string {
     case 'text.edit':
       return `block:${command.blockId}`;
     case 'feed.create':
+    case 'feed.mode':
     case 'feed.remove':
       return `feed:${command.id}`;
     case 'relation.create':

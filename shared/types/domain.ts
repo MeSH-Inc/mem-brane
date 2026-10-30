@@ -126,6 +126,10 @@ export interface Run {
   // live version; null for composed and developed runs.
   machine_block_id: string | null;
   machine_version: number | null;
+  // The press that admitted this run with others, one per card of a slot fed 'each',
+  // and this run's card's position in that slot; null for a run admitted alone.
+  batch_id: string | null;
+  batch_position: number | null;
 }
 // One placed card, or one group's members, fills one slot of a placed machine on the
 // same brane. Exactly one of the two sources is set.
@@ -136,6 +140,8 @@ export interface Feed {
   from_group_id: string | null;
   to_placement_id: string;
   slot: string;
+  // A group feed sends its cards to one run ('together') or one run per card ('each').
+  mode: 'together' | 'each';
   created_at: number;
 }
 // An arrow between two cards on the table, in the user's word: "answers", "supports".

@@ -57,6 +57,7 @@ export function reclaimExpiredGuests(db: DB, batchSize: number, time = Date.now(
         const ownedAssets = 'SELECT id FROM assets WHERE owner_id=?';
         db.prepare('DELETE FROM artifact_imports WHERE owner_id=?').run(library);
         db.prepare('DELETE FROM workspace_operations WHERE owner_id=?').run(library);
+        db.prepare('DELETE FROM workshop_machines WHERE owner_id=?').run(library);
         for (const table of ['placements', 'ingestions', 'block_live_state', 'block_revisions'])
           db.prepare(`DELETE FROM ${table} WHERE block_id IN (${ownedBlocks})`).run(library);
         db.prepare('DELETE FROM blocks WHERE owner_id=?').run(library);

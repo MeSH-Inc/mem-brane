@@ -49,6 +49,8 @@ const state: BraneState = {
       retry_of: null,
       machine_block_id: null,
       machine_version: null,
+      batch_id: null,
+      batch_position: null,
       created_at: 0,
     },
   ],

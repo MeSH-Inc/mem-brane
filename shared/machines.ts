@@ -12,6 +12,22 @@ export const MACHINE_TEMPLATE =
 // A machine made from a selection starts with one slot holding every selected card.
 export const SELECTION_MACHINE_TEMPLATE = 'Summarise {cards} in five sentences.';
 export const MAX_SLOT_NAME = 40;
+// One press of a slot fed 'each' admits at most this many runs.
+export const MAX_EACH_RUNS = 12;
+// The Workshop's built-in machines. Taking one out places a machine with its prompt.
+export const BUILT_IN_MACHINES = [
+  { name: 'Critique', template: MACHINE_TEMPLATE },
+  {
+    name: 'Distill',
+    template:
+      'Distill {material} into one card: the main claims, where they agree, and where they conflict.',
+  },
+  {
+    name: 'Extract',
+    template: 'From {source}, answer in one short sentence: what is its main finding?',
+  },
+] as const;
+export const MAX_WORKSHOP_NAME = 60;
 export const machineTemplate = z.string().min(1).max(MAX_BLOCK_TEXT_CHARACTERS);
 const slotPattern = /\{([^{}\n]{1,40})\}/g;
 
@@ -39,6 +55,8 @@ export const runMachine = z
       .min(1)
       .max(32),
     edits: z.array(edit).max(33).default([]),
+    // The slot fed 'each': one run per card in it, all admitted by this one press.
+    each: z.string().trim().min(1).max(40).optional(),
     maxOutputTokens: z.number().int().positive().optional(),
     maxReservedMicrousd: z.number().int().nonnegative().safe().optional(),
   })

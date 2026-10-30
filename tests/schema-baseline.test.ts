@@ -23,6 +23,7 @@ it('applies the baseline once and reopens without changes', () => {
     '004-card-backs.sql',
     '005-relations.sql',
     '006-groups.sql',
+    '007-each-and-workshop.sql',
   ]);
   expect(db.prepare('SELECT enabled FROM guest_policy').pluck().get()).toBe(1);
   db.close();
