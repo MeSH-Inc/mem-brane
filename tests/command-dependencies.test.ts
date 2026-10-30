@@ -93,3 +93,40 @@ it('makes a run wait for the arrows drawn on its brane, and an arrow for its car
     requiredOperations([relate], requestResources('/runs', { braneId: 'other', references: [] })),
   ).toEqual([]);
 });
+
+it('orders a group before the feeds from it, and its members’ removal after it', () => {
+  const group = {
+    key: 'group',
+    command: {
+      type: 'group.create' as const,
+      id: 'g',
+      braneId: 'b',
+      label: 'Group 1',
+      display: 'region' as const,
+      members: ['p', 'q'],
+    },
+  };
+  const feed = {
+    key: 'feed',
+    command: {
+      type: 'feed.create' as const,
+      id: 'f',
+      braneId: 'b',
+      fromGroupId: 'g',
+      toPlacementId: 'm',
+      slot: 'papers',
+    },
+  };
+  const remove = {
+    key: 'remove',
+    command: { type: 'placement.remove' as const, id: 'q', braneId: 'b', version: 0 },
+  };
+  const ungroup = {
+    key: 'ungroup',
+    command: { type: 'group.remove' as const, id: 'g', braneId: 'b' },
+  };
+  const graph = operationDependencies([group, feed, remove, ungroup]);
+  expect([...graph.get('feed')!]).toEqual(['group']);
+  expect([...graph.get('remove')!]).toEqual(['group']);
+  expect([...graph.get('ungroup')!].sort()).toEqual(['feed', 'group']);
+});

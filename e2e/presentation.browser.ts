@@ -26,6 +26,8 @@ test.beforeEach(async ({ page }) => {
     runs: [],
     feeds: [],
     relations: [],
+    groups: [],
+    relationEntries: [],
     derivations: [],
   };
   await page.route('**/api/**', async (route) => {

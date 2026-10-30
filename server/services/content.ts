@@ -7,9 +7,14 @@ import {
 } from './block-state.js';
 import type { SavedText } from '../../shared/contracts.js';
 import { encodeContent, decodeContent, contentReader } from './representations.js';
-import { readWorkspaceRuns, readVisibleDerivations } from './run-reads.js';
+import {
+  readWorkspaceRuns,
+  readVisibleDerivations,
+  readVisibleRelationEntries,
+} from './run-reads.js';
 import { readFeeds } from './feeds.js';
 import { readRelations } from './relations.js';
+import { readGroups } from './groups.js';
 import { MACHINE_TEMPLATE } from '../../shared/machines.js';
 import { MAX_BRANE_PLACEMENTS, fitsArtifactContent } from '../../shared/limits.js';
 import { content as contentSchema } from '../../shared/schemas/index.js';
@@ -360,7 +365,19 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
   const derivations = readVisibleDerivations(db, actor, id);
   const feeds = readFeeds(db, actor, id);
   const relations = readRelations(db, actor, id);
-  return { brane, placements, blocks, feeds, relations, runs, derivations };
+  const groups = readGroups(db, actor, id);
+  const relationEntries = readVisibleRelationEntries(db, actor, id);
+  return {
+    brane,
+    placements,
+    blocks,
+    feeds,
+    relations,
+    groups,
+    runs,
+    derivations,
+    relationEntries,
+  };
 }
 
 interface WorkspaceBlockRow {

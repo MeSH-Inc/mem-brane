@@ -47,6 +47,9 @@ export interface GestureOwner {
   preview(value: GesturePreview): void;
   create(geometry: Geometry): void;
   commit(id: string, geometry: Geometry): void;
+  // The placements a press on this node moves and selects together: a group frame's
+  // members, or a stacked card's whole stack. Undefined for a card on its own.
+  together?(id: string): string[] | undefined;
 }
 type Gesture = Press & {
   kind: 'select' | 'pan' | 'move' | 'resize';
@@ -155,7 +158,18 @@ export class CanvasGestures {
     }
     if (g.surface.kind === 'background') return;
     const id = g.surface.id;
-    const ids = g.selection.includes(id) ? g.selection : g.shift ? [...g.selection, id] : [id];
+    const together = g.kind === 'move' ? this.owner.together?.(id) : undefined;
+    const ids = together
+      ? together.every((member) => g.selection.includes(member))
+        ? g.selection
+        : g.shift
+          ? [...new Set([...g.selection, ...together])]
+          : together
+      : g.selection.includes(id)
+        ? g.selection
+        : g.shift
+          ? [...g.selection, id]
+          : [id];
     this.owner.select(g.kind === 'resize' ? [id] : ids);
     const geometry: Record<string, Geometry> = {};
     for (const p of g.placements) {
@@ -238,12 +252,14 @@ export class CanvasGestures {
         return;
       } else if (g.kind === 'move') {
         const id = g.surface.id;
+        const ids = this.owner.together?.(id) ?? [id];
+        const chosen = ids.every((member) => g.selection.includes(member));
         this.owner.select(
           g.shift
-            ? g.selection.includes(id)
-              ? g.selection.filter((p) => p !== id)
-              : [...g.selection, id]
-            : [id],
+            ? chosen
+              ? g.selection.filter((p) => !ids.includes(p))
+              : [...new Set([...g.selection, ...ids])]
+            : ids,
         );
       }
     }

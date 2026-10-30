@@ -2,7 +2,7 @@ import type { RunRecord } from '../db/records.js';
 import type { RunSummary, RunDetail } from '../../shared/contracts.js';
 import { readInputs } from './context-reader.js';
 import type { DB } from '../db/index.js';
-import type { Run, Derivation } from '../../shared/types/domain.js';
+import type { Run, Derivation, RelationEntry } from '../../shared/types/domain.js';
 import type { RunPage } from '../../shared/types/history.js';
 import { canReadBrane, DomainError, requireOwned } from '../domain/access.js';
 
@@ -50,6 +50,29 @@ export function readVisibleDerivations(db: DB, actor: string, braneId: string): 
     WHERE r.owner_id=? ORDER BY r.created_at,i.position`,
     )
     .all(braneId, actor) as Derivation[];
+}
+
+// The relations each visible output's run sent, by the blocks of the inputs they
+// joined, so the workspace can tell when the arrows drawn now differ.
+export function readVisibleRelationEntries(
+  db: DB,
+  actor: string,
+  braneId: string,
+): RelationEntry[] {
+  canReadBrane(db, actor, braneId);
+  return db
+    .prepare(
+      `SELECT r.id runId,fv.block_id fromBlockId,tv.block_id toBlockId,e.label
+    FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p
+    CROSS JOIN runs r INDEXED BY runs_output_block ON r.output_block_id=p.block_id
+    CROSS JOIN relation_entries e ON e.context_id=r.context_id
+    JOIN context_entries f ON f.context_id=e.context_id AND f.position=e.from_position
+    JOIN block_revisions fv ON fv.id=f.revision_id
+    JOIN context_entries t ON t.context_id=e.context_id AND t.position=e.to_position
+    JOIN block_revisions tv ON tv.id=t.revision_id
+    WHERE r.owner_id=? ORDER BY r.created_at,e.position`,
+    )
+    .all(braneId, actor) as RelationEntry[];
 }
 
 export function readRunPage(

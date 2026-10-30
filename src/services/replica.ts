@@ -43,7 +43,10 @@ const editCommands = new Set([
   'placement.detach',
   'brane.title',
   'feed.remove',
+  'relation.relabel',
   'relation.remove',
+  'group.edit',
+  'group.remove',
 ]);
 const creationCommands = new Set([
   'block.create',
@@ -51,6 +54,7 @@ const creationCommands = new Set([
   'brane.create',
   'feed.create',
   'relation.create',
+  'group.create',
 ]);
 const unavailable = (error: unknown) =>
   error instanceof ApiError
@@ -237,7 +241,8 @@ export class WorkspaceReplica {
         path === '/blocks/machine' ||
         path === '/placements' ||
         path === '/feeds' ||
-        path === '/relations') &&
+        path === '/relations' ||
+        path === '/groups') &&
       body &&
       typeof body === 'object' &&
       'braneId' in body
@@ -371,6 +376,20 @@ export class WorkspaceReplica {
         type: 'relation.remove',
         id,
         braneId: Object.values(state.workspaces).find((w) => w.relations.some((r) => r.id === id))
+          ?.brane.id,
+      };
+    } else if (/^\/relations\/[^/]+$/.test(path) && method === 'PATCH')
+      command = { type: 'relation.relabel', id: path.split('/')[2], ...body };
+    else if (path === '/groups' && method === 'POST')
+      command = { type: 'group.create', ...body, id: crypto.randomUUID() };
+    else if (/^\/groups\/[^/]+$/.test(path) && method === 'PATCH')
+      command = { type: 'group.edit', id: path.split('/')[2], ...body };
+    else if (/^\/groups\/[^/]+$/.test(path) && method === 'DELETE') {
+      const id = path.split('/')[2];
+      command = {
+        type: 'group.remove',
+        id,
+        braneId: Object.values(state.workspaces).find((w) => w.groups.some((g) => g.id === id))
           ?.brane.id,
       };
     } else if (/^\/placements\/[^/]+\/detach$/.test(path) && method === 'POST')
@@ -714,7 +733,11 @@ function commandBrane(state: ReplicaState, command: WorkspaceCommand): string | 
     case 'feed.create':
     case 'feed.remove':
     case 'relation.create':
+    case 'relation.relabel':
     case 'relation.remove':
+    case 'group.create':
+    case 'group.edit':
+    case 'group.remove':
       return command.braneId;
     case 'text.edit':
       return Object.values(state.workspaces).find((w) =>
@@ -741,7 +764,21 @@ function localState(state: ReplicaState, command: WorkspaceCommand): unknown {
     case 'placement.remove':
     case 'feed.remove':
     case 'relation.remove':
+    case 'group.remove':
       return command;
+    case 'relation.relabel':
+      return (
+        Object.values(state.workspaces)
+          .flatMap((w) => w.relations)
+          .find((r) => r.id === command.id) ?? command
+      );
+    case 'group.create':
+    case 'group.edit':
+      return (
+        Object.values(state.workspaces)
+          .flatMap((w) => w.groups)
+          .find((g) => g.id === command.id) ?? command
+      );
     case 'relation.create':
       return (
         Object.values(state.workspaces)
@@ -768,8 +805,13 @@ function serverState(current: BraneState, command: WorkspaceCommand): unknown {
     case 'feed.remove':
       return current.feeds.find((f) => f.id === command.id);
     case 'relation.create':
+    case 'relation.relabel':
     case 'relation.remove':
       return current.relations.find((r) => r.id === command.id);
+    case 'group.create':
+    case 'group.edit':
+    case 'group.remove':
+      return current.groups.find((g) => g.id === command.id);
     default:
       return current.placements.find((p) => p.id === command.id);
   }
@@ -809,9 +851,14 @@ function readLocal(state: ReplicaState, path: string): unknown {
 function isLocalMutation(path: string, method: string): boolean {
   if (path === '/branes') return method === 'POST';
   if (/^\/branes\/[^/]+$/.test(path)) return method === 'PATCH';
-  if (['/blocks/text', '/blocks/machine', '/placements', '/feeds', '/relations'].includes(path))
+  if (
+    ['/blocks/text', '/blocks/machine', '/placements', '/feeds', '/relations', '/groups'].includes(
+      path,
+    )
+  )
     return method === 'POST';
-  if (/^\/(feeds|relations)\/[^/]+$/.test(path)) return method === 'DELETE';
+  if (/^\/feeds\/[^/]+$/.test(path)) return method === 'DELETE';
+  if (/^\/(relations|groups)\/[^/]+$/.test(path)) return ['PATCH', 'DELETE'].includes(method);
   if (path === '/blocks/live') return method === 'PATCH';
   if (/^\/placements\/[^/]+\/detach$/.test(path)) return method === 'POST';
   return /^\/placements\/[^/]+$/.test(path) && ['PATCH', 'DELETE'].includes(method);

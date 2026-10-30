@@ -28,10 +28,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { Placement } from '../../shared/types/domain';
-import { derivationEdges, machineEdges } from './derivations';
+import { derivationEdges, machineEdges, groupNodeId } from './derivations';
+import { GroupFrame, type GroupNode } from './GroupFrame';
+import { frame, groupOf, STACK_EDGES, tableMembers } from './groups';
 import { MachineCard, CardPort, type MachineActions } from './MachineCard';
 import { RelationEdge, RelationPicker, relationEdges, type ArrowDraft } from './RelationEdge';
-import { machineStaleness } from './machines';
+import { answerStaleness, machineStaleness } from './machines';
 import { CardBack, type BackActions } from './CardBack';
 import { AskBox, ASK_WIDTH, type AskNode, type AskPosition } from './AskBox';
 import { SpawnButton } from '../components/SpawnButton';
@@ -68,6 +70,7 @@ type CardData = ResponseActions & {
     toPlacementId: string,
     point: { x: number; y: number },
   ) => void;
+  onTakeOut: (placementId: string) => void;
   machine: MachineActions;
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
@@ -81,16 +84,14 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
     data.document.store,
     (s) => s.scene.placements.filter((p) => p.host_placement_id === id).length,
   );
-  // An input edited since this card was generated marks the flip control, whose back
-  // holds the receipt that says which.
-  const changed = useStore(data.document.store, (s) =>
-    s.scene.derivations.some(
-      (d) =>
-        d.outputBlockId === data.blockId &&
-        d.sourceVersion !== null &&
-        !!s.blocks[d.sourceBlockId] &&
-        s.blocks[d.sourceBlockId].version !== d.sourceVersion,
-    ),
+  // An input edited, or an arrow between inputs changed, since this card was generated
+  // marks the flip control, whose back holds the receipt that says which.
+  const changed = useStore(
+    data.document.store,
+    (s) => !!s.state && answerStaleness(s.state, data.blockId).stale,
+  );
+  const grouped = useStore(data.document.store, (s) =>
+    s.scene.groups.some((g) => g.members.includes(id)),
   );
   const back = useMemo<BackActions>(
     () => ({
@@ -144,8 +145,8 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
         {!data.mobile && (
           <CardPort
-            placementId={id}
-            onFeed={data.machine.onFeed}
+            owner={id}
+            onFeed={(machine, slot) => void data.machine.onFeed([id], machine, slot)}
             onArrow={(to, point) => data.onArrow(id, to, point)}
           />
         )}
@@ -193,6 +194,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
                 <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
               )}
               <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
+              {grouped && <button onClick={() => data.onTakeOut(id)}>Take out of group</button>}
               <button onClick={() => data.onManage(block.id, id, 'place')}>
                 Show on another brane…
               </button>
@@ -235,7 +237,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
     content
   );
 });
-const nodeTypes = { card: Card, ask: AskBox };
+const nodeTypes = { card: Card, ask: AskBox, cardGroup: GroupFrame };
 const edgeTypes = { relation: RelationEdge };
 interface Props extends ResponseActions {
   mobile: boolean;
@@ -257,7 +259,11 @@ interface Props extends ResponseActions {
   onReuse: CardData['onReuse'];
   onUpdate: CardData['onUpdate'];
   onRelate: (fromPlacementId: string, toPlacementId: string, label: string) => void;
+  onRelabel: (relationId: string, label: string) => void;
   onUnrelate: (relationId: string) => void;
+  onFeedGroup: GroupNode['data']['onFeed'];
+  onRenameGroup: GroupNode['data']['onRename'];
+  onTakeOut: CardData['onTakeOut'];
   // The open Ask box: where it stands and the prompt panel it holds.
   ask?: AskPosition & { content: ReactNode };
   onCloseAsk: () => void;
@@ -306,6 +312,14 @@ function Inner(props: Props) {
     [],
   );
   const closeArrow = useCallback(() => setArrow(undefined), []);
+  const relabelArrow = useCallback(
+    (relationId: string, label: string, point: { x: number; y: number }) =>
+      setArrow({ relationId, label, ...point }),
+    [],
+  );
+  const groups = scene.groups;
+  const latestGroups = useRef(groups);
+  latestGroups.current = groups;
   const placements = scene.placements;
   const {
     geometry,
@@ -322,6 +336,15 @@ function Inner(props: Props) {
     },
     create: props.onCreate,
     commit: props.onGeometry,
+    // A frame's header moves its group; any card of a stack moves the whole stack.
+    together: (id) => {
+      const group = id.startsWith('group:')
+        ? latestGroups.current.find((g) => groupNodeId(g.id) === id)
+        : groupOf(latestGroups.current, id);
+      return group && (id.startsWith('group:') || group.display === 'stack')
+        ? group.members
+        : undefined;
+    },
   });
   const insertion = useCallback(() => {
     const bounds = host.current?.getBoundingClientRect();
@@ -346,11 +369,20 @@ function Inner(props: Props) {
   const nodes = useMemo<CardNode[]>(() => {
     const visible = new Set(placements.map((p) => p.id));
     for (const id of nodeCache.current.keys()) if (!visible.has(id)) nodeCache.current.delete(id);
+    // A stack draws its first member on top. Cards past the last visible edge lie
+    // exactly behind it, so their order among themselves is never seen.
+    const stacked = new Map<string, number>();
+    for (const group of groups)
+      if (group.display === 'stack')
+        group.members.forEach((id, index) =>
+          stacked.set(id, STACK_EDGES + 1 - Math.min(index, STACK_EDGES + 1)),
+        );
     return placements.map((p) => {
       const g = geometry[p.id] ?? p;
       const next: CardNode = {
         id: p.id,
         type: 'card',
+        zIndex: stacked.get(p.id),
         position: { x: g.x, y: g.y },
         width: g.width,
         height: g.height,
@@ -385,6 +417,7 @@ function Inner(props: Props) {
           onReuse: props.onReuse,
           onUpdate: props.onUpdate,
           onArrow: drawArrow,
+          onTakeOut: props.onTakeOut,
           onStop: props.onStop,
           onRetry: props.onRetry,
           machine: props.machine,
@@ -398,6 +431,7 @@ function Inner(props: Props) {
         previous.width === next.width &&
         previous.height === next.height &&
         previous.selected === next.selected &&
+        previous.zIndex === next.zIndex &&
         (Object.keys(next.data) as (keyof CardData)[]).every(
           (key) => previous.data[key] === next.data[key],
         )
@@ -428,18 +462,51 @@ function Inner(props: Props) {
     props.onReuse,
     props.onUpdate,
     drawArrow,
+    props.onTakeOut,
+    groups,
     props.onStop,
     props.onRetry,
     props.machine,
   ]);
+  // Frames follow their members as they are dragged, so they read the gesture's preview.
+  const frames = useMemo<GroupNode[]>(
+    () =>
+      groups.flatMap((group) => {
+        const members = tableMembers({ placements }, group).map((p) => geometry[p.id] ?? p);
+        if (!members.length) return [];
+        const box = frame(members);
+        return [
+          {
+            id: groupNodeId(group.id),
+            type: 'cardGroup',
+            zIndex: -1,
+            position: { x: box.x, y: box.y },
+            width: box.width,
+            height: box.height,
+            style: { width: box.width, height: box.height, pointerEvents: 'none' },
+            data: {
+              groupId: group.id,
+              label: group.label,
+              display: group.display,
+              count: members.length,
+              chosen: group.members.every((id) => selected.includes(id)),
+              onFeed: props.onFeedGroup,
+              onRename: props.onRenameGroup,
+            },
+          },
+        ];
+      }),
+    [groups, placements, geometry, selected, props.onFeedGroup, props.onRenameGroup],
+  );
   const askData = useMemo(
     () => props.ask && { content: props.ask.content, onClose: props.onCloseAsk },
     [props.ask, props.onCloseAsk],
   );
-  const allNodes = useMemo<(CardNode | AskNode)[]>(
+  const allNodes = useMemo<(CardNode | AskNode | GroupNode)[]>(
     () =>
       props.ask && askData
         ? [
+            ...frames,
             ...nodes,
             {
               id: `ask:${props.ask.id}`,
@@ -450,8 +517,8 @@ function Inner(props: Props) {
               data: askData,
             },
           ]
-        : nodes,
-    [nodes, props.ask, askData],
+        : [...frames, ...nodes],
+    [frames, nodes, props.ask, askData],
   );
   // An Ask box opened out of sight is brought into view with the cards it asks about.
   const askId = props.ask?.id;
@@ -528,9 +595,9 @@ function Inner(props: Props) {
     () => [
       ...derivationEdges(scene, new Set(machineRuns.split(' ').filter(Boolean))),
       ...machineEdges(scene, new Set(changedFeeds.split(' ').filter(Boolean))),
-      ...relationEdges(scene, props.onUnrelate),
+      ...relationEdges(scene, props.onUnrelate, relabelArrow),
     ],
-    [scene, machineRuns, changedFeeds, props.onUnrelate],
+    [scene, machineRuns, changedFeeds, props.onUnrelate, relabelArrow],
   );
   return (
     <div
@@ -590,7 +657,9 @@ function Inner(props: Props) {
         <RelationPicker
           draft={arrow}
           onPick={(label) => {
-            props.onRelate(arrow.from, arrow.to, label);
+            if (arrow.relationId !== undefined) {
+              if (label !== arrow.label) props.onRelabel(arrow.relationId, label);
+            } else props.onRelate(arrow.from, arrow.to, label);
             setArrow(undefined);
           }}
           onClose={closeArrow}

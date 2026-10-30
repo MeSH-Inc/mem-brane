@@ -6,6 +6,12 @@ import { LiveBlockContent } from '../components/LiveBlockContent';
 import { ResponseSources } from '../components/ResponseSources';
 import type { ResponseActions } from '../components/ResponseContent';
 import { statusLabels } from '../lib/labels';
+import { answerStaleness } from './machines';
+import type { Block } from '../../shared/types/domain';
+
+// A card named by its first words, for lists that point at other cards.
+export const cardName = (block: Block | undefined) =>
+  (block?.content.text ?? '').trim().slice(0, 32) || 'Untitled card';
 
 export interface BackActions extends ResponseActions {
   onDetach: (placementId: string) => void;
@@ -56,16 +62,23 @@ export const CardBack = memo(function CardBack({
       ? run.id
       : '';
   });
-  // A source edited since the answer was asked offers Update.
-  const stale = useStore(document.store, (s) =>
-    s.scene.derivations.some(
-      (d) =>
-        d.outputBlockId === blockId &&
-        d.sourceVersion !== null &&
-        !!s.blocks[d.sourceBlockId] &&
-        s.blocks[d.sourceBlockId].version !== d.sourceVersion,
-    ),
+  // A source edited, or an arrow between sources drawn, reworded or removed, since the
+  // answer was asked offers Update.
+  const stale = useStore(
+    document.store,
+    (s) => !!s.state && answerStaleness(s.state, blockId).stale,
   );
+  // The arrows this answer's run sent, as sentences over its sources' first words.
+  const sentKey = useStore(document.store, (s) => {
+    const run = s.runs[blockId];
+    if (!run || !s.state) return '[]';
+    return JSON.stringify(
+      s.state.relationEntries
+        .filter((e) => e.runId === run.id)
+        .map((e) => [cardName(s.blocks[e.fromBlockId]), e.label, cardName(s.blocks[e.toBlockId])]),
+    );
+  });
+  const sent = useMemo(() => JSON.parse(sentKey) as [string, string, string][], [sentKey]);
   const [updating, setUpdating] = useState(false);
   const [question, setQuestion] = useState('');
   // Based on lists the sources with Exact inputs; a run without sources still has them.
@@ -118,6 +131,15 @@ export const CardBack = memo(function CardBack({
                 Make reusable
               </button>
             </blockquote>
+          )}
+          {sent.length > 0 && (
+            <ul className="back-arrows" aria-label="Arrows sent">
+              {sent.map(([from, label, to], index) => (
+                <li key={index}>
+                  {from} <strong>{label}</strong> {to}
+                </li>
+              ))}
+            </ul>
           )}
           {unsourced && (
             <button className="text-button" onClick={() => actions.onInspect(unsourced)}>
@@ -198,4 +220,68 @@ export function backItems(
       };
     })
     .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+// A card's arrows, listed: where arrows are not drawn (Focus and phones), this is how
+// they are read and removed.
+export function CardArrows({
+  placementId,
+  document,
+  onRemove,
+}: {
+  placementId: string;
+  document: WorkspaceDocument;
+  onRemove: (relationId: string) => void;
+}) {
+  const key = useStore(document.store, (s) => {
+    const block = new Map(s.scene.placements.map((p) => [p.id, p.block_id]));
+    return JSON.stringify(
+      s.scene.relations
+        .filter((r) => r.from_placement_id === placementId || r.to_placement_id === placementId)
+        .map((r) => ({
+          id: r.id,
+          label: r.label,
+          outgoing: r.from_placement_id === placementId,
+          other: cardName(
+            s.blocks[
+              block.get(
+                r.from_placement_id === placementId ? r.to_placement_id : r.from_placement_id,
+              )!
+            ],
+          ),
+        })),
+    );
+  });
+  const arrows = useMemo(
+    () => JSON.parse(key) as { id: string; label: string; outgoing: boolean; other: string }[],
+    [key],
+  );
+  if (!arrows.length) return null;
+  return (
+    <section className="card-arrows" aria-label="Arrows">
+      <span className="eyebrow">Arrows</span>
+      <ul>
+        {arrows.map((arrow) => (
+          <li key={arrow.id}>
+            {arrow.outgoing ? (
+              <>
+                This card <strong>{arrow.label}</strong> {arrow.other}
+              </>
+            ) : (
+              <>
+                {arrow.other} <strong>{arrow.label}</strong> this card
+              </>
+            )}
+            <button
+              className="text-button"
+              aria-label={`Remove arrow “${arrow.label}”`}
+              onClick={() => onRemove(arrow.id)}
+            >
+              ×
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }

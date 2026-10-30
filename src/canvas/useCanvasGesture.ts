@@ -39,6 +39,7 @@ export function useCanvasGesture(
         camera: (view) => callbacks.current.camera(view),
         create: (g) => callbacks.current.create(g),
         commit: (id, g) => callbacks.current.commit(id, g),
+        together: (id) => callbacks.current.together?.(id),
         preview: setPreview,
       }),
   );

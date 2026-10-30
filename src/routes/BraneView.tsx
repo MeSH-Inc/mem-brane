@@ -14,7 +14,7 @@ import { ImportTray } from '../components/ImportTray';
 import { selectedBlockIds } from '../canvas/selection';
 import { openSpot } from '../canvas/machines';
 import { SELECTION_MACHINE_TEMPLATE } from '../../shared/machines';
-import { CardBack } from '../canvas/CardBack';
+import { CardBack, CardArrows } from '../canvas/CardBack';
 import { MachineControls } from '../canvas/MachineControls';
 import { ASK_HEIGHT, ASK_WIDTH, type AskPosition } from '../canvas/AskBox';
 import {
@@ -542,6 +542,13 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
   // Machine: one {cards} slot fed with the whole selection, its prompt ready to edit.
   const machineFromSelection = () =>
     feedNewMachine(SELECTION_MACHINE_TEMPLATE, [['cards', selectedCards]], true);
+  // The group whose cards on the table are exactly the selection, if there is one.
+  const chosenGroup = state?.groups.find((g) => {
+    const members = g.members.filter((id) => selectedCards.some((p) => p.id === id));
+    return members.length === selectedCards.length && members.length === g.members.length;
+  });
+  const groupable = selectedCards.length > 1 && !chosenGroup;
+  const groupSelection = () => void controller.group(selectedCards.map((p) => p.id));
   const flipSelection = () => {
     const interaction = useInteraction.getState();
     const back = !selectedCards.every((p) => interaction.flipped.includes(p.id));
@@ -753,6 +760,9 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
         } else if (event.key === 'd' && developable) {
           event.preventDefault();
           spawn(developable.block_id, developable.id);
+        } else if (event.key === 'g' && groupable) {
+          event.preventDefault();
+          groupSelection();
         }
       }}
       onWheelCapture={presentation.getState().interact}
@@ -1094,6 +1104,11 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                           document={controller.document}
                           actions={focusBack}
                         />
+                        <CardArrows
+                          placementId={focusedPlacement.id}
+                          document={controller.document}
+                          onRemove={controller.unrelate}
+                        />
                       </section>
                     ))}
                   <footer>
@@ -1196,7 +1211,11 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 onReuse={makeReusable}
                 onUpdate={controller.update}
                 onRelate={controller.relate}
+                onRelabel={controller.relabel}
                 onUnrelate={controller.unrelate}
+                onFeedGroup={controller.feedGroup}
+                onRenameGroup={controller.renameGroup}
+                onTakeOut={controller.takeOutOfGroup}
                 ask={canvasAsk && askAt ? { ...askAt, content: promptPanel } : undefined}
                 onCloseAsk={closeAsk}
                 machine={machineActions}
@@ -1240,6 +1259,39 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 >
                   Machine
                 </button>
+                {groupable && (
+                  <button
+                    title="Make these cards one group that moves and feeds as one (G)"
+                    onClick={groupSelection}
+                  >
+                    Group
+                  </button>
+                )}
+                {chosenGroup && (
+                  <>
+                    <button
+                      title={
+                        chosenGroup.display === 'stack'
+                          ? 'Lay the stack out as a region'
+                          : 'Pile these cards into one card’s space'
+                      }
+                      onClick={() =>
+                        void controller.arrangeGroup(
+                          chosenGroup.id,
+                          chosenGroup.display === 'stack' ? 'region' : 'stack',
+                        )
+                      }
+                    >
+                      {chosenGroup.display === 'stack' ? 'Spread' : 'Stack'}
+                    </button>
+                    <button
+                      title="Keep the cards where they are, without the group"
+                      onClick={() => void controller.ungroup(chosenGroup.id)}
+                    >
+                      Ungroup
+                    </button>
+                  </>
+                )}
                 <button title="Turn over (F)" onClick={flipSelection}>
                   Flip
                 </button>

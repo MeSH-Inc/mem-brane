@@ -54,6 +54,8 @@ const state: BraneState = {
   runs: [],
   feeds: [],
   relations: [],
+  groups: [],
+  relationEntries: [],
   derivations: [],
 };
 const workspace = new WorkspaceDocument();
@@ -88,7 +90,11 @@ function render(s = state) {
           onReuse={noop}
           onUpdate={async () => {}}
           onRelate={noop}
+          onRelabel={noop}
           onUnrelate={noop}
+          onFeedGroup={noop}
+          onRenameGroup={noop}
+          onTakeOut={noop}
           onCloseAsk={noop}
         />
       </StrictMode>,

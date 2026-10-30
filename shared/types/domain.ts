@@ -127,11 +127,13 @@ export interface Run {
   machine_block_id: string | null;
   machine_version: number | null;
 }
-// One placed card fills one slot of a placed machine on the same brane.
+// One placed card, or one group's members, fills one slot of a placed machine on the
+// same brane. Exactly one of the two sources is set.
 export interface Feed {
   id: string;
   brane_id: string;
-  from_placement_id: string;
+  from_placement_id: string | null;
+  from_group_id: string | null;
   to_placement_id: string;
   slot: string;
   created_at: number;
@@ -145,14 +147,33 @@ export interface Relation {
   label: string;
   created_at: number;
 }
+// A labelled, ordered set of cards on the table that moves and feeds as one.
+export interface Group {
+  id: string;
+  brane_id: string;
+  label: string;
+  display: 'region' | 'stack';
+  created_at: number;
+  // Member placements in member order, which is the order a feed sends them.
+  members: string[];
+}
+// A relation a run sent, by the blocks of the two inputs it joined.
+export interface RelationEntry {
+  runId: string;
+  fromBlockId: string;
+  toBlockId: string;
+  label: string;
+}
 export interface BraneState {
   brane: Brane;
   blocks: Block[];
   placements: Placement[];
   feeds: Feed[];
   relations: Relation[];
+  groups: Group[];
   runs: Run[];
   derivations: Derivation[];
+  relationEntries: RelationEntry[];
 }
 export interface RunInput {
   position: number;

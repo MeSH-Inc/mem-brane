@@ -2,8 +2,14 @@ import { z } from 'zod';
 import { id, geometry, edit, placementEdit } from './schemas/index.js';
 import { slotName, machineTemplate } from './machines.js';
 import { relationLabel } from './relations.js';
+import { groupLabel, groupDisplay, MAX_GROUP_MEMBERS } from './groups.js';
 
 const title = z.string().trim().min(1).max(200);
+const members = z
+  .array(id)
+  .min(1)
+  .max(MAX_GROUP_MEMBERS)
+  .refine((ids) => new Set(ids).size === ids.length, 'A card is a member of a group once.');
 export const workspaceCommand = z.discriminatedUnion('type', [
   z.object({ type: z.literal('brane.create'), id, title }).strict(),
   z.object({ type: z.literal('brane.title'), id, title, previous: z.string() }).strict(),
@@ -48,7 +54,9 @@ export const workspaceCommand = z.discriminatedUnion('type', [
       type: z.literal('feed.create'),
       id,
       braneId: id,
-      fromPlacementId: id,
+      // Exactly one: a card, or a group whose members feed in member order.
+      fromPlacementId: id.optional(),
+      fromGroupId: id.optional(),
       toPlacementId: id,
       slot: slotName,
     })
@@ -64,7 +72,30 @@ export const workspaceCommand = z.discriminatedUnion('type', [
       label: relationLabel,
     })
     .strict(),
+  z.object({ type: z.literal('relation.relabel'), id, braneId: id, label: relationLabel }).strict(),
   z.object({ type: z.literal('relation.remove'), id, braneId: id }).strict(),
+  z
+    .object({
+      type: z.literal('group.create'),
+      id,
+      braneId: id,
+      label: groupLabel,
+      display: groupDisplay,
+      members,
+    })
+    .strict(),
+  // An edit states the whole group: its label, display and members in order.
+  z
+    .object({
+      type: z.literal('group.edit'),
+      id,
+      braneId: id,
+      label: groupLabel,
+      display: groupDisplay,
+      members,
+    })
+    .strict(),
+  z.object({ type: z.literal('group.remove'), id, braneId: id }).strict(),
 ]);
 export const workspaceOperation = z.object({ key: id, command: workspaceCommand }).strict();
 export const workspaceAcknowledgement = z.object({ key: id }).strict();
@@ -79,8 +110,13 @@ export function commandEntity(command: WorkspaceCommand): string {
     case 'feed.remove':
       return `feed:${command.id}`;
     case 'relation.create':
+    case 'relation.relabel':
     case 'relation.remove':
       return `relation:${command.id}`;
+    case 'group.create':
+    case 'group.edit':
+    case 'group.remove':
+      return `group:${command.id}`;
     case 'brane.create':
     case 'brane.title':
       return `brane:${command.id}`;

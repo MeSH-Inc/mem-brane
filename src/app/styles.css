@@ -2375,9 +2375,10 @@ summary:focus-visible {
   font-size: 11px;
   padding: 3px 9px;
 }
-/* An open card menu draws above the neighbouring cards it overlaps. */
+/* An open card menu draws above the neighbouring cards it overlaps, a selected stack's
+   cards (z-index up to 1004) included. */
 .react-flow__node:has(.action-menu[open]) {
-  z-index: 1002 !important;
+  z-index: 1010 !important;
 }
 /* Arrows: a labelled line between two cards, drawn from a card's port. */
 /* An arrow's word stays readable where its line passes under a card, selected cards
@@ -2460,4 +2461,94 @@ summary:focus-visible {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+}
+.relation-word {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.relation-word:hover {
+  text-decoration: underline;
+}
+.relation-picker button[aria-pressed='true'] {
+  background: #dfe5f1;
+  border-color: #8794b0;
+}
+/* Groups: a frame round cards that move and feed as one. Only the header takes the
+   pointer; inside a region the table stays the table. */
+.group-frame {
+  width: 100%;
+  height: 100%;
+  border: 1.5px dashed #a9b39b;
+  border-radius: 14px;
+  background: #eef0e333;
+  pointer-events: none;
+}
+.group-frame.chosen {
+  border-color: var(--green);
+  background: #dce8a51f;
+}
+.group-frame.stack {
+  border-style: solid;
+  border-color: #c7cbbb;
+}
+.group-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 28px 0 12px;
+  color: #4e5547;
+  font-size: 12px;
+  cursor: grab;
+  pointer-events: all;
+}
+.group-label {
+  font-weight: 600;
+}
+.group-count {
+  color: var(--muted);
+}
+.group-header .icon-button {
+  padding: 0 4px;
+  opacity: 0;
+}
+.group-header:hover .icon-button,
+.group-header .icon-button:focus-visible {
+  opacity: 1;
+}
+.group-header input {
+  width: 160px;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+.group-header .card-port {
+  opacity: 1;
+}
+.group-frame .react-flow__handle {
+  opacity: 0;
+}
+.slot-chip.group .slot-chip-label {
+  font-weight: 600;
+}
+.back-arrows,
+.card-arrows ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: #3d4a66;
+}
+.back-arrows li,
+.card-arrows li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+.card-arrows {
+  margin-top: 12px;
 }

@@ -16,7 +16,8 @@ import {
   now,
 } from './content.js';
 import { createFeed, removeFeed } from './feeds.js';
-import { createRelation, removeRelation } from './relations.js';
+import { createRelation, relabelRelation, removeRelation } from './relations.js';
+import { createGroup, editGroup, removeGroup } from './groups.js';
 import { MACHINE_TEMPLATE } from '../../shared/machines.js';
 
 export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceOperation) {
@@ -107,8 +108,21 @@ export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceO
           assertUnused(db, 'relations', command.id);
           createRelation(db, actor, command);
           break;
+        case 'relation.relabel':
+          relabelRelation(db, actor, command.id, command.braneId, command.label);
+          break;
         case 'relation.remove':
           removeRelation(db, actor, command.id, command.braneId);
+          break;
+        case 'group.create':
+          assertUnused(db, 'groups', command.id);
+          createGroup(db, actor, command);
+          break;
+        case 'group.edit':
+          editGroup(db, actor, command);
+          break;
+        case 'group.remove':
+          removeGroup(db, actor, command.id, command.braneId);
           break;
         case 'placement.remove':
           if (getPlacement(db, actor, command.id).brane_id !== command.braneId)
@@ -130,7 +144,7 @@ export function applyWorkspaceOperation(db: DB, actor: string, input: WorkspaceO
 }
 function assertUnused(
   db: DB,
-  table: 'branes' | 'blocks' | 'placements' | 'feeds' | 'relations',
+  table: 'branes' | 'blocks' | 'placements' | 'feeds' | 'relations' | 'groups',
   id: string,
 ) {
   if (db.prepare(`SELECT 1 FROM ${table} WHERE id=?`).get(id))

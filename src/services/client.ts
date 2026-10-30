@@ -6,11 +6,20 @@ import { submissionReceipt, pdfRepresentation } from '../../shared/schemas';
 import type {
   Edit,
   Geometry,
+  Group,
   PlacementEdit,
   SubmitRunRequest,
   SpawnArtifactRequest,
 } from '../../shared/types/domain';
 import type { RunMachineRequest } from '../../shared/machines';
+
+// A group stated whole: its label, display and members in member order.
+interface GroupBody {
+  braneId: string;
+  label: string;
+  display: Group['display'];
+  members: string[];
+}
 
 export class InvalidApiResponse extends Error {
   constructor(path: string, cause: unknown) {
@@ -45,7 +54,8 @@ export function createClient(request: typeof api) {
       read(response.createdBlockResponse, '/blocks/machine', { braneId, geometry, template }),
     createFeed: (body: {
       braneId: string;
-      fromPlacementId: string;
+      fromPlacementId?: string;
+      fromGroupId?: string;
       toPlacementId: string;
       slot: string;
     }) => request('/feeds', body),
@@ -56,7 +66,12 @@ export function createClient(request: typeof api) {
       toPlacementId: string;
       label: string;
     }) => request('/relations', body),
+    relabelRelation: (id: string, braneId: string, label: string) =>
+      request(`/relations/${id}`, { braneId, label }, 'PATCH'),
     removeRelation: (id: string) => request(`/relations/${id}`, undefined, 'DELETE'),
+    createGroup: (body: GroupBody) => request('/groups', body),
+    editGroup: (id: string, body: GroupBody) => request(`/groups/${id}`, body, 'PATCH'),
+    removeGroup: (id: string) => request(`/groups/${id}`, undefined, 'DELETE'),
     runMachine: (input: RunMachineRequest) => read(submissionReceipt, '/machines/run', input),
     estimateMachine: (input: RunMachineRequest) =>
       read(response.estimateResponse, '/machines/estimate', input),

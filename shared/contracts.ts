@@ -90,7 +90,8 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
     z.object({
       id: identity,
       brane_id: identity,
-      from_placement_id: identity,
+      from_placement_id: identity.nullable(),
+      from_group_id: identity.nullable(),
       to_placement_id: identity,
       slot: z.string(),
       created_at: z.number(),
@@ -104,6 +105,16 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
       to_placement_id: identity,
       label: z.string(),
       created_at: z.number(),
+    }),
+  ),
+  groups: z.array(
+    z.object({
+      id: identity,
+      brane_id: identity,
+      label: z.string(),
+      display: z.enum(['region', 'stack']),
+      created_at: z.number(),
+      members: z.array(identity),
     }),
   ),
   runs: z.array(runResponse),
@@ -120,6 +131,9 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
       anchorPlacementId: identity.nullable(),
       outputPlacementId: identity.nullable(),
     }),
+  ),
+  relationEntries: z.array(
+    z.object({ runId: identity, fromBlockId: identity, toBlockId: identity, label: z.string() }),
   ),
 });
 export const budgetResponse = z.object({

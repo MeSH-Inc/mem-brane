@@ -60,6 +60,8 @@ const state = (versionA: number): BraneState => ({
   runs: [],
   feeds: [],
   relations: [],
+  groups: [],
+  relationEntries: [],
   derivations: [
     derivation({}),
     derivation({ sourceBlockId: 'c', sourceRevisionId: 'rev-c', sourceVersion: null, position: 1 }),

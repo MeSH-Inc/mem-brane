@@ -66,6 +66,15 @@ export function createRelation(db: DB, actor: string, input: RelationRequest): R
   return relation;
 }
 
+// Change an arrow's word. Runs already admitted keep the word they froze.
+export function relabelRelation(db: DB, actor: string, id: string, braneId: string, label: string) {
+  canEditBrane(db, actor, braneId);
+  const result = db
+    .prepare('UPDATE relations SET label=? WHERE id=? AND brane_id=?')
+    .run(label, id, braneId);
+  if (!result.changes) throw new DomainError(404, 'This arrow is no longer on the brane.');
+}
+
 // Removing a relation that a placement removal already cascaded away satisfies the intent.
 export function removeRelation(db: DB, actor: string, id: string, braneId: string) {
   canEditBrane(db, actor, braneId);

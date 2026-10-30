@@ -106,6 +106,7 @@ export function submitRun(
       label: entry.label,
       role: 'user',
       revisionId: revisions[index],
+      relation: entry.relation,
     }));
     const anchor = machine
       ? machine.placement
@@ -313,9 +314,14 @@ function replacedAnswer(db: DB, braneId: string, placementId: string) {
 // The replaced output, and anything already on its back, move to the new output's
 // back. Feeds it gave other machines follow the tray, keeping their position in each
 // slot, so those machines see the new output and go stale instead of running on;
-// arrows follow it too.
+// arrows and group membership follow it too.
 function moveToBack(db: DB, replaced: Placement, outputPlacementId: string) {
   const time = now();
+  // The new card takes the replaced card's place in its group while both are on the table.
+  db.prepare('UPDATE group_members SET placement_id=? WHERE placement_id=?').run(
+    outputPlacementId,
+    replaced.id,
+  );
   const rehost = db.prepare(
     'UPDATE placements SET host_placement_id=?,version=version+1,updated_at=? WHERE host_placement_id=?',
   );

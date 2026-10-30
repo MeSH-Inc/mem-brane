@@ -56,27 +56,36 @@ export function derivationEdges(
   });
 }
 
-// Feeds are authored inputs: card output to a machine's slot. A feed whose card changed
-// since the machine's last run is drawn dashed in the stale colour.
+// Feeds are authored inputs: a card's output, or a group's frame, to a machine's slot. A
+// feed whose cards changed since the machine's last run is drawn dashed in the stale
+// colour.
 export function machineEdges(
-  state: Pick<BraneState, 'placements' | 'feeds'>,
+  state: Pick<BraneState, 'placements' | 'feeds' | 'groups'>,
   changedFeeds: Set<string> = new Set(),
 ): Edge[] {
   const placed = new Set(state.placements.map((p) => p.id));
-  return state.feeds
-    .filter((f) => placed.has(f.from_placement_id) && placed.has(f.to_placement_id))
-    .map((f) => ({
-      id: `feed:${f.id}`,
-      source: f.from_placement_id,
-      target: f.to_placement_id,
-      sourceHandle: 'output',
-      targetHandle: `slot:${f.slot}`,
-      type: 'default',
-      selectable: false,
-      deletable: false,
-      className: changedFeeds.has(f.id) ? 'feed-edge stale' : 'feed-edge',
-      style: changedFeeds.has(f.id)
-        ? { stroke: '#c98a1b', strokeWidth: 2, strokeDasharray: '6 4' }
-        : { stroke: '#7d8a7e', strokeWidth: 2 },
-    }));
+  const groups = new Set(state.groups.map((g) => g.id));
+  return state.feeds.flatMap((f) => {
+    const source = f.from_group_id
+      ? groups.has(f.from_group_id) && groupNodeId(f.from_group_id)
+      : placed.has(f.from_placement_id!) && f.from_placement_id!;
+    if (!source || !placed.has(f.to_placement_id)) return [];
+    return [
+      {
+        id: `feed:${f.id}`,
+        source,
+        target: f.to_placement_id,
+        sourceHandle: 'output',
+        targetHandle: `slot:${f.slot}`,
+        type: 'default',
+        selectable: false,
+        deletable: false,
+        className: changedFeeds.has(f.id) ? 'feed-edge stale' : 'feed-edge',
+        style: changedFeeds.has(f.id)
+          ? { stroke: '#c98a1b', strokeWidth: 2, strokeDasharray: '6 4' }
+          : { stroke: '#7d8a7e', strokeWidth: 2 },
+      },
+    ];
+  });
 }
+export const groupNodeId = (groupId: string) => `group:${groupId}`;

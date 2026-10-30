@@ -43,7 +43,7 @@ export function commandAccess(c: WorkspaceCommand): CommandAccess {
       return {
         reads: [
           exists('brane', c.braneId),
-          exists('placement', c.fromPlacementId),
+          c.fromGroupId ? exists('group', c.fromGroupId) : exists('placement', c.fromPlacementId!),
           exists('placement', c.toPlacementId),
         ],
         writes: [exists('feed', c.id)],
@@ -60,8 +60,22 @@ export function commandAccess(c: WorkspaceCommand): CommandAccess {
         ],
         writes: [exists('relation', c.id), value('relations', c.braneId)],
       };
+    case 'relation.relabel':
+      return { reads: [exists('relation', c.id)], writes: [value('relations', c.braneId)] };
     case 'relation.remove':
       return { reads: [], writes: [exists('relation', c.id), value('relations', c.braneId)] };
+    case 'group.create':
+      return {
+        reads: [exists('brane', c.braneId), ...c.members.map((id) => exists('placement', id))],
+        writes: [exists('group', c.id), value('group', c.id)],
+      };
+    case 'group.edit':
+      return {
+        reads: [exists('group', c.id), ...c.members.map((id) => exists('placement', id))],
+        writes: [value('group', c.id)],
+      };
+    case 'group.remove':
+      return { reads: [], writes: [exists('group', c.id), value('group', c.id)] };
   }
 }
 export function operationDependencies(operations: PendingOperation[]) {

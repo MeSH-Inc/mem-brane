@@ -256,6 +256,135 @@ test('Ask answers a region where it was asked, and Make reusable turns it into a
   record('region', counts);
 });
 
+test('a reading pile becomes a stack and feeds a machine as one', async ({ page }) => {
+  const counts = { actions: 0 };
+  await serve(page, 4204, async ({ seed, completed, state, api, origin }) => {
+    const papers = Array.from({ length: 12 }, (_, i) => `Paper ${i + 1}: one finding.`);
+    // Twelve dropped files stand on the table in a grid; dropping them is one gesture.
+    const { braneId, cards } = await seed('Reading pile', papers, (index) => ({
+      x: 40 + (index % 4) * 220,
+      y: 40 + Math.floor(index / 4) * 140,
+      width: 200,
+      height: 120,
+    }));
+    counts.actions++;
+    // Split stands ready on the table, as the Workshop will place it.
+    const split = await (
+      await page.request.post(api('/blocks/machine'), {
+        data: {
+          braneId,
+          geometry: { x: 980, y: 40, width: 400, height: 300 },
+          template: 'Split {text} into one card per idea.',
+        },
+      })
+    ).json();
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    await act(() => lasso(page, cards));
+    await act(() => page.keyboard.press('g'));
+    const frame = page.getByRole('region', { name: 'Group 1' });
+    await expect(frame).toContainText('12 cards');
+    await act(() => page.getByRole('button', { name: 'Stack', exact: true }).click());
+    await expect(frame).toContainText('Stack · 12');
+    // The pile takes the first paper's space, and moves as one from any of its cards.
+    await expect
+      .poll(async () => {
+        const placed = (await state(braneId)).placements.filter((p) =>
+          cards.some((c) => c.placementId === p.id),
+        );
+        return new Set(placed.map((p) => `${p.width}x${p.height}`)).size;
+      })
+      .toBe(1);
+    await act(() =>
+      drag(page, '.group-header .card-port', page.locator('[data-feed-slot="text"]')),
+    );
+    await expect(page.locator('[data-feed-slot="text"] .slot-chip')).toHaveText(/Group 1 · 12/);
+    await page.locator('.machine-lever').click();
+    await completed(braneId, 1);
+    const run = (await state(braneId)).runs[0];
+    const detail = await (await page.request.get(api(`/runs/${run.id}`))).json();
+    // The stack sends its members in reading order, each under the slot it fills.
+    expect(
+      detail.inputs
+        .filter((i: { kind: string }) => i.kind === 'reference')
+        .map((i: { label: string; content: { text: string } }) => [i.label, i.content.text]),
+    ).toEqual(papers.map((text) => ['text', text]));
+    // A member taken out of the stack makes the machine stale. The output was revealed
+    // beside the machine; bring the stack back into view first.
+    await page.locator('.react-flow__controls-fitview').click();
+    const top = page.locator(`.react-flow__node[data-id="${cards[0].placementId}"]`);
+    await top.getByRole('button', { name: 'Card actions' }).click();
+    await top.getByRole('button', { name: 'Take out of group' }).click();
+    await expect(page.locator('.machine-state')).toHaveText('stale · text changed');
+    await expect(frame).toContainText('Stack · 11');
+    expect(split.id).toBeTruthy();
+  });
+  record('pile', counts);
+});
+
+test('a grouped region is asked about, and its answer goes stale when an arrow changes', async ({
+  page,
+}) => {
+  const counts = { actions: 0, typed: 0 };
+  const question = 'What do these three cards agree on, and where do they disagree?';
+  await serve(page, 4205, async ({ seed, completed, state, origin }) => {
+    const { braneId, cards } = await seed('Grouped region', sources);
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    // The arrow is drawn before the question; it is not part of the count.
+    await arrow(page, async (work) => void (await work()), braneId, state, cards[1].id, cards[0]);
+    await act(() => marquee(page, cards));
+    await act(() => page.keyboard.press('g'));
+    await expect(page.getByRole('region', { name: 'Group 1' })).toContainText('3 cards');
+    // Renaming is a label change only; it is not part of the count.
+    await page.getByRole('button', { name: 'Rename Group 1' }).click();
+    await page.getByRole('textbox', { name: 'Group name' }).fill('Rent evidence');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('region', { name: 'Rent evidence' })).toContainText('3 cards');
+    await expect
+      .poll(async () => (await state(braneId)).groups.map((g) => g.label))
+      .toEqual(['Rent evidence']);
+    await act(() => page.getByRole('button', { name: 'Ask about 3', exact: true }).click());
+    counts.typed = question.length;
+    const box = page.getByRole('region', { name: 'Ask' });
+    await act(() => box.getByRole('textbox', { name: 'Run prompt' }).fill(question));
+    await act(() => box.getByRole('button', { name: 'Run ↗', exact: true }).click());
+    await completed(braneId, 1);
+    // The answer's back lists the arrow it sent.
+    const answer = page.locator('.react-flow__node:has(.canvas-card.generated)');
+    await answer.getByRole('button', { name: /Show back/ }).click();
+    await expect(answer.getByRole('list', { name: 'Arrows sent' })).toContainText(
+      'answers Good transit raises rents',
+    );
+    await expect(answer.getByRole('button', { name: 'Update' })).toHaveCount(0);
+    // Rewording the arrow changes what asking again would send: Update appears.
+    await page.locator('.relation-word').click();
+    await page
+      .getByRole('dialog', { name: 'Change the arrow’s word' })
+      .getByRole('button', { name: 'contradicts' })
+      .click();
+    await expect(page.locator('.relation-word')).toHaveText('contradicts');
+    await expect
+      .poll(async () => (await state(braneId)).relations.map((r) => r.label))
+      .toEqual(['contradicts']);
+    await expect(answer.getByRole('button', { name: 'Update' })).toBeVisible();
+    // Focus lists the arrow where it is not drawn.
+    await page.getByRole('button', { name: 'Focus', exact: true }).click();
+    await page.getByRole('button', { name: /Good transit raises rents/ }).click();
+    const arrows = page.getByRole('region', { name: 'Arrows' });
+    await expect(arrows).toContainText('contradicts this card');
+    await arrows.getByRole('button', { name: 'Remove arrow “contradicts”' }).click();
+    await expect.poll(async () => (await state(braneId)).relations).toEqual([]);
+  });
+  record('grouped-region', counts);
+});
+
 // Drag the objection's port onto the claim and name the arrow: two gestures.
 async function arrow(
   page: Page,
@@ -334,6 +463,27 @@ async function marquee(page: Page, cards: { placementId: string }[]) {
   );
 }
 
+// One marquee across a grid of cards, from the empty table beyond its right edge.
+async function lasso(page: Page, cards: { placementId: string }[]) {
+  const boxes = await Promise.all(
+    cards.map(
+      async (c) =>
+        (await page.locator(`.react-flow__node[data-id="${c.placementId}"]`).boundingBox())!,
+    ),
+  );
+  const right = Math.max(...boxes.map((b) => b.x + b.width));
+  const top = Math.min(...boxes.map((b) => b.y));
+  const left = Math.min(...boxes.map((b) => b.x));
+  const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+  await page.mouse.move(right + 40, top - 10);
+  await page.mouse.down();
+  await page.mouse.move(left + 20, bottom - 20, { steps: 10 });
+  await page.mouse.up();
+  await expect(page.getByRole('toolbar', { name: 'Selection' })).toContainText(
+    `${cards.length} cards`,
+  );
+}
+
 interface BraneRead {
   placements: {
     id: string;
@@ -341,9 +491,12 @@ interface BraneRead {
     host_placement_id: string | null;
     x: number;
     y: number;
+    width: number;
+    height: number;
   }[];
   blocks: { id: string; kind: string; version: number }[];
   relations: { from_placement_id: string; to_placement_id: string; label: string }[];
+  groups: { label: string; members: string[] }[];
   runs: { id: string; status: string; output_block_id: string; machine_block_id: string | null }[];
 }
 interface Server {
@@ -353,6 +506,7 @@ interface Server {
   seed: (
     title: string,
     texts: string[],
+    layout?: (index: number) => { x: number; y: number; width: number; height: number },
   ) => Promise<{ braneId: string; cards: { id: string; placementId: string }[] }>;
   completed: (braneId: string, count: number) => Promise<void>;
 }
@@ -390,7 +544,7 @@ async function serve(page: Page, port: number, scenario: (server: Server) => Pro
       origin,
       api,
       state,
-      async seed(title, texts) {
+      async seed(title, texts, layout) {
         const brane = await (await page.request.post(api('/branes'), { data: { title } })).json();
         const cards: { id: string; placementId: string }[] = [];
         for (const [index, text] of texts.entries()) {
@@ -398,7 +552,12 @@ async function serve(page: Page, port: number, scenario: (server: Server) => Pro
             await page.request.post(api('/blocks/text'), {
               data: {
                 braneId: brane.id,
-                geometry: { x: 40, y: 40 + index * 230, width: 320, height: 190 },
+                geometry: layout?.(index) ?? {
+                  x: 40,
+                  y: 40 + index * 230,
+                  width: 320,
+                  height: 190,
+                },
               },
             })
           ).json();

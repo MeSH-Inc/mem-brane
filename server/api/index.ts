@@ -57,7 +57,9 @@ import {
   machineTemplate,
 } from '../../shared/machines.js';
 import { createFeed, removeFeed } from '../services/feeds.js';
-import { createRelation, removeRelation } from '../services/relations.js';
+import { createRelation, relabelRelation, removeRelation } from '../services/relations.js';
+import { createGroup, editGroup, removeGroup } from '../services/groups.js';
+import { groupDisplay, groupLabel } from '../../shared/groups.js';
 import { relationLabel } from '../../shared/relations.js';
 import { readInputs, readLineage } from '../services/context-reader.js';
 import {
@@ -230,7 +232,13 @@ export function createApi(
   });
   app.post('/feeds', async (c) => {
     const body = z
-      .object({ braneId: id, fromPlacementId: id, toPlacementId: id, slot: slotName })
+      .object({
+        braneId: id,
+        fromPlacementId: id.optional(),
+        fromGroupId: id.optional(),
+        toPlacementId: id,
+        slot: slotName,
+      })
       .strict()
       .parse(await authorizedBody(c));
     return c.json(createFeed(db, c.get('actor'), { id: crypto.randomUUID(), ...body }), 201);
@@ -249,11 +257,38 @@ export function createApi(
       .parse(await authorizedBody(c));
     return c.json(createRelation(db, c.get('actor'), { id: crypto.randomUUID(), ...body }), 201);
   });
+  app.patch('/relations/:id', async (c) => {
+    const relationId = id.parse(c.req.param('id'));
+    const body = z
+      .object({ braneId: id, label: relationLabel })
+      .strict()
+      .parse(await authorizedBody(c));
+    relabelRelation(db, c.get('actor'), relationId, body.braneId, body.label);
+    return c.json({ ok: true });
+  });
   app.delete('/relations/:id', (c) => {
     const relationId = id.parse(c.req.param('id'));
     const relation = db.prepare('SELECT brane_id FROM relations WHERE id=?').get(relationId) as
       { brane_id: string } | undefined;
     if (relation) removeRelation(db, c.get('actor'), relationId, relation.brane_id);
+    return c.json({ ok: true });
+  });
+  const groupBody = z
+    .object({ braneId: id, label: groupLabel, display: groupDisplay, members: z.array(id).min(1) })
+    .strict();
+  app.post('/groups', async (c) => {
+    const body = groupBody.parse(await authorizedBody(c));
+    return c.json(createGroup(db, c.get('actor'), { id: crypto.randomUUID(), ...body }), 201);
+  });
+  app.patch('/groups/:id', async (c) => {
+    const body = groupBody.parse(await authorizedBody(c));
+    return c.json(editGroup(db, c.get('actor'), { id: id.parse(c.req.param('id')), ...body }));
+  });
+  app.delete('/groups/:id', (c) => {
+    const groupId = id.parse(c.req.param('id'));
+    const group = db.prepare('SELECT brane_id FROM groups WHERE id=?').get(groupId) as
+      { brane_id: string } | undefined;
+    if (group) removeGroup(db, c.get('actor'), groupId, group.brane_id);
     return c.json({ ok: true });
   });
   app.get('/blocks/unplaced', (c) => {

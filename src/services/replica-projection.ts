@@ -65,8 +65,10 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         placements: [],
         feeds: [],
         relations: [],
+        groups: [],
         runs: [],
         derivations: [],
+        relationEntries: [],
       };
       return brane;
     }
@@ -166,12 +168,14 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
             .map((p) => p.id),
         ]);
         workspace.placements = workspace.placements.filter((p) => !removed.has(p.id));
-        workspace.feeds = workspace.feeds.filter(
-          (f) => !removed.has(f.from_placement_id) && !removed.has(f.to_placement_id),
-        );
         workspace.relations = workspace.relations.filter(
           (r) => !removed.has(r.from_placement_id) && !removed.has(r.to_placement_id),
         );
+        // A group loses the card, and goes when it has no card left.
+        workspace.groups = workspace.groups
+          .map((g) => ({ ...g, members: g.members.filter((id) => !removed.has(id)) }))
+          .filter((g) => g.members.length);
+        workspace.feeds = presentFeeds(workspace);
         // Retain block data locally: another pending operation may place it again.
       }
       return { ok: true };
@@ -190,7 +194,8 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
       const feed = {
         id: command.id,
         brane_id: command.braneId,
-        from_placement_id: command.fromPlacementId,
+        from_placement_id: command.fromPlacementId ?? null,
+        from_group_id: command.fromGroupId ?? null,
         to_placement_id: command.toPlacementId,
         slot: command.slot,
         created_at: Date.now(),
@@ -216,12 +221,60 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
       workspace.relations = [...workspace.relations.filter((r) => r.id !== relation.id), relation];
       return relation;
     }
+    case 'relation.relabel': {
+      const workspace = requireWorkspace(state, command.braneId);
+      workspace.relations = workspace.relations.map((r) =>
+        r.id === command.id ? { ...r, label: command.label } : r,
+      );
+      return { ok: true };
+    }
     case 'relation.remove': {
       const workspace = requireWorkspace(state, command.braneId);
       workspace.relations = workspace.relations.filter((r) => r.id !== command.id);
       return { ok: true };
     }
+    case 'group.create':
+    case 'group.edit': {
+      const workspace = requireWorkspace(state, command.braneId);
+      const previous = workspace.groups.find((g) => g.id === command.id);
+      if (command.type === 'group.edit' && !previous)
+        throw new Error('This group is no longer on the brane.');
+      // A card belongs to one group, as on the server.
+      const taken = new Set(
+        workspace.groups.filter((g) => g.id !== command.id).flatMap((g) => g.members),
+      );
+      if (command.members.some((id) => taken.has(id)))
+        throw new Error('A card belongs to one group. Take it out of its group first.');
+      const group = {
+        id: command.id,
+        brane_id: command.braneId,
+        label: command.label,
+        display: command.display,
+        created_at: previous?.created_at ?? Date.now(),
+        members: [...command.members],
+      };
+      workspace.groups = previous
+        ? workspace.groups.map((g) => (g.id === group.id ? group : g))
+        : [...workspace.groups, group];
+      return group;
+    }
+    case 'group.remove': {
+      const workspace = requireWorkspace(state, command.braneId);
+      workspace.groups = workspace.groups.filter((g) => g.id !== command.id);
+      workspace.feeds = presentFeeds(workspace);
+      return { ok: true };
+    }
   }
+}
+// Feeds whose card or group, and whose machine, are still on the brane.
+function presentFeeds(workspace: Pick<BraneState, 'feeds' | 'placements' | 'groups'>) {
+  const placed = new Set(workspace.placements.map((p) => p.id));
+  const groups = new Set(workspace.groups.map((g) => g.id));
+  return workspace.feeds.filter(
+    (f) =>
+      placed.has(f.to_placement_id) &&
+      (f.from_placement_id ? placed.has(f.from_placement_id) : groups.has(f.from_group_id!)),
+  );
 }
 function requireWorkspace(state: ReplicaState, id: string): BraneState {
   const workspace = state.workspaces[id];
@@ -274,13 +327,15 @@ export function overlayPending(state: ReplicaState, incoming: BraneState): Brane
   const blocks = new Set<string>(),
     placements = new Set<string>(),
     feeds = new Set<string>(),
-    relations = new Set<string>();
+    relations = new Set<string>(),
+    groups = new Set<string>();
   let title = false;
   for (const { command: c } of state.pending) {
     if (c.type === 'block.create' || c.type === 'text.edit') blocks.add(c.blockId);
     if (c.type === 'block.create') placements.add(c.placementId);
     if (c.type === 'feed.create' || c.type === 'feed.remove') feeds.add(c.id);
-    if (c.type === 'relation.create' || c.type === 'relation.remove') relations.add(c.id);
+    if (c.type.startsWith('relation.') && 'id' in c) relations.add(c.id);
+    if (c.type.startsWith('group.') && 'id' in c) groups.add(c.id);
     if (c.type.startsWith('placement.') && 'id' in c) placements.add(c.id);
     if ((c.type === 'brane.create' || c.type === 'brane.title') && c.id === incoming.brane.id)
       title = true;
@@ -300,17 +355,24 @@ export function overlayPending(state: ReplicaState, incoming: BraneState): Brane
       ...incoming.relations.filter((r) => !relations.has(r.id)),
       ...local.relations.filter((r) => relations.has(r.id)),
     ],
+    groups: [
+      ...incoming.groups.filter((g) => !groups.has(g.id)),
+      ...local.groups.filter((g) => groups.has(g.id)),
+    ],
     blocks: incoming.blocks.map((block) =>
       blocks.has(block.id) ? (findBlock(state, block.id) ?? block) : block,
     ),
   };
-  // A pending placement removal also removes the feeds and arrows that touched it.
-  const present = (ends: { from_placement_id: string; to_placement_id: string }) =>
-    [ends.from_placement_id, ends.to_placement_id].every((id) =>
-      next.placements.some((p) => p.id === id),
-    );
-  next.feeds = next.feeds.filter(present);
-  next.relations = next.relations.filter(present);
+  // A pending placement removal also removes the feeds, arrows and memberships that
+  // touched it.
+  const placed = new Set(next.placements.map((p) => p.id));
+  next.relations = next.relations.filter(
+    (r) => placed.has(r.from_placement_id) && placed.has(r.to_placement_id),
+  );
+  next.groups = next.groups
+    .map((g) => ({ ...g, members: g.members.filter((id) => placed.has(id)) }))
+    .filter((g) => g.members.length);
+  next.feeds = presentFeeds(next);
   for (const placement of next.placements) {
     if (next.blocks.some((block) => block.id === placement.block_id)) continue;
     const block = findBlock(state, placement.block_id);

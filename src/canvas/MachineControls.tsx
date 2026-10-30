@@ -42,13 +42,21 @@ export function MachineControls({
   const selection = useInteraction((s) => s.selectedPlacements);
   const view = useMachineView(document, placementId, draft);
   const viewKey = JSON.stringify(view ?? null);
+  // A card feed is named by its card's first words, a group feed by the group.
   const previews = useStore(document.store, (s) =>
     JSON.stringify(
       Object.fromEntries(
-        (view?.inputs ?? []).map((input) => [
-          input.feedId,
-          (s.blocks[input.blockId]?.content.text ?? '').trim().slice(0, 28) || 'Untitled card',
-        ]),
+        (view?.feeds ?? []).map((feed) => {
+          const group = feed.groupId && s.scene.groups.find((g) => g.id === feed.groupId);
+          const input = view?.inputs.find((i) => i.feedId === feed.feedId);
+          return [
+            feed.feedId,
+            group
+              ? `${group.label} · ${feed.count}`
+              : (s.blocks[input?.blockId ?? '']?.content.text ?? '').trim().slice(0, 28) ||
+                'Untitled card',
+          ];
+        }),
       ),
     ),
   );
@@ -93,26 +101,26 @@ export function MachineControls({
     <>
       <ul className="machine-slots" aria-label="Slots">
         {slots.map((slot) => {
-          const fed = view?.inputs.filter((i) => i.slot === slot) ?? [];
+          const fed = view?.feeds.filter((f) => f.slot === slot) ?? [];
           return (
             <li
               key={slot}
-              className={`machine-slot${fed.length ? '' : ' empty'}`}
+              className={`machine-slot${view?.inputs.some((i) => i.slot === slot) ? '' : ' empty'}`}
               data-feed-slot={slot}
               data-feed-machine={placementId}
             >
               {handle?.(slot)}
               <span className="slot-name">{slot}</span>
               <span className="slot-feeds nodrag nopan">
-                {fed.map((input) => (
+                {fed.map((feed) => (
                   <span
-                    key={input.feedId}
-                    className={`slot-chip${view?.changedFeeds.includes(input.feedId) && view.ran ? ' changed' : ''}`}
+                    key={feed.feedId}
+                    className={`slot-chip${feed.groupId ? ' group' : ''}${view?.changedFeeds.includes(feed.feedId) && view.ran ? ' changed' : ''}`}
                   >
-                    <span className="slot-chip-label">{labels[input.feedId]}</span>
+                    <span className="slot-chip-label">{labels[feed.feedId]}</span>
                     <button
-                      aria-label={`Remove ${labels[input.feedId]} from ${slot}`}
-                      onClick={() => void actions.onUnfeed(input.feedId)}
+                      aria-label={`Remove ${labels[feed.feedId]} from ${slot}`}
+                      onClick={() => void actions.onUnfeed(feed.feedId)}
                     >
                       ×
                     </button>

@@ -27,6 +27,14 @@ import type { Imports } from './imports';
 import { estimateIssue, runIssueOf, type RunIssue } from './run-issues';
 import { runMachine as runMachineSchema, type RunMachine } from '../../shared/machines';
 import { machineStaleness, openSpot } from '../canvas/machines';
+import {
+  groupOf,
+  nextGroupLabel,
+  readingOrder,
+  regionLayout,
+  stackLayout,
+  tableMembers,
+} from '../canvas/groups';
 
 type DraftState = Pick<
   Interaction,
@@ -858,7 +866,7 @@ export class WorkspaceController {
       const existing = new Set(
         state.feeds
           .filter((f) => f.to_placement_id === toPlacementId && f.slot === slot)
-          .map((f) => f.from_placement_id),
+          .flatMap((f) => f.from_placement_id ?? []),
       );
       const sources = state.placements.filter(
         (p) =>
@@ -912,6 +920,112 @@ export class WorkspaceController {
         fromPlacementId,
         toPlacementId,
         label: label.trim(),
+      });
+    }).catch(() => undefined);
+  relabel = (relationId: string, label: string) =>
+    this.mutate(`relabel:${relationId}`, () =>
+      this.client.relabelRelation(relationId, this.braneId, label.trim()),
+    ).catch(() => undefined);
+  // Grouping runs nothing. The cards become one group in reading order; when some of
+  // them are already in one group, the others join it at its end.
+  group = (placementIds: string[]) =>
+    this.mutate(`group:${[...placementIds].sort().join(',')}`, async () => {
+      const state = this.state;
+      if (!state) throw new Error('This brane is not open.');
+      const kinds = new Map(state.blocks.map((b) => [b.id, b.kind]));
+      const cards = readingOrder(
+        state.placements.filter(
+          (p) =>
+            placementIds.includes(p.id) &&
+            !p.host_placement_id &&
+            kinds.get(p.block_id) !== 'machine',
+        ),
+      );
+      if (cards.length < 2 && !cards.some((p) => groupOf(state.groups, p.id)))
+        throw new Error('Select two or more cards to group them.');
+      const touched = [...new Set(cards.flatMap((p) => groupOf(state.groups, p.id) ?? []))];
+      if (touched.length > 1)
+        throw new Error('These cards are in different groups. Ungroup one of them first.');
+      const [existing] = touched;
+      if (!existing) {
+        await this.client.createGroup({
+          braneId: this.braneId,
+          label: nextGroupLabel(state.groups),
+          display: 'region',
+          members: cards.map((p) => p.id),
+        });
+        return;
+      }
+      const joining = cards.filter((p) => !existing.members.includes(p.id)).map((p) => p.id);
+      if (!joining.length) return;
+      await this.client.editGroup(existing.id, {
+        braneId: this.braneId,
+        label: existing.label,
+        display: existing.display,
+        members: [...existing.members, ...joining],
+      });
+    }).catch(() => undefined);
+  ungroup = (groupId: string) =>
+    this.mutate(`ungroup:${groupId}`, () => this.client.removeGroup(groupId)).catch(
+      () => undefined,
+    );
+  renameGroup = (groupId: string, label: string) =>
+    this.mutate(`renameGroup:${groupId}`, async () => {
+      const group = this.state?.groups.find((g) => g.id === groupId);
+      if (!group) throw new Error('This group is no longer on the brane.');
+      await this.client.editGroup(groupId, {
+        braneId: this.braneId,
+        label: label.trim(),
+        display: group.display,
+        members: group.members,
+      });
+    }).catch(() => undefined);
+  // Stack piles the members into the first one's space; Region spreads a stack back out
+  // on a grid. What the group feeds is the same either way.
+  arrangeGroup = (groupId: string, display: 'region' | 'stack') =>
+    this.mutate(`arrangeGroup:${groupId}`, async () => {
+      const state = this.state;
+      const group = state?.groups.find((g) => g.id === groupId);
+      if (!state || !group) throw new Error('This group is no longer on the brane.');
+      if (group.display === display) return;
+      const members = tableMembers(state, group);
+      const layout = display === 'stack' ? stackLayout(members) : regionLayout(members);
+      await this.client.editGroup(groupId, {
+        braneId: this.braneId,
+        label: group.label,
+        display,
+        members: group.members,
+      });
+      members.forEach((member, index) => this.geometry(member.id, layout[index]));
+    }).catch(() => undefined);
+  takeOutOfGroup = (placementId: string) =>
+    this.mutate(`takeOut:${placementId}`, async () => {
+      const group = this.state && groupOf(this.state.groups, placementId);
+      if (!group) return;
+      const members = group.members.filter((id) => id !== placementId);
+      if (!members.length) return void (await this.client.removeGroup(group.id));
+      await this.client.editGroup(group.id, {
+        braneId: this.braneId,
+        label: group.label,
+        display: group.display,
+        members,
+      });
+    }).catch(() => undefined);
+  // A fed group sends its members when the machine is run, in member order.
+  feedGroup = (groupId: string, toPlacementId: string, slot: string) =>
+    this.mutate(`feedGroup:${groupId}:${toPlacementId}:${slot}`, async () => {
+      if (
+        this.state?.feeds.some(
+          (f) =>
+            f.from_group_id === groupId && f.to_placement_id === toPlacementId && f.slot === slot,
+        )
+      )
+        throw new Error('This group already feeds that slot.');
+      await this.client.createFeed({
+        braneId: this.braneId,
+        fromGroupId: groupId,
+        toPlacementId,
+        slot,
       });
     }).catch(() => undefined);
   unrelate = (relationId: string) =>

@@ -61,7 +61,9 @@ export const MachineCard = memo(function MachineCard({
               {view?.stale
                 ? view.templateChanged
                   ? 'stale · prompt edited'
-                  : `stale · ${view.changedSlots.join(', ')} changed`
+                  : view.changedSlots.length
+                    ? `stale · ${view.changedSlots.join(', ')} changed`
+                    : 'stale · arrows changed'
                 : 'ran'}
             </span>
           )}
@@ -106,16 +108,19 @@ export const MachineCard = memo(function MachineCard({
 });
 
 // Drag from a card's port onto a machine's slot row to feed it, or onto another card
-// to draw an arrow to it. The port is a native surface, so the canvas gesture
-// recognizer never sees this drag.
+// to draw an arrow to it; a group's port feeds only. The port is a native surface, so
+// the canvas gesture recognizer never sees this drag.
 export function CardPort({
-  placementId,
+  owner,
+  title = 'Drag onto a machine slot to feed it, or onto a card to draw an arrow',
   onFeed,
   onArrow,
 }: {
-  placementId: string;
-  onFeed: MachineActions['onFeed'];
-  onArrow: (toPlacementId: string, point: { x: number; y: number }) => void;
+  // The node the port belongs to; a drop on that node does nothing.
+  owner: string;
+  title?: string;
+  onFeed: (toPlacementId: string, slot: string) => void;
+  onArrow?: (toPlacementId: string, point: { x: number; y: number }) => void;
 }) {
   const [line, setLine] = useState<{ x1: number; y1: number; x2: number; y2: number }>();
   // The drag's start is read from a ref: a quick drag can end before React has drawn
@@ -126,7 +131,7 @@ export function CardPort({
       <span
         className="card-port"
         data-canvas-native
-        title="Drag onto a machine slot to feed it, or onto a card to draw an arrow"
+        title={title}
         onPointerDown={(event) => {
           event.stopPropagation();
           event.preventDefault();
@@ -147,11 +152,11 @@ export function CardPort({
           const under = globalThis.document.elementFromPoint(event.clientX, event.clientY);
           const slot = under?.closest<HTMLElement>('[data-feed-slot]');
           if (slot?.dataset.feedMachine && slot.dataset.feedSlot) {
-            void onFeed([placementId], slot.dataset.feedMachine, slot.dataset.feedSlot);
+            onFeed(slot.dataset.feedMachine, slot.dataset.feedSlot);
             return;
           }
           const card = under?.closest<HTMLElement>('.react-flow__node-card')?.dataset.id;
-          if (card && card !== placementId) onArrow(card, { x: event.clientX, y: event.clientY });
+          if (card && card !== owner) onArrow?.(card, { x: event.clientX, y: event.clientY });
         }}
         onPointerCancel={() => {
           start.current = undefined;

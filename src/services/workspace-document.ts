@@ -4,7 +4,10 @@ import type { Block, BraneState, Placement } from '../../shared/types/domain';
 type Run = BraneState['runs'][number];
 type Activity = { busy: boolean; retry: boolean; phase?: CommandPhase };
 export const idleActivity: Activity = { busy: false, retry: false };
-export type Scene = Pick<BraneState, 'placements' | 'derivations' | 'feeds' | 'relations'> & {
+export type Scene = Pick<
+  BraneState,
+  'placements' | 'derivations' | 'feeds' | 'relations' | 'groups'
+> & {
   braneId: string;
 };
 interface DocumentSnapshot {
@@ -31,7 +34,7 @@ function entities<T extends { id: string }>(previous: T[], next: T[]) {
 export class WorkspaceDocument {
   base?: BraneState;
   readonly store = createStore<DocumentSnapshot>(() => ({
-    scene: { braneId: '', placements: [], derivations: [], feeds: [], relations: [] },
+    scene: { braneId: '', placements: [], derivations: [], feeds: [], relations: [], groups: [] },
     blocks: {},
     runs: {},
     activity: {},
@@ -46,10 +49,14 @@ export class WorkspaceDocument {
           placements: entities(previous.placements, next.placements),
           feeds: entities(previous.feeds, next.feeds),
           relations: entities(previous.relations, next.relations),
+          groups: entities(previous.groups, next.groups),
           runs: entities(previous.runs, next.runs),
           derivations: same(previous.derivations, next.derivations)
             ? previous.derivations
             : next.derivations,
+          relationEntries: same(previous.relationEntries, next.relationEntries)
+            ? previous.relationEntries
+            : next.relationEntries,
         }
       : next;
     this.reproject();
@@ -65,7 +72,8 @@ export class WorkspaceDocument {
       previous.scene.placements === placements &&
       previous.scene.derivations === base.derivations &&
       previous.scene.feeds === base.feeds &&
-      previous.scene.relations === base.relations
+      previous.scene.relations === base.relations &&
+      previous.scene.groups === base.groups
         ? previous.scene
         : {
             braneId: base.brane.id,
@@ -73,6 +81,7 @@ export class WorkspaceDocument {
             derivations: base.derivations,
             feeds: base.feeds,
             relations: base.relations,
+            groups: base.groups,
           };
     const blocks =
       previous.state?.blocks === base.blocks

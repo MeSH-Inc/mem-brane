@@ -12,7 +12,12 @@ import {
 import type { BraneState } from '../../shared/types/domain';
 import { RELATION_LABELS, MAX_RELATION_LABEL } from '../../shared/relations';
 
-export type RelationData = { label: string; onRemove: (relationId: string) => void };
+export type RelationData = {
+  label: string;
+  onRemove: (relationId: string) => void;
+  // Reopen the word picker for this arrow, at the point pressed.
+  onRelabel: (relationId: string, label: string, point: { x: number; y: number }) => void;
+};
 export type RelationEdgeType = Edge<RelationData, 'relation'>;
 
 // Where the line from a card's centre toward a point leaves the card's border.
@@ -35,8 +40,8 @@ const centre = (node: InternalNode) => ({
 });
 
 // An arrow between two cards on the table: a straight line between their nearest
-// borders, whichever way they stand, labelled with its word. The label carries the
-// arrow's one action, removing it.
+// borders, whichever way they stand, labelled with its word. Pressing the word changes
+// it; × removes the arrow.
 export const RelationEdge = memo(function RelationEdge({
   id,
   source,
@@ -65,7 +70,15 @@ export const RelationEdge = memo(function RelationEdge({
           data-canvas-native
           style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}
         >
-          {data?.label}
+          <button
+            className="relation-word"
+            title="Change this arrow’s word"
+            onClick={(event) =>
+              data?.onRelabel(relationId, data.label, { x: event.clientX, y: event.clientY })
+            }
+          >
+            {data?.label}
+          </button>
           <button
             className="text-button"
             aria-label={`Remove arrow “${data?.label}”`}
@@ -82,7 +95,8 @@ export const RelationEdge = memo(function RelationEdge({
 
 export function relationEdges(
   state: Pick<BraneState, 'placements' | 'relations'>,
-  onRemove: (relationId: string) => void,
+  onRemove: RelationData['onRemove'],
+  onRelabel: RelationData['onRelabel'],
 ): RelationEdgeType[] {
   const table = new Set(state.placements.filter((p) => !p.host_placement_id).map((p) => p.id));
   return state.relations
@@ -97,19 +111,17 @@ export function relationEdges(
       selectable: false,
       deletable: false,
       markerEnd: { type: MarkerType.ArrowClosed, color: '#5a6b8c', width: 18, height: 18 },
-      data: { label: r.label, onRemove },
+      data: { label: r.label, onRemove, onRelabel },
     }));
 }
 
-// Where a drawn arrow waits for its word: the cards it joins and the drop point.
-export interface ArrowDraft {
-  from: string;
-  to: string;
-  x: number;
-  y: number;
-}
-// Names a drawn arrow. One press picks an offered word; another word can be typed.
-// Escape or a press elsewhere leaves the arrow undrawn.
+// Where a drawn arrow waits for its word: the cards it joins and the drop point; or,
+// when an existing arrow's word is being changed, that arrow and its word.
+export type ArrowDraft = { x: number; y: number } & (
+  { from: string; to: string; relationId?: undefined } | { relationId: string; label: string }
+);
+// Names a drawn arrow, or renames one. One press picks an offered word; another word can
+// be typed. Escape or a press elsewhere leaves the arrow as it was.
 export function RelationPicker({
   draft,
   onPick,
@@ -119,7 +131,11 @@ export function RelationPicker({
   onPick: (label: string) => void;
   onClose: () => void;
 }) {
-  const [word, setWord] = useState('');
+  const [word, setWord] = useState(
+    draft.relationId && !(RELATION_LABELS as readonly string[]).includes(draft.label)
+      ? draft.label
+      : '',
+  );
   const box = useRef<HTMLFormElement>(null);
   useEffect(() => {
     box.current?.querySelector('button')?.focus({ preventScroll: true });
@@ -135,7 +151,7 @@ export function RelationPicker({
       className="relation-picker"
       data-canvas-native
       role="dialog"
-      aria-label="Name the arrow"
+      aria-label={draft.relationId ? 'Change the arrow’s word' : 'Name the arrow'}
       style={{ left: draft.x, top: draft.y }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
@@ -149,7 +165,12 @@ export function RelationPicker({
       }}
     >
       {RELATION_LABELS.map((label) => (
-        <button key={label} type="button" onClick={() => onPick(label)}>
+        <button
+          key={label}
+          type="button"
+          aria-pressed={draft.relationId ? draft.label === label : undefined}
+          onClick={() => onPick(label)}
+        >
           {label}
         </button>
       ))}

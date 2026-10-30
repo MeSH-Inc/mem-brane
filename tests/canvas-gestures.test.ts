@@ -7,7 +7,7 @@ import {
   type Viewport,
 } from '../src/canvas/gestures';
 import type { Placement } from '../shared/types/domain';
-function fixture(clock = { now: 0 }) {
+function fixture(clock = { now: 0 }, together?: (id: string) => string[] | undefined) {
   let placements: Placement[] = ['a', 'b'].map((id, i) => ({
     id,
     block_id: id,
@@ -41,6 +41,7 @@ function fixture(clock = { now: 0 }) {
       },
       create,
       commit,
+      together,
     },
     () => clock.now,
   );
@@ -196,4 +197,26 @@ it('retains the current gesture owner when a different input device presses', ()
   f.gestures.end(1, { x: 150, y: 120 });
   expect(f.commit).toHaveBeenCalledOnce();
   expect(f.commit).toHaveBeenCalledWith('a', { x: 150, y: 120, width: 300, height: 220 });
+});
+
+it('selects and moves a group together from its frame, and a stack from any of its cards', () => {
+  const members = (id: string) => (id === 'group:g' || id === 'b' ? ['a', 'b'] : undefined);
+  const f = fixture(undefined, members);
+  const press = (id: string): Press => ({
+    pointerId: 1,
+    point: { x: 0, y: 0 },
+    surface: { kind: 'card', id },
+    button: 0,
+    touch: false,
+    shift: false,
+  });
+  f.gestures.begin(press('group:g'));
+  f.gestures.end(1, { x: 0, y: 0 });
+  expect(f.selection).toEqual(['a', 'b']);
+  f.gestures.begin(press('b'));
+  f.gestures.end(1, { x: 40, y: 10 });
+  expect(f.commit.mock.calls.map(([id, g]) => [id, g.x, g.y])).toEqual([
+    ['a', 140, 110],
+    ['b', 540, 110],
+  ]);
 });

@@ -4,6 +4,7 @@ import { openDatabase, type DB } from '../server/db';
 import {
   createBrane,
   createTextBlock,
+  createMachineBlock,
   createPlacement,
   readBrane,
   uid,
@@ -920,4 +921,71 @@ it('draws an arrow offline, removes it with its card, and replays both', async (
       r.label,
     ]),
   ).toEqual([[objection.placement.id, claim.id, 'answers']]);
+});
+
+it('groups cards offline, feeds the group, loses a member with its card, and replays', async () => {
+  const f = await fixture();
+  const [first] = readBrane(db, f.actor, f.brane.id).placements;
+  const second = createTextBlock(db, f.actor, f.brane.id);
+  const third = createTextBlock(db, f.actor, f.brane.id);
+  const machine = createMachineBlock(db, f.actor, f.brane.id);
+  await f.client.workspace(f.brane.id);
+  f.offline();
+  const created = (await f.client.createGroup({
+    braneId: f.brane.id,
+    label: 'Group 1',
+    display: 'region',
+    members: [first.id, second.placement.id],
+  })) as { id: string };
+  await f.client.editGroup(created.id, {
+    braneId: f.brane.id,
+    label: 'Pile',
+    display: 'stack',
+    members: [first.id, second.placement.id, third.placement.id],
+  });
+  await f.client.createFeed({
+    braneId: f.brane.id,
+    fromGroupId: created.id,
+    toPlacementId: machine.placement.id,
+    slot: 'claim',
+  });
+  await f.client.removePlacement(second.placement.id);
+  const local = await f.client.workspace(f.brane.id);
+  expect(local.groups).toMatchObject([
+    { id: created.id, label: 'Pile', display: 'stack', members: [first.id, third.placement.id] },
+  ]);
+  expect(local.feeds).toMatchObject([{ from_group_id: created.id }]);
+  f.online();
+  await f.replica.synchronize();
+  const server = readBrane(db, f.actor, f.brane.id);
+  expect(server.groups).toMatchObject([
+    { id: created.id, label: 'Pile', display: 'stack', members: [first.id, third.placement.id] },
+  ]);
+  expect(server.feeds).toMatchObject([
+    { from_group_id: created.id, to_placement_id: machine.placement.id },
+  ]);
+  // Ungrouping removes the group's feeds, here and on the server.
+  await f.client.removeGroup(created.id);
+  expect((await f.client.workspace(f.brane.id)).feeds).toEqual([]);
+  await f.replica.synchronize();
+  expect(readBrane(db, f.actor, f.brane.id).feeds).toEqual([]);
+});
+
+it('rewords an arrow offline and replays the new word', async () => {
+  const f = await fixture();
+  const [claim] = readBrane(db, f.actor, f.brane.id).placements;
+  const objection = createTextBlock(db, f.actor, f.brane.id);
+  await f.client.workspace(f.brane.id);
+  f.offline();
+  const relation = (await f.client.createRelation({
+    braneId: f.brane.id,
+    fromPlacementId: objection.placement.id,
+    toPlacementId: claim.id,
+    label: 'answers',
+  })) as { id: string };
+  await f.client.relabelRelation(relation.id, f.brane.id, 'contradicts');
+  expect((await f.client.workspace(f.brane.id)).relations[0].label).toBe('contradicts');
+  f.online();
+  await f.replica.synchronize();
+  expect(readBrane(db, f.actor, f.brane.id).relations[0].label).toBe('contradicts');
 });
