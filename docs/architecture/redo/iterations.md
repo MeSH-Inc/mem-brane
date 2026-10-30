@@ -275,18 +275,76 @@ composer's best path (4) now costs less than building a machine (7).
 - Importing the shared machine controls from the canvas card would have put React
   Flow in the main bundle. They live in their own module.
 
-## Recommended iteration 6
+## Iteration 6: the prompt moves onto the table
 
-Retire the bottom composer and make building a machine as cheap as asking.
+Iteration 6 retired the bottom composer on the desktop canvas and added the Machine
+chip. Arrows were deferred (see the decisions).
 
-1. **Continue in the Ask box.** The Reply chip opens an Ask box with `continueFrom`
-   set, drawn with a thread line to the response. Attachments drop onto the table as
-   cards, and the model choice moves to the brane's settings. The submission recovery
-   notices move into the box. Then delete the composer and its context state, as
-   `domain.md` already lists.
-2. **Machine from a selection.** A **Machine** chip places a machine with one
-   `{cards}` slot fed by the selection, like Critique. Scenario 6's build drops from 7
-   to 4 (marquee, Machine, prompt, Run).
-3. **Arrows.** Draw a labelled arrow between two cards (the last step of scenario 1),
-   stored as a brane-scoped relation and sent when both ends are inputs of one run.
-4. Measure scenarios 1, 4 and 6 with the composer gone.
+- **The Ask box is the composer.** On the desktop canvas, the prompt panel lives in an
+  Ask box on the table: its context chips, attachments, question, Run, estimate and
+  refusal notices. It opens from **Ask about N** (the selection becomes its context),
+  **Reply** and ⑂ Continue (beside the response), **+ Use as context** (beside the
+  card), **Reuse with current sources** (beside the answer), the toolbar **Ask** and
+  `/`. Its answer takes its place. Closing it keeps the draft. Focus and phones keep
+  the same panel docked at the bottom, because there is no table to put it on.
+- **One way to ask.** Iteration 5's separate Ask request and journal are gone. The Ask
+  box runs the composer's request, with its recovery, estimate and Continue, plus
+  `outputGeometry`. An accepted run clears its question, context and Continue.
+- **The bottom line** holds only the selection chips, the model menu and the save
+  status.
+- **Machine chip.** It places a machine beside the selection with one `{cards}` slot
+  fed by every selected card, and its prompt ("Summarise {cards} in five sentences.")
+  ready to edit.
+- **Every receipt has Exact inputs**, including runs with no sources.
+
+### Decisions taken while building
+
+| Question                                    | Decision                                                                          | Rationale                                                                                                                                       |
+| ------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rebuild the composer's features for Ask?    | No: move the composer's panel into the Ask box and drop the separate Ask request. | Continue, attachments, estimate, refusal notices and submission recovery come along unchanged, and there is one prompting path instead of two.  |
+| Where does the prompt live without a table? | Docked at the bottom in Focus and on phones.                                      | A box placed on the table needs the table; those views already show one card at a time.                                                         |
+| What remains after a run?                   | Nothing: the question, its context and Continue clear once accepted.              | They belonged to that question. Iteration 5 measured the composer leaving three cards in context for the next, unrelated run.                   |
+| Move the model choice to brane settings?    | No: it stays in the bottom line, beside the save status.                          | It applies to Develop and machines as well, and a brane setting would need a new stored record for no new behaviour.                            |
+| Build arrows in this iteration?             | No, deferred to iteration 7.                                                      | An arrow needs a relation record, a migration, two synchronized commands, a drawing gesture and a manifest entry kind: an iteration of its own. |
+
+### Measured
+
+The second path is now Ask: the same app, with the question written out.
+
+| Scenario                     | Ask                                                       | Machine and chips                                                   |
+| ---------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------- |
+| 1. Pressure-test a claim     | 6 actions, 142 characters typed, 3 cards                  | 5 actions (⋯, Develop, marquee, Critique, Run), none typed, 4 cards |
+| 4. Ask about three cards     | 4 actions (marquee, Ask about 3, question, Run), 63 typed | n/a                                                                 |
+| 6. Keep a brief: build       | 4 (marquee, Ask about 3, prompt, Run)                     | 4 (marquee, Machine, prompt, Run)                                   |
+| 6. Keep a brief: each update | 3 (flip, Reuse with current sources, Run)                 | 1 (Rerun)                                                           |
+
+The Machine chip brought scenario 6's build from 7 to 4, level with asking, so a
+machine now costs nothing extra and saves two actions on every update. Scenario 4's
+answer is checked to stand at the box's exact table position.
+
+### Defects found by building it
+
+- The scenario servers shared ports with the import and workspace-recovery suites,
+  and parallel workers collided. They now use 4201 to 4203, which no other suite uses.
+- A run with no sources showed no Exact inputs on its back.
+- Handlers rebuilt on every render would have re-rendered every card on each
+  keystroke in the Ask box. The canvas now receives stable callbacks.
+- Resizing to a phone layout with the box open would have kept it on a table that
+  phones do not show.
+
+## Recommended iteration 7
+
+Arrows, and an Update for asked answers.
+
+1. **Arrows.** A `relations` table (brane, from placement, to placement, label), with
+   `relation.create` and `relation.remove` synchronized like feeds. Draw one by
+   dragging a card's port onto another card (not a slot) and naming it. Send it as a
+   manifest `relation` entry when both ends are inputs of one run. This completes
+   scenario 1's last step: _answers_ from the objection to the claim.
+2. **Update an asked answer in place.** **Update** on a stale answer reruns its question
+   over the current sources. The new answer takes the old one's place, and the old one
+   goes on its back, as machine reruns do (`replacesPlacementId` on the run request).
+   Scenario 6's Ask update drops from 3 to 2.
+3. **An Ask sheet in Focus and on phones** in place of the docked panel, so the bottom
+   composer is gone everywhere.
+4. Measure scenario 1 including the arrow.

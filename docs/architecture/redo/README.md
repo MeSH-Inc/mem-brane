@@ -1,9 +1,10 @@
 # Redo: a table of cards and machines
 
-Status: iteration 5. Machines, feeds, staleness, card backs, tray history, the
-selection chips, Ask with Make reusable, and the header menu that replaced the action
-row all run in the app. The bottom composer still stands beside Ask. Groups, arrows and
-Compare models are still concept.
+Status: iteration 6. Machines, feeds, staleness, card backs, tray history, the
+selection chips (Develop, Ask, Reply, Critique, Machine, Flip), the header menu and the
+Ask box run in the app. On the desktop canvas the prompt lives in the Ask box; Focus
+and phones still dock it at the bottom. Arrows, groups and Compare models are still
+concept.
 
 This directory proposes a replacement for the current brane interface; once accepted,
 its decisions move into the numbered architecture documents and this directory is
