@@ -96,11 +96,10 @@ test('a machine keeps a brief current with one press per update', async ({ page 
         counts.composer[phase]++;
         await work();
       };
-      for (const card of cards) {
-        const node = page.locator(`.react-flow__node[data-id="${card.placementId}"]`);
-        await node.locator('.card-grip').hover();
-        await act('build', () => node.getByRole('button', { name: '+ Use as context' }).click());
-      }
+      await act('build', () => marquee(page, cards));
+      await act('build', () =>
+        page.getByRole('button', { name: '+ Add 3 selected', exact: true }).click(),
+      );
       await act('build', () =>
         page
           .getByRole('textbox', { name: 'Run prompt' })
@@ -142,8 +141,7 @@ test('Develop goes to the claim’s back and Critique arrives pre-fed', async ({
         await work();
       };
       const claim = page.locator(`.react-flow__node[data-id="${cards[0].placementId}"]`);
-      const study = page.locator(`.react-flow__node[data-id="${cards[1].placementId}"]`);
-      await claim.locator('.card-grip').hover();
+      await act(() => claim.getByRole('button', { name: 'Card actions' }).click());
       await act(() => claim.getByRole('button', { name: 'Develop', exact: true }).click());
       await expect(claim.getByRole('button', { name: /Show front · 1 on the back/ })).toBeVisible();
       await expect(claim.locator('.back-item')).toContainText('Development');
@@ -151,18 +149,7 @@ test('Develop goes to the claim’s back and Critique arrives pre-fed', async ({
       expect(
         (await state(braneId)).placements.find((p) => p.host_placement_id === cards[0].placementId),
       ).toBeTruthy();
-      // One reverse marquee from the empty table on the right selects both cards.
-      const top = (await claim.boundingBox())!;
-      const bottom = (await study.boundingBox())!;
-      await act(async () => {
-        await page.mouse.move(top.x + top.width + 60, top.y + 20);
-        await page.mouse.down();
-        await page.mouse.move(top.x + top.width - 30, bottom.y + bottom.height - 20, {
-          steps: 8,
-        });
-        await page.mouse.up();
-      });
-      await expect(page.getByRole('toolbar', { name: 'Selection' })).toContainText('2 cards');
+      await act(() => marquee(page, cards));
       await act(() => page.getByRole('button', { name: 'Critique', exact: true }).click());
       await expect(page.locator('[data-feed-slot="claim"] .slot-chip')).toHaveCount(1);
       await expect(page.locator('[data-feed-slot="evidence"] .slot-chip')).toHaveCount(1);
@@ -189,16 +176,11 @@ test('Develop goes to the claim’s back and Critique arrives pre-fed', async ({
         await work();
       };
       const claim = page.locator(`.react-flow__node[data-id="${cards[0].placementId}"]`);
-      await claim.locator('.card-grip').hover();
+      await act(() => claim.getByRole('button', { name: 'Card actions' }).click());
       await act(() => claim.getByRole('button', { name: 'Develop', exact: true }).click());
       await completed(braneId, 1);
-      // Develop turned the claim over; its Use as context is on the front.
-      await act(() => claim.getByRole('button', { name: /Show front/ }).click());
-      for (const card of cards) {
-        const node = page.locator(`.react-flow__node[data-id="${card.placementId}"]`);
-        await node.locator('.card-grip').hover();
-        await act(() => node.getByRole('button', { name: '+ Use as context' }).click());
-      }
+      await act(() => marquee(page, cards));
+      await act(() => page.getByRole('button', { name: '+ Add 2 selected', exact: true }).click());
       counts.composer.typed = critiquePrompt.length;
       await act(() => page.getByRole('textbox', { name: 'Run prompt' }).fill(critiquePrompt));
       await act(() => page.getByRole('button', { name: 'Run ↗', exact: true }).click());
@@ -209,6 +191,84 @@ test('Develop goes to the claim’s back and Critique arrives pre-fed', async ({
   record('claim', counts);
   expect(counts.redo.actions).toBeLessThan(counts.composer.actions);
 });
+
+test('Ask answers a region where it was asked, and Make reusable turns it into a machine', async ({
+  page,
+}) => {
+  const counts = {
+    redo: { actions: 0, typed: 0, contextLeft: 0 },
+    composer: { actions: 0, typed: 0, contextLeft: 0 },
+  };
+  const question = 'What do these three cards agree on, and where do they disagree?';
+  await serve(page, 4187, async ({ seed, completed, state, api, origin }) => {
+    // The redo's path: one marquee, Ask, the question, Ask ↗.
+    {
+      const { braneId, cards } = await seed('Region, redo', sources);
+      await page.goto(`${origin}/b/${braneId}`);
+      const act = async (work: () => Promise<unknown>) => {
+        counts.redo.actions++;
+        await work();
+      };
+      await act(() => marquee(page, cards));
+      await act(() => page.getByRole('button', { name: 'Ask about 3', exact: true }).click());
+      counts.redo.typed = question.length;
+      await act(() => page.getByRole('textbox', { name: 'Ask prompt' }).fill(question));
+      await act(() => page.getByRole('button', { name: 'Ask ↗', exact: true }).click());
+      await completed(braneId, 1);
+      await expect(page.getByRole('form', { name: 'Ask' })).toHaveCount(0);
+      const run = (await state(braneId)).runs[0];
+      const detail = await (await page.request.get(api(`/runs/${run.id}`))).json();
+      expect(detail.inputs.map((i: { kind: string }) => i.kind)).toEqual([
+        'reference',
+        'reference',
+        'reference',
+        'prompt',
+      ]);
+      counts.redo.contextLeft = await page.locator('.context-chips .chip').count();
+      // The answer's back holds the question; Make reusable feeds the same cards.
+      const answer = page.locator('.react-flow__node:has(.canvas-card.generated)');
+      await answer.getByRole('button', { name: /Show back/ }).click();
+      await expect(answer.getByRole('blockquote', { name: 'Question' })).toContainText(question);
+      await answer.getByRole('button', { name: 'Make reusable' }).click();
+      await expect(page.locator('[data-feed-slot="cards"] .slot-chip')).toHaveCount(3);
+      await page.locator('.machine-lever').click();
+      await completed(braneId, 2);
+    }
+
+    // The composer's path: one marquee, add the selection, the prompt, Run.
+    {
+      const { braneId, cards } = await seed('Region, composer', sources);
+      await page.goto(`${origin}/b/${braneId}`);
+      const act = async (work: () => Promise<unknown>) => {
+        counts.composer.actions++;
+        await work();
+      };
+      await act(() => marquee(page, cards));
+      await act(() => page.getByRole('button', { name: '+ Add 3 selected', exact: true }).click());
+      counts.composer.typed = question.length;
+      await act(() => page.getByRole('textbox', { name: 'Run prompt' }).fill(question));
+      await act(() => page.getByRole('button', { name: 'Run ↗', exact: true }).click());
+      await completed(braneId, 1);
+      counts.composer.contextLeft = await page.locator('.context-chips .chip').count();
+    }
+  });
+  record('region', counts);
+  expect(counts.redo.contextLeft).toBe(0);
+});
+
+// One reverse marquee from the empty table right of the cards selects all of them.
+async function marquee(page: Page, cards: { placementId: string }[]) {
+  const node = (id: string) => page.locator(`.react-flow__node[data-id="${id}"]`);
+  const top = (await node(cards[0].placementId).boundingBox())!;
+  const bottom = (await node(cards[cards.length - 1].placementId).boundingBox())!;
+  await page.mouse.move(top.x + top.width + 60, top.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(top.x + top.width - 30, bottom.y + bottom.height - 20, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.getByRole('toolbar', { name: 'Selection' })).toContainText(
+    `${cards.length} cards`,
+  );
+}
 
 interface BraneRead {
   placements: { id: string; block_id: string; host_placement_id: string | null }[];

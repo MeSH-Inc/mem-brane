@@ -83,7 +83,11 @@ function render(s = state) {
           onManage={noop}
           onInspect={noop}
           onRerun={noop}
-          onDetach={() => {}}
+          onDetach={noop}
+          onReuse={noop}
+          asking={false}
+          onAsk={noop}
+          onCancelAsk={noop}
         />
       </StrictMode>,
     ),

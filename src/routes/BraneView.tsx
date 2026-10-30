@@ -13,6 +13,9 @@ import { acceptedFiles, pasteFiles, dropFiles, allowFileDrop } from '../services
 import { ImportTray } from '../components/ImportTray';
 import { selectedBlockIds } from '../canvas/selection';
 import { openSpot } from '../canvas/machines';
+import { CardBack } from '../canvas/CardBack';
+import { MachineControls } from '../canvas/MachineControls';
+import { ASK_HEIGHT, ASK_WIDTH, type AskRequest } from '../canvas/AskBox';
 import {
   useCallback,
   useEffect,
@@ -33,7 +36,6 @@ import { useStore } from 'zustand';
 import { LiveBlockContent } from '../components/LiveBlockContent';
 import { SpawnButton } from '../components/SpawnButton';
 import { ArtifactActions, type CardAction } from '../components/ArtifactActions';
-import { ResponseSources } from '../components/ResponseSources';
 import { FirstSteps } from '../components/FirstSteps';
 import { RunHistory } from '../components/RunHistory';
 import { RunInputs } from '../components/RunInputs';
@@ -321,13 +323,18 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
   const canvasInsertion = useRef<() => { x: number; y: number }>(() => ({ x: 100, y: 100 }));
   const machineActions = useMemo(
     () => ({
-      onRunMachine: (placementId: string) =>
-        needsAccount() ? Promise.resolve() : controller.runMachine(placementId),
+      // The output is revealed in the tray, moving the view only if it is out of sight.
+      onRunMachine: async (placementId: string) => {
+        if (needsAccount()) return;
+        const attention = presentation.getState().attention;
+        const id = await controller.runMachine(placementId);
+        if (id) presentation.getState().reveal(attention, { blockId: id, kind: 'reveal' });
+      },
       onEstimateMachine: controller.estimateMachine,
       onFeed: controller.feed,
       onUnfeed: controller.unfeed,
     }),
-    [controller, needsAccount],
+    [controller, needsAccount, presentation],
   );
   const tablePlacements = () =>
     (controller.state?.placements ?? []).filter((p) => !p.host_placement_id);
@@ -338,6 +345,10 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     const placementId = controller.state?.placements.find((p) => p.block_id === id)?.id;
     if (placementId) useInteraction.getState().setSelectedPlacements([placementId]);
   }, [controller]);
+  // Focus lists and opens cards on the table; what is on a back is read on its host.
+  const tableBlocks = (state?.blocks ?? []).filter((b) =>
+    state?.placements.some((p) => p.block_id === b.id && !p.host_placement_id),
+  );
   // The cards the selection chips act on, in reading order; machines are excluded.
   const selectedCards = (() => {
     if (!state || focusMode || mobile) return [];
@@ -356,17 +367,103 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     state?.blocks.find((b) => b.id === selectedCards[0].block_id)?.origin === 'authored'
       ? selectedCards[0]
       : undefined;
-  // Selection never changes context by itself; Ask adds the selected cards the prompt
-  // does not already use, once per block.
-  const askable = selectedBlockIds(selectedCards, ui.selectedPlacements).filter(
+  // Selection never changes the composer's context by itself; it offers to add it.
+  const unreferencedSelection = selectedBlockIds(selectedCards, ui.selectedPlacements).filter(
     (id) => !ui.references.includes(id),
   );
-  const ask = () => {
-    ui.addReferences(askable);
-    requestAnimationFrame(() =>
-      document.querySelector<HTMLTextAreaElement>('[aria-label="Run prompt"]')?.focus(),
-    );
+  const replyTo =
+    selectedCards.length === 1
+      ? state?.blocks.find((b) => b.id === selectedCards[0].block_id)?.messageId
+      : undefined;
+  // Ask opens a question at the selection's right edge, where its answer will land.
+  const [askRequest, setAskRequest] = useState<AskRequest>();
+  const openAsk = () => {
+    if (!selectedCards.length) return;
+    // Beside the selection, or below it when that is nearer to open space.
+    const right = Math.max(...selectedCards.map((p) => p.x + p.width));
+    const left = Math.min(...selectedCards.map((p) => p.x));
+    const bottom = Math.max(...selectedCards.map((p) => p.y + p.height));
+    const top = selectedCards[0].y;
+    const beside = openSpot(tablePlacements(), { x: right + 80, y: top }, ASK_WIDTH, ASK_HEIGHT);
+    const below = openSpot(tablePlacements(), { x: left, y: bottom + 40 }, ASK_WIDTH, ASK_HEIGHT);
+    const spot =
+      Math.hypot(beside.x - right, beside.y - top) <= Math.hypot(below.x - left, below.y - bottom)
+        ? beside
+        : below;
+    setAskRequest({
+      id: crypto.randomUUID(),
+      references: selectedBlockIds(selectedCards, ui.selectedPlacements),
+      x: spot.x,
+      y: spot.y,
+    });
   };
+  const submitAsk = useCallback(
+    (question: string) => {
+      if (!askRequest || needsAccount()) return;
+      const attention = presentation.getState().attention;
+      const geometry = {
+        x: askRequest.x,
+        y: askRequest.y,
+        width: ASK_WIDTH,
+        height: ASK_HEIGHT,
+      };
+      void controller.ask(question, askRequest.references, geometry).then((id) => {
+        if (!id) return;
+        setAskRequest((current) => (current?.id === askRequest.id ? undefined : current));
+        presentation.getState().reveal(attention, { blockId: id, kind: 'reveal' });
+      });
+    },
+    [askRequest, controller, needsAccount, presentation],
+  );
+  const cancelAsk = useCallback(() => setAskRequest(undefined), []);
+  // Make reusable: a machine whose prompt is the question and whose one slot is fed
+  // with the cards the answer was asked about. Braces in the question would name
+  // slots of their own, so they become parentheses.
+  const makeReusable = useCallback(
+    async (runId: string, question: string) => {
+      const current = controller.state;
+      if (!current) return;
+      const tableOf = (blockId: string) =>
+        current.placements.find((p) => p.block_id === blockId && !p.host_placement_id);
+      const answer = tableOf(current.runs.find((r) => r.id === runId)?.output_block_id ?? '');
+      const sources = current.derivations
+        .filter((d) => d.runId === runId && d.kind === 'reference')
+        .flatMap((d) => tableOf(d.sourceBlockId) ?? []);
+      if (!answer) return;
+      const template = `${question.replace(/\{/g, '(').replace(/\}/g, ')')}\n\n{cards}`;
+      const id = await controller.createMachine(
+        openSpot(
+          current.placements.filter((p) => !p.host_placement_id),
+          { x: answer.x + answer.width + 80, y: answer.y },
+          400,
+          340,
+        ),
+        template,
+      );
+      const machine = controller.state?.placements.find((p) => p.block_id === id);
+      if (!machine) return;
+      if (sources.length)
+        await controller.feed(
+          sources.map((p) => p.id),
+          machine.id,
+          'cards',
+        );
+      useInteraction.getState().setSelectedPlacements([machine.id]);
+    },
+    [controller],
+  );
+  const focusBack = useMemo(
+    () => ({
+      onDetach: controller.detach,
+      onReuse: makeReusable,
+      onOpenSource: focusBlock,
+      onInspect: inspectRun,
+      onRerun: rerun,
+      onStop: controller.cancelRun,
+      onRetry: controller.retryRun,
+    }),
+    [controller, makeReusable, focusBlock, inspectRun, rerun],
+  );
   // Critique is a machine pre-fed from the selection: the first card in reading order
   // is the claim and the rest are its evidence. It runs only when its lever is pulled.
   const critique = async () => {
@@ -420,7 +517,9 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     },
     [braneId, commands, refresh],
   );
-  const focused = state?.blocks.find((b) => b.id === (focus ?? retainedFocus)) ?? state?.blocks[0];
+  const focused = state?.blocks.find((b) => b.id === (focus ?? retainedFocus)) ?? tableBlocks[0];
+  const focusedPlacement =
+    focused && state?.placements.find((p) => p.block_id === focused.id && !p.host_placement_id);
   if (!state) return <div className="loading">{error || 'Opening brane…'}</div>;
   const availableDrafts = ui.availableDrafts.filter((d) =>
     state.blocks.some((b) => b.id === d.blockId),
@@ -463,6 +562,9 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
         if (event.key === 'f' && selectedCards.length) {
           event.preventDefault();
           flipSelection();
+        } else if (event.key === '/' && selectedCards.length) {
+          event.preventDefault();
+          openAsk();
         } else if (event.key === 'd' && developable) {
           event.preventDefault();
           spawn(developable.block_id, developable.id);
@@ -749,8 +851,8 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
           {focusMode ? (
             <div className="focus-layout">
               <nav className="block-outline">
-                <span className="eyebrow">CARDS / {state.blocks.length}</span>
-                {state.blocks.map((b, i) => (
+                <span className="eyebrow">CARDS / {tableBlocks.length}</span>
+                {tableBlocks.map((b, i) => (
                   <button
                     key={b.id}
                     className={focused?.id === b.id ? 'active' : ''}
@@ -781,17 +883,29 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                     onStop={controller.cancelRun}
                     onRetry={controller.retryRun}
                   />
-                  {focused.origin === 'generated' && (
-                    <ResponseSources
-                      document={controller.document}
-                      blockId={focused.id}
-                      onOpenSource={focusBlock}
-                      onInspect={inspectRun}
-                      onRerun={rerun}
-                    />
-                  )}
+                  {focusedPlacement &&
+                    (focused.kind === 'machine' ? (
+                      <div className="focus-machine">
+                        <MachineControls
+                          placementId={focusedPlacement.id}
+                          blockId={focused.id}
+                          document={controller.document}
+                          actions={machineActions}
+                        />
+                      </div>
+                    ) : (
+                      <section className="focus-back" aria-label="Back">
+                        <span className="eyebrow">Back</span>
+                        <CardBack
+                          placementId={focusedPlacement.id}
+                          blockId={focused.id}
+                          document={controller.document}
+                          actions={focusBack}
+                        />
+                      </section>
+                    ))}
                   <footer>
-                    {focused.origin !== 'generated' && (
+                    {focused.origin !== 'generated' && focused.kind !== 'machine' && (
                       <SpawnButton
                         block={focused}
                         busy={spawning.includes(focused.id)}
@@ -806,9 +920,11 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                     {focused.messageId ? (
                       <button onClick={() => continueBranch(focused.messageId)}>⑂ Continue</button>
                     ) : (
-                      <button onClick={() => ui.addReferences([focused.id])}>
-                        + Use as context
-                      </button>
+                      focused.kind !== 'machine' && (
+                        <button onClick={() => ui.addReferences([focused.id])}>
+                          + Use as context
+                        </button>
+                      )
                     )}
                     <ActionMenu label="More" align="right">
                       {focused.messageId && (
@@ -889,6 +1005,11 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 onInspect={inspectRun}
                 onRerun={rerun}
                 onDetach={controller.detach}
+                onReuse={makeReusable}
+                ask={askRequest}
+                asking={controller.asking}
+                onAsk={submitAsk}
+                onCancelAsk={cancelAsk}
                 machine={machineActions}
               />
             </Suspense>
@@ -907,9 +1028,15 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                     Develop
                   </button>
                 )}
-                {askable.length > 0 && (
-                  <button title="Add to the prompt's context" onClick={ask}>
-                    Ask about {askable.length}
+                <button title="Ask a question of these cards (/)" onClick={openAsk}>
+                  Ask about {selectedBlockIds(selectedCards, ui.selectedPlacements).length}
+                </button>
+                {replyTo && (
+                  <button
+                    title="Continue this response's conversation in the prompt below"
+                    onClick={() => continueBranch(replyTo)}
+                  >
+                    Reply
                   </button>
                 )}
                 <button
@@ -950,6 +1077,14 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                   {state.blocks.find((b) => b.id === id)?.content.text.slice(0, 23) || 'Card'} ×
                 </button>
               ))}
+              {unreferencedSelection.length > 0 && (
+                <button
+                  className="suggest-chip"
+                  onClick={() => ui.addReferences(unreferencedSelection)}
+                >
+                  + Add {unreferencedSelection.length} selected
+                </button>
+              )}
               {!ui.references.length && !ui.continueFrom && (
                 <span className="muted">Prompt only</span>
               )}

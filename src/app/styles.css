@@ -373,17 +373,6 @@ a {
 .block-editor::placeholder {
   color: #b2b6a6;
 }
-.canvas-card footer {
-  display: flex;
-  gap: 8px;
-  border-top: 1px solid #eaecdf;
-}
-.canvas-card footer button {
-  font-size: 8px;
-  border: 0;
-  background: transparent;
-  color: #849467;
-}
 .response-content {
   white-space: pre-wrap;
   overflow: auto;
@@ -1239,9 +1228,6 @@ a {
   font-weight: 650;
   color: #384c2e;
 }
-.canvas-card footer {
-  flex-wrap: wrap;
-}
 .canvas-card .react-flow__handle {
   width: 6px;
   height: 6px;
@@ -1476,8 +1462,7 @@ a {
   height: 48px;
   padding: 6px 16px;
 }
-.tools button,
-.canvas-card footer button {
+.tools button {
   font-size: 12px;
 }
 .view-toggle button {
@@ -1655,32 +1640,8 @@ summary:focus-visible {
   flex-basis: 100%;
   margin: 0;
 }
-.canvas-card footer {
-  min-height: 0;
-  height: 0;
-  padding: 0 10px;
-  opacity: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.canvas-card:is(.selected, :focus-within, :hover) footer {
-  height: auto;
-  min-height: 40px;
-  padding: 4px 8px;
-  opacity: 1;
-  overflow: visible;
-  pointer-events: auto;
-  gap: 2px;
-}
 .canvas-card:has(.action-menu[open]) {
   overflow: visible;
-}
-.canvas-card footer .menu-content {
-  top: auto;
-  bottom: calc(100% + 4px);
-}
-.canvas-card footer button {
-  padding: 6px;
 }
 .card-grip {
   font-size: 11px;
@@ -1819,14 +1780,6 @@ summary:focus-visible {
   }
   .workspace-dialog .inspector {
     padding: 0;
-  }
-  .canvas-card footer {
-    min-height: 40px;
-    height: auto;
-    opacity: 1;
-    padding: 4px 8px;
-    pointer-events: auto;
-    overflow: visible;
   }
 }
 .title-error {
@@ -2196,17 +2149,11 @@ summary:focus-visible {
   border-radius: 999px;
   padding: 1px 8px;
 }
-.machine-card footer,
-.machine-card:is(.selected, :focus-within, :hover) footer {
-  height: auto;
-  min-height: 0;
+.machine-footer {
+  display: flex;
   padding: 8px 12px 12px;
-  opacity: 1;
-  overflow: visible;
-  pointer-events: auto;
-  border-top: 0;
 }
-.machine-card footer .machine-lever {
+.machine-footer .machine-lever {
   width: 100%;
   padding: 8px 10px;
   border-radius: 7px;
@@ -2215,10 +2162,10 @@ summary:focus-visible {
   background: var(--green);
   color: #fff;
 }
-.machine-card footer .machine-lever.stale {
+.machine-footer .machine-lever.stale {
   background: #c98a1b;
 }
-.machine-card footer .machine-lever:disabled {
+.machine-footer .machine-lever:disabled {
   background: #e4e6dc;
   color: #7c8173;
   font-weight: 500;
@@ -2361,4 +2308,75 @@ summary:focus-visible {
   padding: 6px 0 4px;
   font-size: 12px;
   line-height: 1.6;
+}
+.card-menu > summary {
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 1;
+  color: #8b9676;
+}
+.card-menu > summary::after {
+  content: none;
+}
+.card-menu .menu-content {
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.card-status .spawn-button {
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+}
+.back-question {
+  margin: 6px 0 0;
+  padding: 4px 0 4px 10px;
+  border-left: 2px solid #c8d2ae;
+  white-space: pre-wrap;
+}
+.back-question .text-button {
+  display: block;
+  margin-top: 4px;
+}
+.ask-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: #fffefa;
+  border: 1px dashed #889c58;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px #363d2214;
+  cursor: auto;
+}
+.ask-box .eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ask-box textarea {
+  min-height: 72px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+  font-size: 13px;
+}
+.ask-box footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.suggest-chip {
+  border: 1px dashed var(--green);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--green);
+  font-size: 11px;
+  padding: 3px 9px;
+}
+/* An open card menu draws above the neighbouring cards it overlaps. */
+.react-flow__node:has(.action-menu[open]) {
+  z-index: 1000 !important;
 }

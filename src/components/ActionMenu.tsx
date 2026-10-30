@@ -2,11 +2,14 @@ import { useEffect, useRef, type ReactNode } from 'react';
 
 export function ActionMenu({
   label,
+  text,
   children,
   className = '',
   align = 'left',
 }: {
   label: string;
+  // Visible summary content when it differs from the accessible label.
+  text?: ReactNode;
   children: ReactNode;
   className?: string;
   align?: 'left' | 'right';
@@ -31,8 +34,8 @@ export function ActionMenu({
         }
       }}
     >
-      <summary role="button" aria-label={label}>
-        {label}
+      <summary role="button" aria-label={label} title={text ? label : undefined}>
+        {text ?? label}
       </summary>
       <div
         className={`menu-content align-${align}`}

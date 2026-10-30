@@ -31,6 +31,7 @@ import { derivationEdges, machineEdges } from './derivations';
 import { MachineCard, FeedPort, type MachineActions } from './MachineCard';
 import { machineStaleness } from './machines';
 import { CardBack, type BackActions } from './CardBack';
+import { AskBox, ASK_WIDTH, type AskNode, type AskRequest } from './AskBox';
 import { SpawnButton } from '../components/SpawnButton';
 import type { CardAction } from '../components/ArtifactActions';
 import { LiveBlockContent } from '../components/LiveBlockContent';
@@ -58,6 +59,7 @@ type CardData = ResponseActions & {
   onInspect: (runId: string) => void;
   onRerun: (runId: string) => void;
   onDetach: (placementId: string) => void;
+  onReuse: (runId: string, question: string) => void;
   machine: MachineActions;
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
@@ -85,13 +87,22 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
   const back = useMemo<BackActions>(
     () => ({
       onDetach: data.onDetach,
+      onReuse: data.onReuse,
       onOpenSource: data.onOpenSource,
       onInspect: data.onInspect,
       onRerun: data.onRerun,
       onStop: data.onStop,
       onRetry: data.onRetry,
     }),
-    [data.onDetach, data.onOpenSource, data.onInspect, data.onRerun, data.onStop, data.onRetry],
+    [
+      data.onDetach,
+      data.onReuse,
+      data.onOpenSource,
+      data.onInspect,
+      data.onRerun,
+      data.onStop,
+      data.onRetry,
+    ],
   );
   if (!block) return null;
   const resize =
@@ -111,6 +122,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         onFocused={data.onFocused}
         onEdit={data.onEdit}
         actions={data.machine}
+        onManage={(view) => data.onManage(block.id, id, view)}
       >
         {resize}
       </MachineCard>
@@ -125,7 +137,18 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         <header className="card-grip">
           <span className="kind-mark">{block.origin === 'generated' ? '✳' : '◇'}</span>
           <span>{cardKind(block)}</span>
-          <span className="card-status" />
+          <span className="card-status">
+            {/* Develop's progress and recovery stay visible; starting it is in the menu. */}
+            {!data.mobile && block.origin !== 'generated' && (activity.busy || activity.retry) && (
+              <SpawnButton
+                block={block}
+                busy={activity.busy}
+                phase={activity.phase}
+                retry={activity.retry}
+                onSpawn={() => data.onSpawn(block.id, id)}
+              />
+            )}
+          </span>
           <button
             className={`nodrag nopan flip-button${changed ? ' changed' : ''}`}
             aria-pressed={flipped}
@@ -135,6 +158,36 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
           >
             ↻{held > 0 && <span className="flip-count">{held}</span>}
           </button>
+          {!data.mobile && (
+            <ActionMenu
+              label="Card actions"
+              text="⋯"
+              align="right"
+              className="card-menu nodrag nopan"
+            >
+              {block.origin !== 'generated' && !activity.busy && !activity.retry && (
+                <SpawnButton
+                  block={block}
+                  busy={false}
+                  retry={false}
+                  onSpawn={() => data.onSpawn(block.id, id)}
+                />
+              )}
+              {block.messageId && (
+                <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
+              )}
+              <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
+              <button onClick={() => data.onManage(block.id, id, 'place')}>
+                Show on another brane…
+              </button>
+              <button onClick={() => data.onManage(block.id, id, 'versions')}>
+                Version history
+              </button>
+              <button onClick={() => data.onManage(block.id, id, 'remove')}>
+                Remove from this brane
+              </button>
+            </ActionMenu>
+          )}
           <button
             className="nodrag nopan icon-button"
             title={data.mobile ? 'Open card in Focus' : 'Focus block'}
@@ -156,38 +209,6 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
             onRetry={data.onRetry}
           />
         )}
-        {!data.mobile && !flipped && (
-          <footer className="nodrag nopan">
-            {block.origin !== 'generated' && (
-              <SpawnButton
-                block={block}
-                busy={activity.busy}
-                phase={activity.phase}
-                retry={activity.retry}
-                onSpawn={() => data.onSpawn(block.id, id)}
-              />
-            )}
-            {block.messageId ? (
-              <button onClick={() => data.onContinue(block.messageId!)}>⑂ Continue</button>
-            ) : (
-              <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
-            )}
-            <ActionMenu label="More" align="right">
-              {block.messageId && (
-                <button onClick={() => data.onContext(block.id)}>+ Use as context</button>
-              )}
-              <button onClick={() => data.onManage(block.id, id, 'place')}>
-                Show on another brane…
-              </button>
-              <button onClick={() => data.onManage(block.id, id, 'versions')}>
-                Version history
-              </button>
-              <button onClick={() => data.onManage(block.id, id, 'remove')}>
-                Remove from this brane
-              </button>
-            </ActionMenu>
-          </footer>
-        )}
       </article>
     );
   return observer ? (
@@ -198,7 +219,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
     content
   );
 });
-const nodeTypes = { card: Card };
+const nodeTypes = { card: Card, ask: AskBox };
 interface Props extends ResponseActions {
   mobile: boolean;
   onContext: (ids: string[]) => void;
@@ -216,6 +237,11 @@ interface Props extends ResponseActions {
   onRerun: CardData['onRerun'];
   onDetach: CardData['onDetach'];
   machine: MachineActions;
+  onReuse: CardData['onReuse'];
+  ask?: AskRequest;
+  asking: boolean;
+  onAsk: (prompt: string) => void;
+  onCancelAsk: () => void;
 }
 function Inner(props: Props) {
   const { mobile } = props;
@@ -330,6 +356,7 @@ function Inner(props: Props) {
           onInspect: props.onInspect,
           onRerun: props.onRerun,
           onDetach: props.onDetach,
+          onReuse: props.onReuse,
           onStop: props.onStop,
           onRetry: props.onRetry,
           machine: props.machine,
@@ -370,13 +397,63 @@ function Inner(props: Props) {
     props.onInspect,
     props.onRerun,
     props.onDetach,
+    props.onReuse,
     props.onStop,
     props.onRetry,
     props.machine,
   ]);
+  const askData = useMemo(
+    () =>
+      props.ask && {
+        count: props.ask.references.length,
+        busy: props.asking,
+        onAsk: props.onAsk,
+        onCancel: props.onCancelAsk,
+      },
+    [props.ask, props.asking, props.onAsk, props.onCancelAsk],
+  );
+  const allNodes = useMemo<(CardNode | AskNode)[]>(
+    () =>
+      props.ask && askData
+        ? [
+            ...nodes,
+            {
+              id: `ask:${props.ask.id}`,
+              type: 'ask',
+              position: { x: props.ask.x, y: props.ask.y },
+              width: ASK_WIDTH,
+              style: { width: ASK_WIDTH, pointerEvents: 'all' },
+              data: askData,
+            },
+          ]
+        : nodes,
+    [nodes, props.ask, askData],
+  );
+  // An Ask box opened out of sight is brought into view with the cards it asks about.
+  const askId = props.ask?.id;
+  useEffect(() => {
+    if (!askId) return;
+    const frame = requestAnimationFrame(() => {
+      const shown = allNodes.filter(
+        (n) => n.id === `ask:${askId}` || (n.type === 'card' && selected.includes(n.id)),
+      );
+      if (!within(shown, host.current, getViewport()))
+        void fitView({ nodes: shown, padding: 0.2, maxZoom: 1, duration: 0 });
+    });
+    return () => cancelAnimationFrame(frame);
+    // Only a newly opened box moves the view.
+  }, [askId]);
+  // Machine runs and the feeds whose cards changed since the last run, as stable keys.
+  const machineRuns = useStore(props.document.store, (s) =>
+    (s.state?.runs ?? [])
+      .filter((r) => r.machine_block_id)
+      .map((r) => r.id)
+      .join(' '),
+  );
   useEffect(() => {
     if (!request || request.kind !== 'reveal') return;
-    const connections = derivationEdges(scene);
+    // A machine's output is framed with its machine; other outputs with their sources.
+    const connections = derivationEdges(scene, new Set(machineRuns.split(' ').filter(Boolean)));
     // An output on a back is revealed by turning its host over.
     const hosts = fullScene.placements
       .filter((p) => p.block_id === request.blockId && p.host_placement_id)
@@ -394,7 +471,9 @@ function Inner(props: Props) {
     if (!visible.length) return;
     const frame = requestAnimationFrame(() => {
       if (presentation.getState().request?.id !== request.id) return;
-      void fitView({ nodes: visible, padding: 0.25, maxZoom: 1, duration: 0 });
+      // Move the view only when part of what is revealed is outside it.
+      if (!within(visible, host.current, getViewport()))
+        void fitView({ nodes: visible, padding: 0.25, maxZoom: 1, duration: 0 });
       presentation.getState().consume(request.id);
     });
     return () => cancelAnimationFrame(frame);
@@ -403,17 +482,12 @@ function Inner(props: Props) {
     fullScene.placements,
     scene.placements,
     scene.derivations,
+    machineRuns,
     nodes,
     fitView,
+    getViewport,
     presentation,
   ]);
-  // Machine runs and the feeds whose cards changed since the last run, as stable keys.
-  const machineRuns = useStore(props.document.store, (s) =>
-    (s.state?.runs ?? [])
-      .filter((r) => r.machine_block_id)
-      .map((r) => r.id)
-      .join(' '),
-  );
   const changedFeeds = useStore(props.document.store, (s) => {
     const state = s.state;
     if (!state) return '';
@@ -458,7 +532,7 @@ function Inner(props: Props) {
       }
     >
       <ReactFlow
-        nodes={nodes}
+        nodes={allNodes}
         edges={edges}
         nodeTypes={nodeTypes}
         nodesDraggable={false}
@@ -493,6 +567,27 @@ function Inner(props: Props) {
         />
       )}
     </div>
+  );
+}
+// Whether every node lies inside the canvas at the current viewport.
+function within(
+  nodes: { position: { x: number; y: number }; width?: number; height?: number }[],
+  host: HTMLElement | null,
+  view: { x: number; y: number; zoom: number },
+) {
+  const bounds = host?.getBoundingClientRect();
+  return (
+    !!bounds &&
+    nodes.every((n) => {
+      const left = n.position.x * view.zoom + view.x,
+        top = n.position.y * view.zoom + view.y;
+      return (
+        left >= 0 &&
+        top >= 0 &&
+        left + (n.width ?? 0) * view.zoom <= bounds.width &&
+        top + (n.height ?? 0) * view.zoom <= bounds.height
+      );
+    })
   );
 }
 export const BraneCanvas = memo(function BraneCanvas(props: Props) {

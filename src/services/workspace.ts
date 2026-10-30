@@ -64,6 +64,8 @@ export class WorkspaceController {
   readonly retryRequests: RequestJournal<string>;
   readonly machineRequests: RequestJournal<Prepared<RunMachine>>;
   private machines = new Map<string, Submission<Prepared<RunMachine>>>();
+  readonly askRequests: RequestJournal<Prepared<SubmitRun>>;
+  private readonly asks: Submission<Prepared<SubmitRun>>;
   private spawns = new Map<string, Submission<Prepared<SpawnArtifact>>>();
   private retries = new Map<string, Submission<string>>();
   private client: Client;
@@ -139,6 +141,12 @@ export class WorkspaceController {
       (v) => validPrepared(v, runMachineSchema),
       deps.storage,
     );
+    this.askRequests = new RequestJournal(
+      JSON.stringify(['mem-brane-pending-asks', actor, braneId]),
+      (v) => validPrepared(v, submitRun),
+      deps.storage,
+    );
+    this.asks = new Submission(this.askRequests);
     this.retryRequests = new RequestJournal(
       JSON.stringify(['mem-brane-pending-retries', actor, braneId]),
       (v) => typeof v === 'string',
@@ -822,10 +830,39 @@ export class WorkspaceController {
       if (this.valid(epoch)) return accepted.receipt.outputBlockId;
     }).catch(() => undefined);
   };
-  createMachine = (geometry: Geometry) =>
+  // Ask runs one prompt over explicit cards without touching the composer's draft.
+  // Its answer is placed beside the first card, where the Ask box was.
+  get asking() {
+    return this.commands.pending('ask');
+  }
+  ask = (prompt: string, references: string[], outputGeometry?: Geometry) => {
+    this.requireActive();
+    return this.command('ask', async (progress) => {
+      const epoch = this.epoch;
+      const accepted = await this.send(
+        this.asks,
+        () => ({
+          braneId: this.braneId,
+          key: crypto.randomUUID(),
+          model: this.draft.model ?? 'mock',
+          prompt,
+          references: [...references],
+          edits: this.edits(references),
+          outputGeometry,
+        }),
+        this.client.submit,
+        progress,
+      );
+      if (!this.valid(epoch)) return;
+      progress('refreshing');
+      await this.refresh();
+      if (this.valid(epoch)) return accepted.receipt.outputBlockId;
+    }).catch(() => undefined);
+  };
+  createMachine = (geometry: Geometry, template?: string) =>
     this.command(`createMachine:${JSON.stringify(geometry)}`, async (progress) => {
       const epoch = this.epoch;
-      const block = await this.client.createMachine(this.braneId, geometry);
+      const block = await this.client.createMachine(this.braneId, geometry, template);
       if (!this.valid(epoch)) return;
       progress('refreshing');
       await this.refresh();

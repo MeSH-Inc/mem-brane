@@ -83,7 +83,7 @@ test('marquee intersects placements independently at multiple zooms and resolves
   await node(page, 'pa2')
     .locator('.card-grip')
     .click({ modifiers: ['Shift'] });
-  await page.getByRole('button', { name: 'Ask about 1', exact: true }).click();
+  await page.getByRole('button', { name: '+ Add 1 selected', exact: true }).click();
   await expect(page.locator('.context-chips .chip')).toHaveCount(1);
   await partialDrag(page, 'pb');
   await expect(node(page, 'pa')).not.toHaveClass(/selected/);
@@ -241,6 +241,7 @@ test('editors and actions stay interactive without changing selection', async ({
   await expect(editor).toBeFocused();
   await expect(node(page, 'pb')).toHaveClass(/selected/);
   await expect(node(page, 'pa')).not.toHaveClass(/selected/);
+  await node(page, 'pa').getByRole('button', { name: 'Card actions' }).click();
   await node(page, 'pa').getByRole('button', { name: '+ Use as context', exact: true }).click();
   await expect(page.locator('.context-chips .chip')).toHaveCount(1);
   await expect(node(page, 'pb')).toHaveClass(/selected/);

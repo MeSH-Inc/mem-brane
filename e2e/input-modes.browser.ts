@@ -84,6 +84,8 @@ test('Tab reaches cards and native controls; keyboard selection toggles and edit
   await page.keyboard.press(forward);
   await expect(card.getByRole('button', { name: 'Show back' })).toBeFocused();
   await page.keyboard.press(forward);
+  await expect(card.getByRole('button', { name: 'Card actions' })).toBeFocused();
+  await page.keyboard.press(forward);
   await expect(card.getByRole('button', { name: '↗', exact: true })).toBeFocused();
   await page.keyboard.press(forward);
   const editor = card.getByRole('textbox');
@@ -95,9 +97,7 @@ test('Tab reaches cards and native controls; keyboard selection toggles and edit
   ).toBe(1);
   await expect(editor).toHaveValue(/Editable /);
   expect(writes.filter((path) => path.includes('/placements/'))).toEqual([]);
-  await page.keyboard.press(backward);
-  await page.keyboard.press(backward);
-  await page.keyboard.press(backward);
+  for (let step = 0; step < 4; step++) await page.keyboard.press(backward);
   await expect(card).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect.poll(() => writes.filter((path) => path.includes('/placements/')).length).toBe(1);
@@ -138,6 +138,7 @@ test.describe('emulated touch input', () => {
     const editor = page.locator('[data-id="pa"] textarea');
     await editor.tap();
     await expect(editor).toBeFocused();
+    await page.locator('[data-id="pa"]').getByRole('button', { name: 'Card actions' }).tap();
     await page
       .locator('[data-id="pa"]')
       .getByRole('button', { name: '+ Use as context', exact: true })

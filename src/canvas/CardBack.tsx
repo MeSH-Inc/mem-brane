@@ -1,4 +1,5 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
+import { client } from '../services/client';
 import { useStore } from 'zustand';
 import type { WorkspaceDocument } from '../services/workspace-document';
 import { LiveBlockContent } from '../components/LiveBlockContent';
@@ -8,6 +9,8 @@ import { statusLabels } from '../lib/labels';
 
 export interface BackActions extends ResponseActions {
   onDetach: (placementId: string) => void;
+  // Turn an asked answer back into a machine fed with the same cards.
+  onReuse: (runId: string, question: string) => void;
   onOpenSource: (blockId: string) => void;
   onInspect: (runId: string) => void;
   onRerun: (runId: string) => void;
@@ -41,12 +44,49 @@ export const CardBack = memo(function CardBack({
     JSON.stringify(backItems(s.scene.placements, s.runs, placementId)),
   );
   const held = useMemo(() => JSON.parse(heldKey) as BackItem[], [heldKey]);
+  // An answer composed from a prompt (not a machine's, not a development) shows the
+  // question it answers, read from the run's frozen prompt entry.
+  const askedRun = useStore(document.store, (s) => {
+    const run = s.runs[blockId];
+    return run &&
+      !run.machine_block_id &&
+      !s.scene.derivations.some((d) => d.outputBlockId === blockId && d.kind === 'source')
+      ? run.id
+      : '';
+  });
+  const [question, setQuestion] = useState('');
+  useEffect(() => {
+    if (!askedRun) return;
+    let current = true;
+    client
+      .run(askedRun)
+      .then((detail) => {
+        const prompt = detail.inputs.find((input) => input.kind === 'prompt');
+        if (current) setQuestion(prompt?.content.text ?? '');
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [askedRun]);
   return (
     <div className="card-back nodrag nopan" aria-label="Card back">
       {generated && (
         <section className="back-receipt" aria-label="Receipt">
           <span className="eyebrow">Receipt</span>
           {receipt && <p className="back-meta">{receipt}</p>}
+          {question && (
+            <blockquote className="back-question" aria-label="Question">
+              {question}
+              <button
+                className="text-button"
+                title="A machine with this question as its prompt, fed with the same cards"
+                onClick={() => actions.onReuse(askedRun, question)}
+              >
+                Make reusable
+              </button>
+            </blockquote>
+          )}
           <ResponseSources
             document={document}
             blockId={blockId}
