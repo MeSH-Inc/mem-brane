@@ -1,9 +1,11 @@
 # Redo: a table of cards and machines
 
-Status: iteration 7. Machines, feeds, arrows, staleness, card backs, tray history,
-Update for machines and asked answers, the selection chips (Develop, Ask, Reply,
-Critique, Machine, Flip), the header menu, the Ask box on the desktop canvas and the
-Ask sheet in Focus and on phones run in the app. Groups and Compare models are still
+Status: iteration 8. Machines, feeds, arrows (rewordable), groups as regions and
+stacks that feed as one, staleness that sees edited cards, changed group membership and
+changed arrows, card backs, tray history, Update for machines and asked answers, the
+selection chips (Develop, Ask, Reply, Critique, Machine, Group, Stack, Flip), the header
+menu, the Ask box on the desktop canvas and the Ask sheet in Focus and on phones run in
+the app. The slot's **each** mode, the matrix display and Compare models are still
 concept.
 
 This directory proposes a replacement for the current brane interface; once accepted,

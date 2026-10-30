@@ -46,7 +46,10 @@ each other, as frozen text that names them by entry label ("Reference 2 answers
 Reference 1."), adding the frozen revision when two inputs share a label. The text is
 an unplaced revision, like an Ask's prompt, so the entry is as sealed and owned as any
 other. Relation entries come after the inputs and before the prompt, and only arrows
-whose two ends are both inputs of the run are sent. _(Implemented in iteration 7.)_
+whose two ends are both inputs of the run are sent. Its structure (the positions of
+the two entries it joins, and the word) is sealed beside it in `relation_entries`, so
+a workspace can read which arrows a run sent by block. _(Implemented in iteration 7;
+structure in iteration 8.)_
 
 **Feed** (brane-scoped): exactly one of `from_placement_id` or `from_group_id`;
 `to_placement_id` (a machine); `slot`; `position` within the slot; `mode`
@@ -58,19 +61,28 @@ template it freezes, and later feed edits affect only later runs. A feed that wo
 close a loop through trays is rejected on write.
 
 _Iteration 3 implements_ `from_placement_id`, `to_placement_id` and `slot`, with
-position given by creation order. A machine cannot feed a machine yet, so no loop is
-possible and no cycle check exists. Groups and `mode` are not implemented.
+position given by creation order; _iteration 8_ adds `from_group_id` (migration 006).
+A machine cannot feed a machine yet, so no loop is possible and no cycle check exists.
+`mode` is not implemented.
 
 **Arrow** (brane-scoped, table `relations`): `from_placement_id`, `to_placement_id`,
 `label` (required, 1 to 60 characters). Both ends are cards on the table; removing
 either removes the arrow, and a rerun or Update moves the arrows of the card it
-replaces onto the new one. Arrows are synchronized like feeds, as `relation.create`
-and `relation.remove`. An arrow never causes a run. It is read only when both ends
-are inputs to one run. _(Implemented in iteration 7.)_
+replaces onto the new one. Arrows are synchronized like feeds, as `relation.create`,
+`relation.relabel` and `relation.remove`. An arrow never causes a run. It is read only
+when both ends are inputs to one run. _(Implemented in iteration 7; relabel in
+iteration 8.)_
 
-**Group** (brane-scoped): an ordered set of card placements, a label, and a display
-(`region` | `stack` | `matrix`). Display is presentation. A feed from a group
-expands, at run time, to its members in reading order.
+**Group** (brane-scoped, tables `groups` and `group_members`): a label (1 to 60
+characters), a display (`region` | `stack`), and an ordered list of member card
+placements on the table. A card belongs to at most one group; a group whose last member
+is removed is removed with its feeds, and a rerun or Update puts its new output in the
+replaced card's place in its group. Groups are synchronized as `group.create`,
+`group.edit` (the whole group: label, display and members) and `group.remove`. Display
+is presentation: a region frames the cards where they lie, a stack piles them into the
+first member's space. A feed from a group expands, when the machine is run, to its
+members in member order, which is reading order at the time each card joined.
+_(Implemented in iteration 8; `matrix` is not.)_
 
 **Loose Ask.** `/` creates a machine block and placement. After the run, the machine's
 placement is removed and the output takes its position; the machine block stays,
@@ -79,8 +91,10 @@ unplaced, so **Update** and **Make reusable** can reach it.
 ## Staleness is a projection
 
 A machine is stale when what its lever would send now differs from what its last run
-froze: per slot, the fed blocks and their live versions, and the machine's template
-version. Each workspace run carries `machine_block_id` and `machine_version`, each
+froze: per slot, the fed blocks (a fed group's current members included) and their
+live versions, the arrows between the fed cards, and the machine's template version.
+An asked answer is stale when a source's version or the arrows between its sources
+differ. Each workspace run carries `machine_block_id` and `machine_version`, each
 derivation its slot `label` and the source's `sourceVersion`, so the client computes
 staleness from the brane state it already holds, including unsaved and offline edits.
 Nothing is stored for staleness. The Update estimate is a separate read-only
@@ -88,8 +102,9 @@ Nothing is stored for staleness. The Update estimate is a separate read-only
 
 _Decision (iteration 3): staleness is computed on the client, not by re-planning on the
 server._ The client's projection works offline and updates on every local edit; a
-server re-plan per visible machine would need a request per edit. Group membership
-and relations will join the same comparison when groups exist.
+server re-plan per visible machine would need a request per edit. Iteration 8 adds
+group membership and arrows to the same comparison: the workspace read carries each
+visible run's sent arrows as `relationEntries` (run, from block, to block, word).
 
 ## Principle changes
 

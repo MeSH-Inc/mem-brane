@@ -416,22 +416,98 @@ put the new answer at the old one's exact position with the old one on its back.
 - An arrow's line still passes under any card standing between its ends; only its word
   stays above them.
 
-## Recommended iteration 8
+## Iteration 8: groups, and staleness that sees arrows and groups
 
-Groups, and staleness that sees arrows and groups.
+Iteration 8 added the third structure on the table, made arrows rewordable, and taught
+staleness about both.
 
-1. **Groups.** A `groups` table (brane, label, display `region` | `stack`) and ordered
-   members (card placements on the table), synchronized as `group.create`,
-   `group.members` and `group.remove`. Marquee and press `G` (or the **Group** chip):
-   the cards become a labelled region that moves as one. **Stack** fans them into one
-   card's space. A group's port feeds a slot with its members in reading order, frozen
-   at the press; the run's manifest is unchanged.
-2. **Staleness sees arrows and groups.** Project each workspace run's relation entries
-   (both ends' blocks and the word) next to its derivations. A machine or an asked
-   answer is stale when an arrow between its inputs is drawn, removed or relabelled, or
-   when a fed group gains or loses a member. Add `relation.relabel` (click the word to
-   edit it).
-3. **Arrows on phones.** Focus lists a card's arrows under its back (word, other card,
-   ×), so arrows are visible where they are not drawn.
-4. Measure scenario 2 up to feeding the stack (drop, lasso, `G`, Stack, feed), and
-   scenario 4 with the region grouped first.
+- **Groups.** Marquee cards and press `G` (or the **Group** chip): they become a
+  region, a dashed frame round the cards where they lie, labelled _Group 1_ with its
+  count. Pressing the frame's header selects the group; dragging it moves every
+  member. ✎ renames it. With the group selected the chips offer **Stack**, which piles
+  the members into the first one's space with three edges showing, and **Spread**,
+  which lays a stack back out on a grid; a press on any card of a stack moves the whole
+  stack. **Ungroup** leaves the cards where they are; **Take out of group** in a card's
+  menu removes one. `G` on a selection that includes one group's cards and loose
+  cards adds the loose cards to that group. Groups are stored in `groups` and
+  `group_members` (migration 006) and synchronized through the offline outbox as
+  `group.create`, `group.edit` and `group.remove`.
+- **A group feeds as one.** The frame's header has a port; dragging it onto a slot
+  feeds the group (`feeds.from_group_id`). The slot row shows one chip, _Group 1 · 12_.
+  The lever sends the group's current members in member order, frozen at the press;
+  the run's manifest is unchanged, one reference entry per card.
+- **Staleness sees arrows and groups.** Each run's relation entries now keep their
+  structure (`relation_entries`: the two entries joined and the word), and the
+  workspace read carries every visible run's sent arrows as `relationEntries`. A
+  machine is stale when an arrow between its fed cards is drawn, reworded or removed
+  (_stale · arrows changed_), or when a fed group gains or loses a card (the slot's
+  name, and the group's feed turns amber). An asked answer offers **Update** for the
+  same reasons, and its back lists the arrows it sent (_Arrows sent_).
+- **Rewording an arrow.** Pressing an arrow's word reopens the word picker with the
+  current word marked (`relation.relabel`). A run keeps the word it froze.
+- **Arrows in Focus and on phones.** Under a card's back, Focus lists its arrows as
+  sentences (_This card answers …_, _… contradicts this card_), each with ×.
+
+### Decisions taken while building
+
+| Question                                          | Decision                                                                                                               | Rationale                                                                                                                                      |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Is a stack a hidden set of cards or a layout?     | A layout: Stack writes each member's geometry onto a pile, Spread writes a grid.                                       | Every member stays a drawn node, so marquee, arrows, feeds and live updates need no second visibility rule; a pile is what a stack looks like. |
+| Can a card be in two groups?                      | No: one group per card, enforced by `UNIQUE(placement_id)`.                                                            | A region moves its members; two regions sharing a card would drag each other.                                                                  |
+| Which order does a group feed in?                 | Member order: reading order of the selection when grouped, joining cards appended.                                     | Recomputing reading order at the press would reorder a stack, whose members all stand in one place.                                            |
+| How does a card join or leave a group?            | Join: select it with the group and press `G`. Leave: **Take out of group**. Dropping a card into a frame does nothing. | One key covers creating and growing; a drop-to-join would make every drag across a region a membership change.                                 |
+| What happens to an empty group?                   | It is removed with its feeds, by trigger on the server and by the same rule in the replica.                            | A group with no cards has nothing to show or send.                                                                                             |
+| How is a group edited?                            | `group.edit` states the whole group (label, display, members); the last edit wins, without a version.                  | Groups are small and edited by one person at a time; a version check would add a conflict dialog for a label.                                  |
+| A card fed alone and inside a fed group?          | It fills the slot once, at its first feed.                                                                             | Sending one card twice in one slot doubles its weight without the user asking.                                                                 |
+| How does the client know which arrows a run sent? | `relation_entries` keeps each relation entry's two entry positions and word, sealed with the context.                  | The entry's frozen text names labels, not blocks; parsing it back would break when two inputs share a label.                                   |
+| What makes an arrow change stale?                 | The set of (from block, to block, word) between the inputs differs from the set the last run sent.                     | That is exactly what asking again would send differently; arrows touching only one input change nothing.                                       |
+| Do groups appear in Focus and on phones?          | Not in this iteration; Focus lists cards and their arrows.                                                             | A group adds no text to read, and feeding a group needs a drawn port; the phone's machine form (iteration 10) is where a group picker belongs. |
+
+### Measured
+
+| Scenario                                 | Actions                                                    |
+| ---------------------------------------- | ---------------------------------------------------------- |
+| 2. Reading pile, up to feeding the stack | 5 (drop, marquee, `G`, Stack, drag the port onto the slot) |
+| 4. Ask a region, grouped first           | 5 (marquee, `G`, Ask about 3, question, Run), 63 typed     |
+| 4. Ask a region, ungrouped (iteration 7) | 4                                                          |
+
+Scenario 2 runs to the slot for the first time: the stack's single chip reads
+_Group 1 · 12_, the run is checked to send all twelve cards in reading order under the
+slot's name, and taking one card out turns the machine _stale · text changed_ with the
+frame reading _Stack · 11_. Split itself is placed by the test, since the Workshop does
+not exist yet. Grouping costs scenario 4 one press; what it buys is a region that can
+be moved, fed and asked about again without another marquee. The answer's back lists
+the arrow it sent, and rewording that arrow makes **Update** appear.
+
+### Defects found by building it
+
+- React Flow styles its own node type `group` with a border and padding, which drew a
+  second frame inside the first. The frame's node type is now `cardGroup`.
+- An open card menu on the top card of a selected stack drew under the cards beneath
+  it, which a selection raises past the menu's z-index. A stack's depth is now capped
+  at four layers, and an open menu draws at 1010.
+- A feed from a card onto its own machine reported "Both ends must be placed" instead
+  of "A machine cannot feed a machine" once group sources were added; the kind check
+  runs first again.
+- Replicas stored before this iteration have no groups or sent arrows; IndexedDB
+  version 5 adds empty lists.
+
+## Recommended iteration 9
+
+The slot's **each** mode, and the Workshop.
+
+1. **Each.** A feed `mode` (`together` | `each`) on group feeds. When a group feeds a
+   slot, its chip shows a toggle; with **each**, the lever reads `Run ×12 · ≈ $0.09`.
+   One press admits one run per member in one transaction with one combined
+   reservation, each freezing its own manifest (domain.md, "Each and Compare models").
+2. **Outputs arrive as a stack.** The runs of one **each** press create their outputs
+   as one new group displayed as a stack beside the machine, in member order. A rerun
+   of an **each** feed replaces that stack's members in place, each old output going
+   on its replacement's back.
+3. **The Workshop.** A drawer listing built-in machines (Critique, Distill, Extract)
+   and any machine saved with **Save to Workshop**; taking one out places a copy at the
+   view's centre. Split and Diagram, whose outputs are several cards, wait for
+   iteration 10.
+4. Measure scenario 2 up to `Run ×12` with Extract standing in for Split, and scenario
+   3 (three Extract machines over one stack, each set to **each**) up to the three
+   output stacks.
