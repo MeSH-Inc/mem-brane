@@ -1,8 +1,8 @@
 # Domain mapping
 
 The redo is mostly a new projection of records that already exist. It adds one block
-kind, three brane-scoped records and one manifest entry kind, and changes one
-principle.
+kind, a host column on placements, three brane-scoped records and one manifest entry
+kind, and changes one principle.
 
 ## Unchanged
 
@@ -12,13 +12,19 @@ principle.
 | Receipt                   | Run, its sealed context manifest and RunOutput                                                                                                                                                       |
 | Developments              | Runs whose manifest has this block as a source or a reference entry                                                                                                                                  |
 | Reply and its thread line | The manifest's parent conversation message, exactly as Continue records it today; the line is projected from ConversationMessage parents                                                             |
-| Output on a back          | A generated block with no placement on this brane, listed through its run's inputs                                                                                                                   |
-| Put on table              | Create a placement for that block (today's **Show here**)                                                                                                                                            |
+| Output on a back          | A placement whose `host_placement_id` names the table placement holding it                                                                                                                           |
+| Put on table              | `placement.detach`: clear the host and give the placement table geometry                                                                                                                             |
 | Each and Compare models   | Several Runs admitted in one transaction with one combined reservation. Every input is known at admission (a stack's members, a list of models), so every Run freezes its own manifest at the press. |
 
-Develop stops creating a placement for its output. **Add → Unplaced cards** excludes
-generated blocks that have a source or reference block still placed on the brane:
-they live on that block's back.
+Develop places its output on the source placement's back, and a machine run moves the
+output it replaces, with that output's back, onto the new output's back. Backs are one
+level deep: a host is always on the table, and removing it removes what it holds.
+
+_Decision (iteration 4): an output on a back keeps a placement._ The concept first
+left such outputs unplaced and listed them through their runs. Every read of a brane
+(its blocks, runs, derivations and live updates) is scoped by placement, so an
+unplaced output would have needed a second visibility rule in each. A host column on
+the placement keeps one rule, and Unplaced cards needs no exclusion.
 
 ## Added
 

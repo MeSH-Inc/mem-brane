@@ -134,19 +134,96 @@ chips and Ask, which iteration 3 did not build.
   loaded the template into the composer. It now offers **Update**, which reruns the
   machine.
 
-## Recommended iteration 4
+## Iteration 4: outputs attach to what produced them
 
-Make outputs attach to what produced them, then measure scenario 1.
+Iteration 4 built the card back, tray history and the selection chips, and measured
+scenario 1 on both paths.
 
-1. **Card back.** Flip any card (`F`, or a corner fold) to its back, showing the
-   receipt (from `/runs/:id`) for generated cards and developments for authored ones.
-   Point Develop's output at the source's back by having Spawn stop creating a
-   placement.
-2. **Tray history.** On rerun, move the machine's previous output off the table and
-   onto the new output's back under _Earlier versions_. This removes the stacked
-   responses in the screenshot `test-results/machine-flow.png`.
-3. **Selection chips.** Show chips above the composer for the current selection
-   (Develop, Ask, Critique, Flip). Critique creates a machine pre-fed from the
-   selection, which brings scenario 1's build cost below the composer's.
-4. Extend `e2e/machines.browser.ts` with scenario 1 for both paths and record the counts
-   here.
+- **Migration 004.** A placement gains `host_placement_id`. A placement with a host is
+  drawn on that host's back instead of on the table. Triggers keep backs one level
+  deep and on one brane, and removing a host removes what it holds.
+- **Develop** places its output on the source placement's back, and the source card
+  turns over to show it streaming.
+- **Tray history.** A machine run takes the place of the machine's current output.
+  The replaced output and its back move to the new output's back. Feeds it gave other
+  machines move to the new output in the same slot position, so those machines go
+  stale instead of running on.
+- **Card back.** Every non-machine card has a flip control (↻, with a count of what
+  is on the back, amber once an input changed) and the `F` key. A generated card's
+  back shows its receipt: time, model, status, inputs by slot, Exact inputs and
+  Update. Under it are developments and earlier versions, newest first, each with
+  Exact inputs and **Put on table** (`placement.detach`, synchronized offline like
+  every other command). The **Based on** strip left the front.
+- **Selection chips** above the composer: **Develop** (`D`, one authored card), **Ask
+  about N** (adds the cards to the prompt and focuses it; it replaces "+ Add N
+  selected"), **Critique** and **Flip**. Critique places a Critique machine beside the
+  selection, with the first card in reading order fed to `{claim}` and the rest to
+  `{evidence}`.
+
+### Decisions taken while building
+
+| Question                                                         | Decision                                                        | Rationale                                                                                                                 |
+| ---------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Leave outputs on a back unplaced, as `domain.md` first proposed? | No: a placement with a host.                                    | Every brane read is scoped by placement; a host column keeps one visibility rule instead of adding a second to each read. |
+| What happens to a back when its host is removed?                 | It is removed with the host; the blocks stay in Unplaced cards. | Spilling every earlier version onto the table at stale positions would be worse than one recoverable removal.             |
+| Do feeds from a replaced output follow the tray?                 | Yes, keeping their slot position.                               | A downstream machine should see the new output and offer Rerun, which is iteration 2's "the next machine goes stale".     |
+| Which selected card is Critique's claim?                         | The first in reading order (top, then left).                    | Selection has no order of its own; reading order is what a person would point at first.                                   |
+| What does Ask count?                                             | Distinct blocks not already in the prompt.                      | Two placements of one block are one input.                                                                                |
+
+### Measured
+
+`e2e/machines.browser.ts` now runs each scenario against its own server and account,
+because one account polling through four paths exceeded the API's 240 requests per
+minute. Counts are written to `test-results/machine-actions/`.
+
+Scenario 6, keep a brief current:
+
+| Path     | Build the brief | Each update after a source edit           |
+| -------- | --------------- | ----------------------------------------- |
+| Composer | 5               | 3 (flip, Reuse with current sources, Run) |
+| Machine  | 7               | 1 (Rerun)                                 |
+
+The composer's update rose from 2 to 3: its Reuse button is now on the response's
+back. After the rerun, the table holds one brief instead of two stacked ones.
+
+Scenario 1, pressure-test a claim (Develop the claim, then critique it with the study):
+
+| Path     | Actions                                                 | Characters typed | Cards on the table after            |
+| -------- | ------------------------------------------------------- | ---------------- | ----------------------------------- |
+| Composer | 6 (Develop, flip back, 2 × Use as context, prompt, Run) | 142              | 3 (claim, study, critique)          |
+| Redo     | 4 (Develop, one marquee, Critique, Run)                 | 0                | 4 (claim, study, machine, critique) |
+
+The redo path costs two fewer actions and no writing. It leaves the Critique machine
+on the table, which is what makes the next critique one press. The composer's sixth
+action, flipping the claim back to reach Use as context, is a cost the card back added
+to the old interface. In iteration 3 that path took 5.
+
+### Defects found by building it
+
+- The back's item header (label, time, Exact inputs, Put on table) overflowed a 320 px
+  card. The time moved into the label's tooltip.
+- Ask first counted placements, so two placements of one block read "Ask about 2".
+  It now counts distinct blocks.
+- Develop turns the source over, which hides that card's footer actions until it is
+  turned back. Removing the footer, as recommended below, removes this.
+- A machine's output is placed to the right of the machine, often outside the view,
+  and nothing brings it into view. Not fixed in this iteration.
+
+## Recommended iteration 5
+
+Remove the card's action row and replace the composer with Ask, then measure
+scenarios 1, 4 and 6 again.
+
+1. **Footer removal.** Delete the card footer (Develop, Use as context, More). Develop
+   and Ask are chips. Show on another brane, Version history and Remove move to a
+   context menu on the grip, which also becomes the Reply entry for responses
+   (Continue). This also removes the flip-back action from both scenario 1 paths.
+2. **Ask collapses.** `/` or **Ask about N** opens a prompt at the selection's edge.
+   It runs as a composed run with the selection as references, and the answer takes
+   the prompt's place. The question goes on the answer's back. **Make reusable** on
+   the answer creates a machine with one `{cards}` slot fed from the same cards.
+   After this the bottom composer can go, and scenario 4 can be measured.
+3. **Reveal the tray.** After a lever press, pan only as far as needed to show the
+   machine's output (the reveal request, applied to the output placement).
+4. **Focus and phone.** Show the back in the Focus view, with the lever for machines,
+   so a machine can be run without the desktop canvas.
