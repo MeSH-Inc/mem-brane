@@ -332,19 +332,106 @@ answer is checked to stand at the box's exact table position.
 - Resizing to a phone layout with the box open would have kept it on a table that
   phones do not show.
 
-## Recommended iteration 7
+## Iteration 7: arrows, Update, and the Ask sheet
 
-Arrows, and an Update for asked answers.
+Iteration 7 added the second kind of link, gave asked answers an Update, and removed
+the always-docked prompt from Focus and phones.
 
-1. **Arrows.** A `relations` table (brane, from placement, to placement, label), with
-   `relation.create` and `relation.remove` synchronized like feeds. Draw one by
-   dragging a card's port onto another card (not a slot) and naming it. Send it as a
-   manifest `relation` entry when both ends are inputs of one run. This completes
-   scenario 1's last step: _answers_ from the objection to the claim.
-2. **Update an asked answer in place.** **Update** on a stale answer reruns its question
-   over the current sources. The new answer takes the old one's place, and the old one
-   goes on its back, as machine reruns do (`replacesPlacementId` on the run request).
-   Scenario 6's Ask update drops from 3 to 2.
-3. **An Ask sheet in Focus and on phones** in place of the docked panel, so the bottom
-   composer is gone everywhere.
-4. Measure scenario 1 including the arrow.
+- **Arrows.** Drag a card's port onto another card (not a slot) and pick a word:
+  _answers_, _supports_, _contradicts_, _extends_, or type another. The arrow is a
+  straight line between the two cards' nearest borders, with its word on a chip that
+  carries its one action, ×, which removes it. Arrows are stored in a new `relations`
+  table (migration 005) and synchronized like feeds, through the offline outbox as
+  `relation.create` and `relation.remove`. Removing either card removes the arrow, and
+  a machine rerun or an Update moves the arrows of the card it replaces onto the new
+  one.
+- **Arrows reach the model.** A run whose inputs include both ends of an arrow freezes
+  a `relation` entry before its prompt, for example "Reference 2 answers Reference 1."
+  The model receives it as "[Relation between reference materials] …". An arrow with
+  only one end among the inputs sends nothing.
+- **Update for asked answers.** When an answer's source has changed, its back shows
+  **Update** beside the question. Update asks the same question over the same cards'
+  current text, with the same branch. The new answer takes the old one's place, and
+  the old one goes on its back as an earlier version, as with machine reruns
+  (`replacesPlacementId` on the run request). The Ask box's own draft is untouched.
+- **The Ask sheet.** Focus and phones open the prompt as a sheet over the bottom bar,
+  from the same places as the desktop Ask box: the toolbar **Ask** (now on every
+  view), `/`, **+ Use as context**, **Reply** and ⑂ Continue. It closes when its
+  question is accepted, when **×** or Escape is pressed, or never by itself while a
+  newer question is written. It opens on its own when the brane opens with an unsent
+  question or a Run whose delivery is unconfirmed, and an Ask box open on the table
+  becomes the sheet when the view loses its table. The bottom bar now holds only the
+  selection chips, the model and the save status, everywhere.
+
+### Decisions taken while building
+
+| Question                                           | Decision                                                                                                         | Rationale                                                                                                                                                             |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| How does a relation entry hold its text?           | As a frozen, unplaced text revision, like an Ask's prompt, with kind `relation` (domain.md said a label column). | `context_entries.revision_id` is required and sealed; a revision keeps the entry immutable, owned and readable through the existing input reader, with no new column. |
+| How does a relation name its ends?                 | By the ends' entry labels; with the frozen revision added when two inputs share a label (one slot, many cards).  | The model already sees each input under its label and revision, so the relation points at text it can find. Slot labels repeat; revisions do not.                     |
+| Is the arrow's word optional?                      | No: required, 1 to 60 characters, chosen from four offered words or typed.                                       | A relation with no word tells the model nothing it can use. Offering four words keeps naming one press.                                                               |
+| Can an arrow end on a machine or a card on a back? | No: both ends are cards on the table.                                                                            | A machine is never an input, so the arrow could never be sent; a card on a back is not drawn.                                                                         |
+| How do runs see an arrow drawn while offline?      | `/runs` and `/machines/run` wait for every pending arrow change on their brane.                                  | The server reads arrows at admission. Arrow commands write one resource per brane, so a run synchronizes them first, as it does its sources' text.                    |
+| Relabel an arrow?                                  | Not in this iteration: remove it and draw it again (two presses).                                                | A relabel command is a third synchronized command for a rare edit; it joins arrow staleness in iteration 8.                                                           |
+| Does a new arrow make earlier runs stale?          | Not yet.                                                                                                         | Staleness compares what a run froze, and workspace runs do not yet project their relation entries. Iteration 8 projects them, together with group membership.         |
+| Where does Update live?                            | On the answer's back, beside its question, only when a source changed.                                           | The flip control already turns amber when a source changes; Update is the next press there. Showing it on fresh answers would invite paid reruns that change nothing. |
+| Hide the sheet when it holds a draft?              | It may be closed, keeping the draft, but it opens with the brane when a question is unsent or a Run unconfirmed. | A closed sheet must not hide work the recovery paths exist to protect, and an always-open sheet would be the docked composer again.                                   |
+
+### Measured
+
+| Scenario                     | Ask                                                       | Machine and chips                                                              |
+| ---------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 1. Pressure-test a claim     | 8 actions, 142 characters typed, 3 cards                  | 7 actions (⋯, Develop, marquee, Critique, Run, drag arrow, _answers_), 4 cards |
+| 4. Ask about three cards     | 4 actions (marquee, Ask about 3, question, Run), 63 typed | n/a                                                                            |
+| 6. Keep a brief: build       | 4 (marquee, Ask about 3, prompt, Run)                     | 4 (marquee, Machine, prompt, Run)                                              |
+| 6. Keep a brief: each update | 2 (flip, Update)                                          | 1 (Rerun)                                                                      |
+
+Scenario 1 is complete for the first time: the arrow costs two gestures on either
+path, and a run over the objection and the claim is checked to send "Reference 2
+answers Reference 1." Scenario 6's asked update fell from 3 to 2, and is checked to
+put the new answer at the old one's exact position with the old one on its back.
+
+### Defects found by building it
+
+- React Flow's handle routing sent an arrow from the right side of a card that stood
+  to the right of its target, looping behind the cards between them. Arrows are now
+  straight lines between the cards' nearest borders.
+- Arrow words drew under the cards, and under a selected card in particular, which
+  React Flow raises to z-index 1000. Labels now draw at 1001, and an open card menu
+  moved to 1002 to stay above them.
+- Focus's own **+ Use as context** added the card without opening the sheet, so the
+  context went somewhere unseen.
+- A Retry that reconciled an unconfirmed Run closed the sheet over the newer question
+  written meanwhile.
+- Replicas stored before this iteration have no arrow list; IndexedDB version 4 adds an
+  empty one.
+- The guest-claim browser test failed about one run in three. Its session poll could
+  leave with the guest cookie before the intercepted sign-in committed; Better Auth
+  then answered that the guest session no longer existed and cleared the new session
+  cookie. The test now polls only after the sign-in commits. The iteration 6 commit
+  never failed it in seven runs, so this iteration's timing exposed the race rather
+  than created it.
+- The keyboard-focus check in `canvas.browser.ts` fails about one full run in seven, on
+  the iteration 6 commit as well. It is not addressed here.
+- An arrow's line still passes under any card standing between its ends; only its word
+  stays above them.
+
+## Recommended iteration 8
+
+Groups, and staleness that sees arrows and groups.
+
+1. **Groups.** A `groups` table (brane, label, display `region` | `stack`) and ordered
+   members (card placements on the table), synchronized as `group.create`,
+   `group.members` and `group.remove`. Marquee and press `G` (or the **Group** chip):
+   the cards become a labelled region that moves as one. **Stack** fans them into one
+   card's space. A group's port feeds a slot with its members in reading order, frozen
+   at the press; the run's manifest is unchanged.
+2. **Staleness sees arrows and groups.** Project each workspace run's relation entries
+   (both ends' blocks and the word) next to its derivations. A machine or an asked
+   answer is stale when an arrow between its inputs is drawn, removed or relabelled, or
+   when a fed group gains or loses a member. Add `relation.relabel` (click the word to
+   edit it).
+3. **Arrows on phones.** Focus lists a card's arrows under its back (word, other card,
+   ×), so arrows are visible where they are not drawn.
+4. Measure scenario 2 up to feeding the stack (drop, lasso, `G`, Stack, feed), and
+   scenario 4 with the region grouped first.

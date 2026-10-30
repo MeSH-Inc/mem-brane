@@ -41,10 +41,12 @@ they filled, and its prompt entry is the machine's own frozen revision. The exis
 response's **Based on** strip show slot names instead of ordinals. _(Implemented in
 iteration 3.)_
 
-**Manifest entry kind `relation`.** It names two entry positions in the same manifest
-and a label. The label is stored in the sealed manifest itself, which is immutable, so
-a relation needs no revision of its own. Relations are included only between entries
-of the same run.
+**Manifest entry kind `relation`.** It states how two inputs of the same run stand to
+each other, as frozen text that names them by entry label ("Reference 2 answers
+Reference 1."), adding the frozen revision when two inputs share a label. The text is
+an unplaced revision, like an Ask's prompt, so the entry is as sealed and owned as any
+other. Relation entries come after the inputs and before the prompt, and only arrows
+whose two ends are both inputs of the run are sent. _(Implemented in iteration 7.)_
 
 **Feed** (brane-scoped): exactly one of `from_placement_id` or `from_group_id`;
 `to_placement_id` (a machine); `slot`; `position` within the slot; `mode`
@@ -59,8 +61,12 @@ _Iteration 3 implements_ `from_placement_id`, `to_placement_id` and `slot`, with
 position given by creation order. A machine cannot feed a machine yet, so no loop is
 possible and no cycle check exists. Groups and `mode` are not implemented.
 
-**Arrow** (brane-scoped): `from_placement_id`, `to_placement_id`, optional `label`.
-An arrow never causes a run. It is read only when both ends are inputs to one run.
+**Arrow** (brane-scoped, table `relations`): `from_placement_id`, `to_placement_id`,
+`label` (required, 1 to 60 characters). Both ends are cards on the table; removing
+either removes the arrow, and a rerun or Update moves the arrows of the card it
+replaces onto the new one. Arrows are synchronized like feeds, as `relation.create`
+and `relation.remove`. An arrow never causes a run. It is read only when both ends
+are inputs to one run. _(Implemented in iteration 7.)_
 
 **Group** (brane-scoped): an ordered set of card placements, a label, and a display
 (`region` | `stack` | `matrix`). Display is presentation. A feed from a group
