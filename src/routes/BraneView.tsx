@@ -13,9 +13,10 @@ import { acceptedFiles, pasteFiles, dropFiles, allowFileDrop } from '../services
 import { ImportTray } from '../components/ImportTray';
 import { selectedBlockIds } from '../canvas/selection';
 import { openSpot } from '../canvas/machines';
+import { SELECTION_MACHINE_TEMPLATE } from '../../shared/machines';
 import { CardBack } from '../canvas/CardBack';
 import { MachineControls } from '../canvas/MachineControls';
-import { ASK_HEIGHT, ASK_WIDTH, type AskRequest } from '../canvas/AskBox';
+import { ASK_HEIGHT, ASK_WIDTH, type AskPosition } from '../canvas/AskBox';
 import {
   useCallback,
   useEffect,
@@ -27,7 +28,7 @@ import {
   useMemo,
 } from 'react';
 import { useNavigate, useRouter } from '@tanstack/react-router';
-import type { Geometry } from '../../shared/types/domain';
+import type { Geometry, Placement } from '../../shared/types/domain';
 import { api, replica, needsAccount } from '../services/api';
 import { RunIssueNotice } from '../components/RunIssueNotice';
 import { useInteraction } from '../stores/interaction';
@@ -228,7 +229,11 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     if (needsAccount()) return;
     const attention = presentation.getState().attention;
     const reconciling = submission.state.status === 'uncertain';
-    const id = await run();
+    const box = askAt;
+    const id = await run(
+      canvasAsk && box ? { x: box.x, y: box.y, width: ASK_WIDTH, height: ASK_HEIGHT } : undefined,
+    );
+    if (id && box) setAskAt((current) => (current?.id === box.id ? undefined : current));
     if (!id || reconciling) return;
     const placementId = controller.state?.placements.find((p) => p.block_id === id)?.id;
     if (
@@ -292,28 +297,25 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
       } else
         void controller
           .reuseInputs(runId)
-          .then(() =>
-            document.querySelector<HTMLTextAreaElement>('[aria-label="Run prompt"]')?.focus(),
-          )
+          .then(() => reuseOpened.current?.(run?.output_block_id))
           .catch((e) => controller.setError(e.message));
     },
     [controller, spawn],
   );
+  // Reuse loads a run's prompt and current sources; the box opens beside its answer.
+  const reuseOpened = useRef<(outputBlockId?: string) => void>(undefined);
   const manage = useCallback(
     (blockId: string, placementId: string, view: CardAction) =>
       setManaged({ blockId, placementId, view }),
     [],
   );
-  const continueBranch = useCallback(
-    (messageId?: string) => {
-      controller.setContinue(messageId);
-      if (messageId)
-        requestAnimationFrame(() =>
-          document.querySelector<HTMLTextAreaElement>('[aria-label="Run prompt"]')?.focus(),
-        );
-    },
-    [controller],
-  );
+  const continueBranch = (messageId?: string) => {
+    controller.setContinue(messageId);
+    if (!messageId) return;
+    const block = controller.state?.blocks.find((b) => b.messageId === messageId);
+    if (askAt) focusPrompt();
+    else openAskAt(block ? placementsOf([block.id]) : []);
+  };
   const attentionRef = useRef<HTMLElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const insertionReady = useCallback((getPoint: () => { x: number; y: number }) => {
@@ -375,47 +377,56 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     selectedCards.length === 1
       ? state?.blocks.find((b) => b.id === selectedCards[0].block_id)?.messageId
       : undefined;
-  // Ask opens a question at the selection's right edge, where its answer will land.
-  const [askRequest, setAskRequest] = useState<AskRequest>();
-  const openAsk = () => {
-    if (!selectedCards.length) return;
-    // Beside the selection, or below it when that is nearer to open space.
-    const right = Math.max(...selectedCards.map((p) => p.x + p.width));
-    const left = Math.min(...selectedCards.map((p) => p.x));
-    const bottom = Math.max(...selectedCards.map((p) => p.y + p.height));
-    const top = selectedCards[0].y;
-    const beside = openSpot(tablePlacements(), { x: right + 80, y: top }, ASK_WIDTH, ASK_HEIGHT);
-    const below = openSpot(tablePlacements(), { x: left, y: bottom + 40 }, ASK_WIDTH, ASK_HEIGHT);
-    const spot =
-      Math.hypot(beside.x - right, beside.y - top) <= Math.hypot(below.x - left, below.y - bottom)
-        ? beside
-        : below;
-    setAskRequest({
-      id: crypto.randomUUID(),
-      references: selectedBlockIds(selectedCards, ui.selectedPlacements),
-      x: spot.x,
-      y: spot.y,
-    });
+  // On the desktop canvas the prompt lives in an Ask box on the table, beside what it
+  // asks about, and its answer takes the box's place. Focus and phones dock it below.
+  const canvasAsk = !focusMode && !mobile;
+  const [askAt, setAskAt] = useState<AskPosition>();
+  const focusPrompt = () =>
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLTextAreaElement>('[aria-label="Run prompt"]')?.focus(),
+    );
+  // Beside the placements, or below them when that is nearer to open space; at the view's
+  // centre when there are none.
+  const openAskAt = (around: Placement[]) => {
+    if (!canvasAsk) return focusPrompt();
+    const table = tablePlacements();
+    let spot = openSpot(table, canvasInsertion.current(), ASK_WIDTH, ASK_HEIGHT);
+    if (around.length) {
+      const right = Math.max(...around.map((p) => p.x + p.width));
+      const left = Math.min(...around.map((p) => p.x));
+      const bottom = Math.max(...around.map((p) => p.y + p.height));
+      const top = Math.min(...around.map((p) => p.y));
+      const beside = openSpot(table, { x: right + 80, y: top }, ASK_WIDTH, ASK_HEIGHT);
+      const below = openSpot(table, { x: left, y: bottom + 40 }, ASK_WIDTH, ASK_HEIGHT);
+      spot =
+        Math.hypot(beside.x - right, beside.y - top) <= Math.hypot(below.x - left, below.y - bottom)
+          ? beside
+          : below;
+    }
+    setAskAt({ id: crypto.randomUUID(), x: spot.x, y: spot.y });
   };
-  const submitAsk = useCallback(
-    (question: string) => {
-      if (!askRequest || needsAccount()) return;
-      const attention = presentation.getState().attention;
-      const geometry = {
-        x: askRequest.x,
-        y: askRequest.y,
-        width: ASK_WIDTH,
-        height: ASK_HEIGHT,
-      };
-      void controller.ask(question, askRequest.references, geometry).then((id) => {
-        if (!id) return;
-        setAskRequest((current) => (current?.id === askRequest.id ? undefined : current));
-        presentation.getState().reveal(attention, { blockId: id, kind: 'reveal' });
-      });
-    },
-    [askRequest, controller, needsAccount, presentation],
+  const placementsOf = (blockIds: string[]) =>
+    tablePlacements().filter((p) => blockIds.includes(p.block_id));
+  // Ask about the selection: exactly these cards, as a new question.
+  const openAsk = () => {
+    ui.setReferences(selectedBlockIds(selectedCards, ui.selectedPlacements));
+    ui.setContinue(undefined);
+    openAskAt(selectedCards);
+  };
+  const closeAsk = useCallback(() => setAskAt(undefined), []);
+  // Cards receive stable callbacks so typing a prompt never re-renders the table.
+  const latestAsk = useRef({ addContext: (_: string[]) => {}, continueBranch: (_?: string) => {} });
+  const canvasContext = useCallback((ids: string[]) => latestAsk.current.addContext(ids), []);
+  const canvasContinue = useCallback(
+    (messageId?: string) => latestAsk.current.continueBranch(messageId),
+    [],
   );
-  const cancelAsk = useCallback(() => setAskRequest(undefined), []);
+  // Adding a card from its menu opens the box beside it if none is open.
+  const addContext = (ids: string[]) => {
+    controller.addReferences(ids);
+    if (!askAt) openAskAt(placementsOf(ids));
+    else focusPrompt();
+  };
   // Make reusable: a machine whose prompt is the question and whose one slot is fed
   // with the cards the answer was asked about. Braces in the question would name
   // slots of their own, so they become parentheses.
@@ -466,24 +477,45 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
   );
   // Critique is a machine pre-fed from the selection: the first card in reading order
   // is the claim and the rest are its evidence. It runs only when its lever is pulled.
-  const critique = async () => {
+  // Place a machine beside the selection and feed its cards into the named slots. It
+  // runs only when its lever is pulled.
+  const feedNewMachine = async (
+    template: string | undefined,
+    slots: [slot: string, cards: Placement[]][],
+    edit = false,
+  ) => {
     const cards = selectedCards;
     if (!cards.length) return;
+    const attention = presentation.getState().attention;
     const right = Math.max(...cards.map((p) => p.x + p.width));
     const id = await controller.createMachine(
       openSpot(tablePlacements(), { x: right + 80, y: cards[0].y }, 400, 340),
+      template,
     );
     const machine = controller.state?.placements.find((p) => p.block_id === id);
-    if (!machine) return;
-    await controller.feed([cards[0].id], machine.id, 'claim');
-    if (cards.length > 1)
-      await controller.feed(
-        cards.slice(1).map((p) => p.id),
-        machine.id,
-        'evidence',
-      );
+    if (!id || !machine) return;
+    for (const [slot, fed] of slots)
+      if (fed.length)
+        await controller.feed(
+          fed.map((p) => p.id),
+          machine.id,
+          slot,
+        );
     useInteraction.getState().setSelectedPlacements([machine.id]);
+    if (edit)
+      presentation
+        .getState()
+        .reveal(attention, { blockId: id, placementId: machine.id, kind: 'edit' });
   };
+  // Critique: the first card in reading order is the claim, the rest its evidence.
+  const critique = () =>
+    feedNewMachine(undefined, [
+      ['claim', selectedCards.slice(0, 1)],
+      ['evidence', selectedCards.slice(1)],
+    ]);
+  // Machine: one {cards} slot fed with the whole selection, its prompt ready to edit.
+  const machineFromSelection = () =>
+    feedNewMachine(SELECTION_MACHINE_TEMPLATE, [['cards', selectedCards]], true);
   const flipSelection = () => {
     const interaction = useInteraction.getState();
     const back = !selectedCards.every((p) => interaction.flipped.includes(p.id));
@@ -544,6 +576,132 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     (retrySpawns.length ? 1 : 0) +
     (imports.recoveryError ? 1 : 0) +
     (controller.titleError ? 1 : 0);
+  // The prompt: what it is asked about, the question, and why it cannot run yet.
+  const promptPanel = (
+    <>
+      <div className="context-chips">
+        <button
+          className="context-toggle"
+          onClick={(event) => {
+            event.currentTarget.focus();
+            setInspectorTab('context');
+            ui.setInspector(true);
+          }}
+        >
+          Context · {ui.references.length}
+          {ui.continueFrom ? ' + branch' : ''}
+        </button>
+        {ui.continueFrom && (
+          <button className="chip branch" onClick={() => ui.setContinue(undefined)}>
+            ⑂ Continuing a branch ×
+          </button>
+        )}
+        {ui.references.map((id, i) => (
+          <button
+            key={id}
+            className="chip"
+            onClick={() => ui.setReferences(ui.references.filter((x) => x !== id))}
+          >
+            {i + 1} · {state.blocks.find((b) => b.id === id)?.content.text.slice(0, 23) || 'Card'} ×
+          </button>
+        ))}
+        {unreferencedSelection.length > 0 && (
+          <button className="suggest-chip" onClick={() => ui.addReferences(unreferencedSelection)}>
+            + Add {unreferencedSelection.length} selected
+          </button>
+        )}
+        {!ui.references.length && !ui.continueFrom && <span className="muted">Prompt only</span>}
+      </div>
+      <div
+        className="prompt-row"
+        onPaste={(event) => pasteFiles(event, (files) => acceptFiles(files, 'composer'))}
+        onDragOver={allowFileDrop}
+        onDrop={(event) => dropFiles(event, (files) => acceptFiles(files, 'composer'))}
+      >
+        <button
+          aria-label="Attach files to prompt"
+          onClick={() => {
+            pickerTarget.current = 'composer';
+            fileInput.current?.click();
+          }}
+        >
+          ＋
+        </button>
+        <textarea
+          aria-label="Run prompt"
+          placeholder="Where should this thought go next?"
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+              e.preventDefault();
+              if ((prompt.trim() || submission.state.status === 'uncertain') && !needsAccount())
+                void submitRun();
+            }
+          }}
+        />
+        <button
+          className="primary run-button"
+          aria-describedby={runFailure ? 'run-issue' : estimateIssue ? 'estimate-issue' : undefined}
+          disabled={
+            busy ||
+            (submission.state.status !== 'uncertain' &&
+              (pendingAttachments ||
+                !!compatibilityError ||
+                !!estimateIssue?.blocking ||
+                !prompt.trim()))
+          }
+          onClick={() => {
+            if (!needsAccount()) void submitRun();
+          }}
+        >
+          {busy
+            ? commands.store.getState().run?.phase === 'waiting'
+              ? 'Waiting for sources…'
+              : 'Submitting…'
+            : submission.state.status === 'uncertain'
+              ? 'Retry submission ↗'
+              : 'Run ↗'}
+        </button>
+      </div>
+      {pendingAttachments && <small>Finish or dismiss failed attachments before running.</small>}
+      {compatibilityError && (
+        <p role="alert" className="error">
+          {compatibilityError}
+        </p>
+      )}
+      {!runFailure && estimateIssue && submission.state.status !== 'uncertain' && (
+        <RunIssueNotice
+          id="estimate-issue"
+          issue={estimateIssue}
+          model={model}
+          models={models}
+          canRunAgain={false}
+          onUseMock={() => setModel('mock')}
+          onRunAgain={() => {}}
+        />
+      )}
+      {runFailure && !busy && (
+        <RunIssueNotice
+          id="run-issue"
+          issue={runFailure}
+          model={model}
+          models={models}
+          canRunAgain={submission.state.status !== 'uncertain' && !!prompt.trim()}
+          onUseMock={() => setModel('mock')}
+          onRunAgain={() => void submitRun()}
+        />
+      )}
+      {estimate && model !== 'mock' && (
+        <p className="ask-estimate">
+          {estimate.canAfford ? 'Up to' : 'Needs'} {formatUsd(estimate.reservedMicrousd)}
+        </p>
+      )}
+    </>
+  );
+  latestAsk.current = { addContext, continueBranch };
+  reuseOpened.current = (outputBlockId) =>
+    openAskAt(placementsOf(outputBlockId ? [outputBlockId] : []));
   return (
     <div
       className="brane-workspace"
@@ -562,9 +720,10 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
         if (event.key === 'f' && selectedCards.length) {
           event.preventDefault();
           flipSelection();
-        } else if (event.key === '/' && selectedCards.length) {
+        } else if (event.key === '/' && canvasAsk) {
           event.preventDefault();
-          openAsk();
+          if (selectedCards.length) openAsk();
+          else openAskAt([]);
         } else if (event.key === 'd' && developable) {
           event.preventDefault();
           spawn(developable.block_id, developable.id);
@@ -593,6 +752,15 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
           )}
         </div>
         <div className="toolbar-actions">
+          {canvasAsk && (
+            <button
+              className="ask-button"
+              title="Ask about the selection, or ask anything (/)"
+              onClick={() => (selectedCards.length ? openAsk() : openAskAt([]))}
+            >
+              Ask
+            </button>
+          )}
           <ActionMenu label="＋ Add">
             <CommandButton
               tasks={commands}
@@ -989,8 +1157,8 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
               )}
               <BraneCanvas
                 mobile={mobile}
-                onContext={controller.addReferences}
-                onContinue={continueBranch}
+                onContext={canvasContext}
+                onContinue={canvasContinue}
                 onImport={attachFiles}
                 onInsertionReady={insertionReady}
                 document={controller.document}
@@ -1006,10 +1174,8 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 onRerun={rerun}
                 onDetach={controller.detach}
                 onReuse={makeReusable}
-                ask={askRequest}
-                asking={controller.asking}
-                onAsk={submitAsk}
-                onCancelAsk={cancelAsk}
+                ask={canvasAsk && askAt ? { ...askAt, content: promptPanel } : undefined}
+                onCloseAsk={closeAsk}
                 machine={machineActions}
               />
             </Suspense>
@@ -1045,137 +1211,18 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 >
                   Critique
                 </button>
+                <button
+                  title="A machine fed with these cards; write its prompt, then pull its lever"
+                  onClick={() => void machineFromSelection()}
+                >
+                  Machine
+                </button>
                 <button title="Turn over (F)" onClick={flipSelection}>
                   Flip
                 </button>
               </div>
             )}
-            <div className="context-chips">
-              <button
-                className="context-toggle"
-                onClick={(event) => {
-                  event.currentTarget.focus();
-                  setInspectorTab('context');
-                  ui.setInspector(true);
-                }}
-              >
-                Context · {ui.references.length}
-                {ui.continueFrom ? ' + branch' : ''}
-              </button>
-              {ui.continueFrom && (
-                <button className="chip branch" onClick={() => ui.setContinue(undefined)}>
-                  ⑂ Continuing a branch ×
-                </button>
-              )}
-              {ui.references.map((id, i) => (
-                <button
-                  key={id}
-                  className="chip"
-                  onClick={() => ui.setReferences(ui.references.filter((x) => x !== id))}
-                >
-                  {i + 1} ·{' '}
-                  {state.blocks.find((b) => b.id === id)?.content.text.slice(0, 23) || 'Card'} ×
-                </button>
-              ))}
-              {unreferencedSelection.length > 0 && (
-                <button
-                  className="suggest-chip"
-                  onClick={() => ui.addReferences(unreferencedSelection)}
-                >
-                  + Add {unreferencedSelection.length} selected
-                </button>
-              )}
-              {!ui.references.length && !ui.continueFrom && (
-                <span className="muted">Prompt only</span>
-              )}
-            </div>
-            <div
-              className="prompt-row"
-              onPaste={(event) => pasteFiles(event, (files) => acceptFiles(files, 'composer'))}
-              onDragOver={allowFileDrop}
-              onDrop={(event) => dropFiles(event, (files) => acceptFiles(files, 'composer'))}
-            >
-              <button
-                aria-label="Attach files to prompt"
-                onClick={() => {
-                  pickerTarget.current = 'composer';
-                  fileInput.current?.click();
-                }}
-              >
-                ＋
-              </button>
-              <textarea
-                aria-label="Run prompt"
-                placeholder="Where should this thought go next?"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                    e.preventDefault();
-                    if (
-                      (prompt.trim() || submission.state.status === 'uncertain') &&
-                      !needsAccount()
-                    )
-                      void submitRun();
-                  }
-                }}
-              />
-              <button
-                className="primary run-button"
-                aria-describedby={
-                  runFailure ? 'run-issue' : estimateIssue ? 'estimate-issue' : undefined
-                }
-                disabled={
-                  busy ||
-                  (submission.state.status !== 'uncertain' &&
-                    (pendingAttachments ||
-                      !!compatibilityError ||
-                      !!estimateIssue?.blocking ||
-                      !prompt.trim()))
-                }
-                onClick={() => {
-                  if (!needsAccount()) void submitRun();
-                }}
-              >
-                {busy
-                  ? commands.store.getState().run?.phase === 'waiting'
-                    ? 'Waiting for sources…'
-                    : 'Submitting…'
-                  : submission.state.status === 'uncertain'
-                    ? 'Retry submission ↗'
-                    : 'Run ↗'}
-              </button>
-            </div>
-            {pendingAttachments && (
-              <small>Finish or dismiss failed attachments before running.</small>
-            )}
-            {compatibilityError && (
-              <p role="alert" className="error">
-                {compatibilityError}
-              </p>
-            )}
-            {!runFailure && estimateIssue && submission.state.status !== 'uncertain' && (
-              <RunIssueNotice
-                id="estimate-issue"
-                issue={estimateIssue}
-                model={model}
-                models={models}
-                canRunAgain={false}
-                onUseMock={() => setModel('mock')}
-                onRunAgain={() => {}}
-              />
-            )}
-            {runFailure && !busy && (
-              <RunIssueNotice
-                id="run-issue"
-                issue={runFailure}
-                model={model}
-                models={models}
-                canRunAgain={submission.state.status !== 'uncertain' && !!prompt.trim()}
-                onUseMock={() => setModel('mock')}
-                onRunAgain={() => void submitRun()}
-              />
-            )}
+            {!canvasAsk && promptPanel}
             <div className="composer-meta">
               <ActionMenu label={model === 'mock' ? 'Local mock' : model} className="model-menu">
                 <label>
@@ -1201,11 +1248,6 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                     : 'Text-only model · PDF text supported'}
                 </p>
               </ActionMenu>
-              {estimate && model !== 'mock' && (
-                <span>
-                  {estimate.canAfford ? 'Up to' : 'Needs'} {formatUsd(estimate.reservedMicrousd)}
-                </span>
-              )}
               <span className="save-notice" role="status">
                 {attentionCount
                   ? `Needs attention (${attentionCount})`

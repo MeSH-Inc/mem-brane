@@ -55,6 +55,12 @@ export const CardBack = memo(function CardBack({
       : '';
   });
   const [question, setQuestion] = useState('');
+  // Based on lists the sources with Exact inputs; a run without sources still has them.
+  const unsourced = useStore(document.store, (s) =>
+    s.runs[blockId] && !s.scene.derivations.some((d) => d.outputBlockId === blockId)
+      ? s.runs[blockId].id
+      : '',
+  );
   useEffect(() => {
     if (!askedRun) return;
     let current = true;
@@ -86,6 +92,11 @@ export const CardBack = memo(function CardBack({
                 Make reusable
               </button>
             </blockquote>
+          )}
+          {unsourced && (
+            <button className="text-button" onClick={() => actions.onInspect(unsourced)}>
+              Exact inputs
+            </button>
           )}
           <ResponseSources
             document={document}

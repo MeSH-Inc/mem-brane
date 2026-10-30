@@ -83,8 +83,9 @@ test('marquee intersects placements independently at multiple zooms and resolves
   await node(page, 'pa2')
     .locator('.card-grip')
     .click({ modifiers: ['Shift'] });
-  await page.getByRole('button', { name: '+ Add 1 selected', exact: true }).click();
-  await expect(page.locator('.context-chips .chip')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Ask about 1', exact: true }).click();
+  await expect(page.locator('.ask-box .context-chips .chip')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Close Ask' }).click();
   await partialDrag(page, 'pb');
   await expect(node(page, 'pa')).not.toHaveClass(/selected/);
   await expect(node(page, 'pa2')).not.toHaveClass(/selected/);

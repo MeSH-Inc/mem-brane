@@ -2341,12 +2341,17 @@ summary:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px 14px;
+  padding: 10px 12px 12px;
   background: #fffefa;
   border: 1px dashed #889c58;
   border-radius: 8px;
   box-shadow: 0 4px 16px #363d2214;
   cursor: auto;
+}
+.ask-box > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 .ask-box .eyebrow {
   font-size: 9px;
@@ -2354,19 +2359,13 @@ summary:focus-visible {
   text-transform: uppercase;
   color: var(--muted);
 }
-.ask-box textarea {
+.ask-box .prompt-row textarea {
   min-height: 72px;
-  resize: vertical;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 8px;
-  font: inherit;
-  font-size: 13px;
 }
-.ask-box footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+.ask-estimate {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
 }
 .suggest-chip {
   border: 1px dashed var(--green);

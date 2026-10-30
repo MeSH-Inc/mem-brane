@@ -85,9 +85,7 @@ function render(s = state) {
           onRerun={noop}
           onDetach={noop}
           onReuse={noop}
-          asking={false}
-          onAsk={noop}
-          onCancelAsk={noop}
+          onCloseAsk={noop}
         />
       </StrictMode>,
     ),

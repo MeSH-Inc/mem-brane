@@ -64,8 +64,6 @@ export class WorkspaceController {
   readonly retryRequests: RequestJournal<string>;
   readonly machineRequests: RequestJournal<Prepared<RunMachine>>;
   private machines = new Map<string, Submission<Prepared<RunMachine>>>();
-  readonly askRequests: RequestJournal<Prepared<SubmitRun>>;
-  private readonly asks: Submission<Prepared<SubmitRun>>;
   private spawns = new Map<string, Submission<Prepared<SpawnArtifact>>>();
   private retries = new Map<string, Submission<string>>();
   private client: Client;
@@ -141,12 +139,6 @@ export class WorkspaceController {
       (v) => validPrepared(v, runMachineSchema),
       deps.storage,
     );
-    this.askRequests = new RequestJournal(
-      JSON.stringify(['mem-brane-pending-asks', actor, braneId]),
-      (v) => validPrepared(v, submitRun),
-      deps.storage,
-    );
-    this.asks = new Submission(this.askRequests);
     this.retryRequests = new RequestJournal(
       JSON.stringify(['mem-brane-pending-retries', actor, braneId]),
       (v) => typeof v === 'string',
@@ -721,7 +713,8 @@ export class WorkspaceController {
       },
     );
   }
-  run = async () => {
+  // outputGeometry places the answer where the Ask box stood.
+  run = async (outputGeometry?: Geometry) => {
     this.requireActive();
     if (
       this.busy ||
@@ -737,12 +730,21 @@ export class WorkspaceController {
           composer = structuredClone(this.draft);
         const accepted = await this.send(
           this.submission,
-          () => this.runRequest(true, composer),
+          () => ({ ...this.runRequest(true, composer), outputGeometry }),
           this.client.submit,
           progress,
         );
         if (!this.valid(epoch)) return;
-        if (this.draft.prompt === accepted.request.payload.prompt) this.updateDraft({ prompt: '' });
+        // The question and the context it was asked with are done once accepted; a draft
+        // changed meanwhile is kept.
+        const sent = accepted.request.payload;
+        if (
+          this.draft.prompt === sent.prompt &&
+          JSON.stringify(this.draft.references ?? []) === JSON.stringify(sent.references) &&
+          this.draft.continueFrom === sent.continueFrom
+        )
+          this.updateDraft({ prompt: '', references: [], continueFrom: undefined });
+        else if (this.draft.prompt === sent.prompt) this.updateDraft({ prompt: '' });
         progress('refreshing');
         await this.refresh();
         if (this.valid(epoch)) return accepted.receipt.outputBlockId;
@@ -822,35 +824,6 @@ export class WorkspaceController {
         submission,
         () => this.machineRequest(placementId),
         this.client.runMachine,
-        progress,
-      );
-      if (!this.valid(epoch)) return;
-      progress('refreshing');
-      await this.refresh();
-      if (this.valid(epoch)) return accepted.receipt.outputBlockId;
-    }).catch(() => undefined);
-  };
-  // Ask runs one prompt over explicit cards without touching the composer's draft.
-  // Its answer is placed beside the first card, where the Ask box was.
-  get asking() {
-    return this.commands.pending('ask');
-  }
-  ask = (prompt: string, references: string[], outputGeometry?: Geometry) => {
-    this.requireActive();
-    return this.command('ask', async (progress) => {
-      const epoch = this.epoch;
-      const accepted = await this.send(
-        this.asks,
-        () => ({
-          braneId: this.braneId,
-          key: crypto.randomUUID(),
-          model: this.draft.model ?? 'mock',
-          prompt,
-          references: [...references],
-          edits: this.edits(references),
-          outputGeometry,
-        }),
-        this.client.submit,
         progress,
       );
       if (!this.valid(epoch)) return;

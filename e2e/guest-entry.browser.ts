@@ -95,6 +95,8 @@ test('guest work, an interrupted import, composer and two tabs survive existing-
     }
     await page.setViewportSize({ width: 844, height: 390 });
     await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+    // On a desktop-width canvas the prompt is in the Ask box, brought into view on opening.
+    await page.getByRole('button', { name: 'Ask', exact: true }).click();
     await expect
       .poll(async () => {
         const prompt = (await page.getByRole('textbox', { name: 'Run prompt' }).boundingBox())!;

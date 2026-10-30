@@ -91,9 +91,10 @@ test('image paste, native text paste, mixed picker, drop, navigation and lost-re
     expect((await read(b.id)).blocks).toHaveLength(0);
     await expect(page.locator('.context-chips .chip')).toHaveCount(0);
     await page.getByRole('link', { name: /Import A/ }).click();
+    // The docked prompt is in Focus; on the canvas it lives in the Ask box.
+    await page.getByRole('button', { name: 'Focus', exact: true }).click();
     await expect(page.locator('.chip').filter({ hasText: 'image' })).toHaveCount(1);
     // Native paste replaces exactly the editor selection.
-    await page.getByRole('button', { name: 'Focus', exact: true }).click();
     const editor = page.getByRole('textbox', { name: 'Block text', exact: true });
     await editor.fill('before after');
     await editor.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(7, 12));

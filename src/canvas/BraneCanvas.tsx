@@ -11,6 +11,7 @@ import {
   useContext,
   memo,
   Profiler,
+  type ReactNode,
 } from 'react';
 import { RenderObserver } from '../lib/render-observer';
 import {
@@ -31,7 +32,7 @@ import { derivationEdges, machineEdges } from './derivations';
 import { MachineCard, FeedPort, type MachineActions } from './MachineCard';
 import { machineStaleness } from './machines';
 import { CardBack, type BackActions } from './CardBack';
-import { AskBox, ASK_WIDTH, type AskNode, type AskRequest } from './AskBox';
+import { AskBox, ASK_WIDTH, type AskNode, type AskPosition } from './AskBox';
 import { SpawnButton } from '../components/SpawnButton';
 import type { CardAction } from '../components/ArtifactActions';
 import { LiveBlockContent } from '../components/LiveBlockContent';
@@ -238,10 +239,9 @@ interface Props extends ResponseActions {
   onDetach: CardData['onDetach'];
   machine: MachineActions;
   onReuse: CardData['onReuse'];
-  ask?: AskRequest;
-  asking: boolean;
-  onAsk: (prompt: string) => void;
-  onCancelAsk: () => void;
+  // The open Ask box: where it stands and the prompt panel it holds.
+  ask?: AskPosition & { content: ReactNode };
+  onCloseAsk: () => void;
 }
 function Inner(props: Props) {
   const { mobile } = props;
@@ -403,14 +403,8 @@ function Inner(props: Props) {
     props.machine,
   ]);
   const askData = useMemo(
-    () =>
-      props.ask && {
-        count: props.ask.references.length,
-        busy: props.asking,
-        onAsk: props.onAsk,
-        onCancel: props.onCancelAsk,
-      },
-    [props.ask, props.asking, props.onAsk, props.onCancelAsk],
+    () => props.ask && { content: props.ask.content, onClose: props.onCloseAsk },
+    [props.ask, props.onCloseAsk],
   );
   const allNodes = useMemo<(CardNode | AskNode)[]>(
     () =>

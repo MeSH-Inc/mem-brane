@@ -551,6 +551,16 @@ it('pins known source versions even when there is no local draft', async () => {
   ]);
 });
 
+it('places the answer where the Ask stood and clears the question and its context', async () => {
+  const f = await fixture();
+  f.c.updateDraft({ prompt: 'Test', references: [f.block] });
+  const geometry = { x: 40, y: 600, width: 380, height: 300 };
+  await f.c.run(geometry);
+  expect(f.sent.find((r) => r.path === '/runs')!.body.outputGeometry).toEqual(geometry);
+  expect(f.c.draft).toMatchObject({ prompt: '', references: [] });
+  expect(f.c.draft.continueFrom).toBeUndefined();
+});
+
 it('does not surface failures from superseded refreshes or lineage requests', async () => {
   const f = await fixture();
   const old = deferred<BraneState>(),

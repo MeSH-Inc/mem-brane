@@ -9,6 +9,8 @@ export const MAX_MACHINE_SLOTS = 8;
 // A new machine starts as a working Critique so its slots and lever are visible at once.
 export const MACHINE_TEMPLATE =
   'Find the strongest objection to {claim}, using only {evidence}. Answer in three sentences, then name the one fact that would settle it.';
+// A machine made from a selection starts with one slot holding every selected card.
+export const SELECTION_MACHINE_TEMPLATE = 'Summarise {cards} in five sentences.';
 export const MAX_SLOT_NAME = 40;
 export const machineTemplate = z.string().min(1).max(MAX_BLOCK_TEXT_CHARACTERS);
 const slotPattern = /\{([^{}\n]{1,40})\}/g;

@@ -20,8 +20,8 @@ const critiquePrompt =
   'Find the strongest objection to the first card, using only the second. Answer in three sentences, then name the one fact that would settle it.';
 
 test('a machine keeps a brief current with one press per update', async ({ page }) => {
-  const counts = { machine: { build: 0, update: 0 }, composer: { build: 0, update: 0 } };
-  await serve(page, 4183, async ({ seed, completed, state, api, origin }) => {
+  const counts = { machine: { build: 0, update: 0 }, ask: { build: 0, update: 0 } };
+  await serve(page, 4201, async ({ seed, completed, state, api, origin }) => {
     async function editFirstSource(braneId: string, cards: { placementId: string }[]) {
       const editor = page
         .locator(`.react-flow__node[data-id="${cards[0].placementId}"]`)
@@ -40,18 +40,13 @@ test('a machine keeps a brief current with one press per update', async ({ page 
         counts.machine.build++;
         await work();
       };
-      await act(() => page.getByText('＋ Add').click());
-      await act(() => page.getByRole('button', { name: '⚙ Machine' }).click());
-      const prompt = page.getByRole('textbox', { name: 'Machine prompt' });
-      await expect(prompt).toBeVisible();
-      await act(() => prompt.fill('Write a five-sentence brief that reconciles {sources}.'));
-      const slot = page.locator('[data-feed-slot="sources"]');
-      await expect(slot).toBeVisible();
-      for (const card of cards)
-        await act(() =>
-          drag(page, `.react-flow__node[data-id="${card.placementId}"] .feed-port`, slot),
-        );
+      // The Machine chip places a machine fed with the selection; its prompt is ready to edit.
+      await act(() => marquee(page, cards));
+      await act(() => page.getByRole('button', { name: 'Machine', exact: true }).click());
+      const slot = page.locator('[data-feed-slot="cards"]');
       await expect(slot.locator('.slot-chip')).toHaveCount(3);
+      const prompt = page.getByRole('textbox', { name: 'Machine prompt' });
+      await act(() => prompt.fill('Write a five-sentence brief that reconciles {cards}.'));
       const lever = page.locator('.machine-lever');
       await expect(lever).toHaveText(/^Run/);
       await act(() => lever.click());
@@ -60,15 +55,15 @@ test('a machine keeps a brief current with one press per update', async ({ page 
       expect(first.machine_block_id).toBeTruthy();
       const detail = await (await page.request.get(api(`/runs/${first.id}`))).json();
       expect(detail.inputs.map((i: { label: string }) => i.label)).toEqual([
-        'sources',
-        'sources',
-        'sources',
+        'cards',
+        'cards',
+        'cards',
         'Prompt',
       ]);
       await expect(page.locator('.machine-state')).toHaveText('ran');
 
       await editFirstSource(braneId, cards);
-      await expect(page.locator('.machine-state')).toHaveText('stale · sources changed');
+      await expect(page.locator('.machine-state')).toHaveText('stale · cards changed');
       await expect(page.locator('.react-flow__edge.feed-edge.stale')).toHaveCount(1);
       await expect(lever).toHaveText(/^Rerun/);
       counts.machine.update++;
@@ -88,17 +83,17 @@ test('a machine keeps a brief current with one press per update', async ({ page 
       await page.screenshot({ path: 'test-results/machine-flow.png' });
     }
 
-    // Composer path, the interface the machine would replace.
+    // Ask path: a one-off question over the same cards.
     {
-      const { braneId, cards } = await seed('Composer brief', sources);
+      const { braneId, cards } = await seed('Asked brief', sources);
       await page.goto(`${origin}/b/${braneId}`);
       const act = async (phase: 'build' | 'update', work: () => Promise<unknown>) => {
-        counts.composer[phase]++;
+        counts.ask[phase]++;
         await work();
       };
       await act('build', () => marquee(page, cards));
       await act('build', () =>
-        page.getByRole('button', { name: '+ Add 3 selected', exact: true }).click(),
+        page.getByRole('button', { name: 'Ask about 3', exact: true }).click(),
       );
       await act('build', () =>
         page
@@ -121,16 +116,16 @@ test('a machine keeps a brief current with one press per update', async ({ page 
     }
   });
   record('brief', counts);
-  expect(counts.machine.update).toBeLessThan(counts.composer.update);
+  expect(counts.machine.update).toBeLessThan(counts.ask.update);
 });
 
 test('Develop goes to the claim’s back and Critique arrives pre-fed', async ({ page }) => {
   const claimCards = sources.slice(0, 2);
   const counts = {
     redo: { actions: 0, typed: 0, tableCards: 0 },
-    composer: { actions: 0, typed: 0, tableCards: 0 },
+    ask: { actions: 0, typed: 0, tableCards: 0 },
   };
-  await serve(page, 4184, async ({ seed, completed, state, api, origin }) => {
+  await serve(page, 4202, async ({ seed, completed, state, api, origin }) => {
     // The redo's path: Develop onto the claim's back, then Critique the claim with the
     // study as its evidence.
     {
@@ -167,12 +162,12 @@ test('Develop goes to the claim’s back and Critique arrives pre-fed', async ({
       await page.screenshot({ path: 'test-results/claim-redo.png' });
     }
 
-    // The composer's path.
+    // The Ask path: write the critique as a question.
     {
-      const { braneId, cards } = await seed('Claim, composer', claimCards);
+      const { braneId, cards } = await seed('Claim, asked', claimCards);
       await page.goto(`${origin}/b/${braneId}`);
       const act = async (work: () => Promise<unknown>) => {
-        counts.composer.actions++;
+        counts.ask.actions++;
         await work();
       };
       const claim = page.locator(`.react-flow__node[data-id="${cards[0].placementId}"]`);
@@ -180,42 +175,44 @@ test('Develop goes to the claim’s back and Critique arrives pre-fed', async ({
       await act(() => claim.getByRole('button', { name: 'Develop', exact: true }).click());
       await completed(braneId, 1);
       await act(() => marquee(page, cards));
-      await act(() => page.getByRole('button', { name: '+ Add 2 selected', exact: true }).click());
-      counts.composer.typed = critiquePrompt.length;
+      await act(() => page.getByRole('button', { name: 'Ask about 2', exact: true }).click());
+      counts.ask.typed = critiquePrompt.length;
       await act(() => page.getByRole('textbox', { name: 'Run prompt' }).fill(critiquePrompt));
       await act(() => page.getByRole('button', { name: 'Run ↗', exact: true }).click());
       await completed(braneId, 2);
-      counts.composer.tableCards = await page.locator('.react-flow__node').count();
+      counts.ask.tableCards = await page.locator('.react-flow__node').count();
     }
   });
   record('claim', counts);
-  expect(counts.redo.actions).toBeLessThan(counts.composer.actions);
+  expect(counts.redo.actions).toBeLessThan(counts.ask.actions);
 });
 
 test('Ask answers a region where it was asked, and Make reusable turns it into a machine', async ({
   page,
 }) => {
-  const counts = {
-    redo: { actions: 0, typed: 0, contextLeft: 0 },
-    composer: { actions: 0, typed: 0, contextLeft: 0 },
-  };
+  const counts = { actions: 0, typed: 0 };
   const question = 'What do these three cards agree on, and where do they disagree?';
-  await serve(page, 4187, async ({ seed, completed, state, api, origin }) => {
-    // The redo's path: one marquee, Ask, the question, Ask ↗.
+  await serve(page, 4203, async ({ seed, completed, state, api, origin }) => {
+    // One marquee, Ask, the question, Run.
     {
       const { braneId, cards } = await seed('Region, redo', sources);
       await page.goto(`${origin}/b/${braneId}`);
       const act = async (work: () => Promise<unknown>) => {
-        counts.redo.actions++;
+        counts.actions++;
         await work();
       };
       await act(() => marquee(page, cards));
       await act(() => page.getByRole('button', { name: 'Ask about 3', exact: true }).click());
-      counts.redo.typed = question.length;
-      await act(() => page.getByRole('textbox', { name: 'Ask prompt' }).fill(question));
-      await act(() => page.getByRole('button', { name: 'Ask ↗', exact: true }).click());
+      const box = page.getByRole('region', { name: 'Ask' });
+      // Where the box stands on the table, from its node's transform.
+      const spot = await page
+        .locator('.react-flow__node[data-id^="ask:"]')
+        .evaluate((node) => new DOMMatrix(getComputedStyle(node).transform));
+      counts.typed = question.length;
+      await act(() => box.getByRole('textbox', { name: 'Run prompt' }).fill(question));
+      await act(() => box.getByRole('button', { name: 'Run ↗', exact: true }).click());
       await completed(braneId, 1);
-      await expect(page.getByRole('form', { name: 'Ask' })).toHaveCount(0);
+      await expect(box).toHaveCount(0);
       const run = (await state(braneId)).runs[0];
       const detail = await (await page.request.get(api(`/runs/${run.id}`))).json();
       expect(detail.inputs.map((i: { kind: string }) => i.kind)).toEqual([
@@ -224,9 +221,13 @@ test('Ask answers a region where it was asked, and Make reusable turns it into a
         'reference',
         'prompt',
       ]);
-      counts.redo.contextLeft = await page.locator('.context-chips .chip').count();
-      // The answer's back holds the question; Make reusable feeds the same cards.
+      // The answer stands where the box stood.
       const answer = page.locator('.react-flow__node:has(.canvas-card.generated)');
+      const placed = (await state(braneId)).placements.find(
+        (p) => p.block_id === run.output_block_id,
+      )!;
+      expect([placed.x, placed.y]).toEqual([spot.e, spot.f]);
+      // Its back holds the question; Make reusable feeds the same cards.
       await answer.getByRole('button', { name: /Show back/ }).click();
       await expect(answer.getByRole('blockquote', { name: 'Question' })).toContainText(question);
       await answer.getByRole('button', { name: 'Make reusable' }).click();
@@ -234,26 +235,8 @@ test('Ask answers a region where it was asked, and Make reusable turns it into a
       await page.locator('.machine-lever').click();
       await completed(braneId, 2);
     }
-
-    // The composer's path: one marquee, add the selection, the prompt, Run.
-    {
-      const { braneId, cards } = await seed('Region, composer', sources);
-      await page.goto(`${origin}/b/${braneId}`);
-      const act = async (work: () => Promise<unknown>) => {
-        counts.composer.actions++;
-        await work();
-      };
-      await act(() => marquee(page, cards));
-      await act(() => page.getByRole('button', { name: '+ Add 3 selected', exact: true }).click());
-      counts.composer.typed = question.length;
-      await act(() => page.getByRole('textbox', { name: 'Run prompt' }).fill(question));
-      await act(() => page.getByRole('button', { name: 'Run ↗', exact: true }).click());
-      await completed(braneId, 1);
-      counts.composer.contextLeft = await page.locator('.context-chips .chip').count();
-    }
   });
   record('region', counts);
-  expect(counts.redo.contextLeft).toBe(0);
 });
 
 // One reverse marquee from the empty table right of the cards selects all of them.
@@ -271,7 +254,13 @@ async function marquee(page: Page, cards: { placementId: string }[]) {
 }
 
 interface BraneRead {
-  placements: { id: string; block_id: string; host_placement_id: string | null }[];
+  placements: {
+    id: string;
+    block_id: string;
+    host_placement_id: string | null;
+    x: number;
+    y: number;
+  }[];
   blocks: { id: string; kind: string; version: number }[];
   runs: { id: string; status: string; output_block_id: string; machine_block_id: string | null }[];
 }

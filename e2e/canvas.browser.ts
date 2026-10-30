@@ -109,15 +109,16 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
   await second.locator('.card-grip').click({ modifiers: ['Shift'] });
   await expect(first).toHaveClass(/selected/);
   await expect(second).toHaveClass(/selected/);
-  await expect(page.getByRole('button', { name: '+ Add 2 selected', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ask about 2', exact: true })).toBeVisible();
   await second.locator('.card-grip').click({ modifiers: ['Shift'] });
   await expect(second).not.toHaveClass(/selected/);
   const duplicate = page.locator('.react-flow__node[data-id="pa2"]');
   await duplicate.locator('.card-grip').click({ modifiers: ['Shift'] });
   await expect(first).toHaveClass(/selected/);
   await expect(duplicate).toHaveClass(/selected/);
-  await page.getByRole('button', { name: '+ Add 1 selected', exact: true }).click();
-  await expect(page.locator('.context-chips .chip')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Ask about 1', exact: true }).click();
+  await expect(page.locator('.ask-box .context-chips .chip')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Close Ask' }).click();
   const handle = first.locator('[data-resize="se"]');
   const bounds = await handle.boundingBox();
   if (!bounds) throw new Error('Missing resize handle');
@@ -149,6 +150,8 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
   await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
   await page.locator('.run-activity summary').click();
   const canvasBounds = await page.locator('.canvas-host').boundingBox();
+  // The prompt's context lives in the Ask box on the canvas.
+  await page.getByRole('button', { name: 'Ask', exact: true }).click();
   const contextButton = page.getByRole('button', { name: 'Context · 1', exact: true });
   await contextButton.click();
   await expect(page.getByRole('dialog', { name: 'Context', exact: true })).toBeVisible();
