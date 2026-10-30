@@ -492,22 +492,91 @@ the arrow it sent, and rewording that arrow makes **Update** appear.
 - Replicas stored before this iteration have no groups or sent arrows; IndexedDB
   version 5 adds empty lists.
 
-## Recommended iteration 9
+## Iteration 9: each, and the Workshop
 
-The slot's **each** mode, and the Workshop.
+Iteration 9 let one press run a machine once per card, and gave machines a place to be
+kept and taken from.
 
-1. **Each.** A feed `mode` (`together` | `each`) on group feeds. When a group feeds a
-   slot, its chip shows a toggle; with **each**, the lever reads `Run ×12 · ≈ $0.09`.
-   One press admits one run per member in one transaction with one combined
-   reservation, each freezing its own manifest (domain.md, "Each and Compare models").
-2. **Outputs arrive as a stack.** The runs of one **each** press create their outputs
-   as one new group displayed as a stack beside the machine, in member order. A rerun
-   of an **each** feed replaces that stack's members in place, each old output going
-   on its replacement's back.
-3. **The Workshop.** A drawer listing built-in machines (Critique, Distill, Extract)
-   and any machine saved with **Save to Workshop**; taking one out places a copy at the
-   view's centre. Split and Diagram, whose outputs are several cards, wait for
-   iteration 10.
-4. Measure scenario 2 up to `Run ×12` with Extract standing in for Split, and scenario
-   3 (three Extract machines over one stack, each set to **each**) up to the three
-   output stacks.
+- **Each.** A group's chip on a slot row now carries a toggle, _together_ or _each_.
+  With _each_, the lever reads `Run ×12 · ≈ $…` and one press admits one run per card
+  of that slot, every other slot's cards going to every run. The runs are admitted in
+  one transaction: all are frozen and reserved at the press, or none are. They share a
+  batch (`run_batches`, migration 007), and a retry takes its run's place in it. The
+  mode is the one part of a feed that may change (`feed.mode`, synchronized through the
+  offline outbox); only a group feed may run each, and only one slot of a machine.
+- **Outputs arrive as a stack.** The first press makes a stack named _Each source_
+  beside the machine, in the slot's order. A rerun puts each new output in its
+  predecessor's place in the stack, with the old one on its back; outputs past the
+  stack's end join it, and old ones with no new counterpart go on the first output's
+  back. Switching back to _together_ leaves one output where the stack was, with the
+  stack's cards on its back.
+- **Staleness compares presses.** What the last press froze is every run of its batch
+  in position order, so a card added to or taken out of the fed stack, or a change of
+  mode, marks the machine stale, as an edited card does.
+- **Run limits count presses.** A batch counts once against the per-account and
+  queue limits, and workers now take the oldest queued run of the owner with the
+  fewest runs under way, so a dozen runs from one press do not hold every worker.
+- **The Workshop.** **＋ Add → ⚒ Workshop** lists Critique, Distill and Extract and the
+  account's saved machines, each with its slots and prompt. Pressing one places a new
+  machine with a copy of the prompt, brought into view and selected. **Save to
+  Workshop** in a machine's ⋯ menu keeps its prompt, named by its opening words, and
+  opens the Workshop to show it; × removes a saved one.
+
+### Decisions taken while building
+
+| Question                                                        | Decision                                                                                                                             | Rationale                                                                                                                                        |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Where does _each_ live?                                         | On the feed, as `mode`; only group feeds offer it, and a slot runs each when any of its feeds does.                                  | The concept puts the toggle on the slot row beside the group; a mode on the feed survives template edits that rename other slots.                |
+| Can two slots run each?                                         | No: refused on the server and in the replica, and the lever reads _One slot runs each_ if it happens.                                | Two lists would fan out into every pairing, which the user never asked for and the lever could not state honestly.                               |
+| How many runs may one press admit?                              | At most 12.                                                                                                                          | Scenario 2's dozen papers; more is a batch job, not a press.                                                                                     |
+| How does a batch meet the run limits (3 per account, 8 queued)? | It counts once, and workers share themselves fairly between owners.                                                                  | Counting each run would make _each_ impossible under the existing limits; fairness keeps one account's batch from starving another's single run. |
+| How is a repeated press recognised?                             | Run _i_ of a batch has a key derived from the press's key; a press whose first key exists returns its runs without placing anything. | The submission journal retries with the same key; replays must not move the tray twice.                                                          |
+| Where do edits sent with a press go?                            | They are saved once, before the first run; every run reads the saved text.                                                           | Each run freezing its own copy of the same edit would conflict on the block's version.                                                           |
+| What is a Workshop item?                                        | A stored prompt with a name (`workshop_machines`), not an unplaced machine block.                                                    | It is only ever copied; as a block it would need revisions and would appear among Unplaced cards.                                                |
+| How is a saved machine named?                                   | By the prompt's words before its first slot (_Split_ from "Split {text} into…"), else its first 60 characters.                       | Naming is one more dialog for something the prompt already says.                                                                                 |
+| Does the Workshop work offline?                                 | Reading it does once loaded; saving and removing need the connection.                                                                | The Workshop is the account's, not a brane's, so it is outside the brane outbox; taking a machine out is an ordinary offline-capable creation.   |
+
+### Measured
+
+| Scenario                                                      | Actions                                                                                               |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 2. Reading pile, through `Run ×12`, Extract from the Workshop | 10 (drop, marquee, `G`, Stack, Add, Workshop, Extract, drag the port, _each_, Run ×12)                |
+| 3. Three Extract machines over one stack of four, each        | 25 (drop, marquee, `G`, Stack; then per machine: Add, Workshop, Extract, question, port, _each_, Run) |
+
+Scenario 2 now runs to its twelve outputs: each run is checked to send one paper, in
+the stack's order, and the outputs arrive as one stack reading _Stack · 12_. Of its ten
+actions, three take Extract out of the Workshop; with Split there in iteration 10 the
+count is unchanged. Scenario 3 reaches its three output stacks, twelve runs in three
+batches. Its cost is seven actions per question, of which three are the Workshop; the
+matrix display (iteration 10) is what turns the three stacks into one table.
+
+### Defects found by building it
+
+- A machine placed from the toolbar or the Workshop landed in the first open space to
+  the right of the view's centre, which could be outside the view; with the table full
+  the second Extract of scenario 3 was placed out of sight. A new machine is now
+  brought into view.
+- Under the existing run limits (three runs under way per account, eight queued in
+  all), a press of twelve runs would always have been refused; see the decision above.
+- Browser tests that dragged right after fitting the view read positions from before
+  the view moved; the drag helper now waits two frames.
+
+## Recommended iteration 10
+
+Machines whose output is several cards, and the matrix.
+
+1. **Split.** A built-in machine whose output is one card per idea. The run's output
+   stays one block, as every run's does; on completion the worker parses its
+   numbered items and the server places one generated card per item as a stack on the
+   output's place, each a derivation of the run, so Update and backs work as for any
+   output. A run that yields no items keeps its single card.
+2. **Diagram.** A built-in machine whose output is cards joined by arrows: items as in
+   Split, and lines of the form `2 —supports→ 1`, placed as a region with the arrows
+   drawn. A line naming an item that does not exist is dropped and reported on the
+   receipt.
+3. **Matrix.** A third group display, offered when a group's cards are the outputs of
+   machines fed one stack each: rows are the stack's cards, columns the machines, each
+   cell the output for that card. Selecting the outputs and pressing `G`, then
+   _Matrix_, makes it.
+4. Measure scenario 2 end to end (through Diagram and rearranging) and scenario 3
+   through the matrix.

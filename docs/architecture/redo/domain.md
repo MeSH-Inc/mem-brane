@@ -6,15 +6,15 @@ kind, and changes one principle.
 
 ## Unchanged
 
-| Redo object               | Existing record                                                                                                                                                                                      |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Card front                | Block + LiveState or finalized revision, placed by a Placement                                                                                                                                       |
-| Receipt                   | Run, its sealed context manifest and RunOutput                                                                                                                                                       |
-| Developments              | Runs whose manifest has this block as a source or a reference entry                                                                                                                                  |
-| Reply and its thread line | The manifest's parent conversation message, exactly as Continue records it today; the line is projected from ConversationMessage parents                                                             |
-| Output on a back          | A placement whose `host_placement_id` names the table placement holding it                                                                                                                           |
-| Put on table              | `placement.detach`: clear the host and give the placement table geometry                                                                                                                             |
-| Each and Compare models   | Several Runs admitted in one transaction with one combined reservation. Every input is known at admission (a stack's members, a list of models), so every Run freezes its own manifest at the press. |
+| Redo object               | Existing record                                                                                                                                                                                                                                                                                                                           |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Card front                | Block + LiveState or finalized revision, placed by a Placement                                                                                                                                                                                                                                                                            |
+| Receipt                   | Run, its sealed context manifest and RunOutput                                                                                                                                                                                                                                                                                            |
+| Developments              | Runs whose manifest has this block as a source or a reference entry                                                                                                                                                                                                                                                                       |
+| Reply and its thread line | The manifest's parent conversation message, exactly as Continue records it today; the line is projected from ConversationMessage parents                                                                                                                                                                                                  |
+| Output on a back          | A placement whose `host_placement_id` names the table placement holding it                                                                                                                                                                                                                                                                |
+| Put on table              | `placement.detach`: clear the host and give the placement table geometry                                                                                                                                                                                                                                                                  |
+| Each and Compare models   | Several Runs admitted in one transaction with one combined reservation. Every input is known at admission (a stack's members, a list of models), so every Run freezes its own manifest at the press. _Each is implemented in iteration 9: the runs share a batch (`run_batches`: batch, position) and count once against the run limits._ |
 
 Develop places its output on the source placement's back, and a machine run moves the
 output it replaces, with that output's back, onto the new output's back. Backs are one
@@ -32,8 +32,13 @@ the placement keeps one rule, and Unplaced cards needs no exclusion.
 with LiveState and revisions, and placed like text. Slots are derived from the
 template on save. A run freezes the machine's revision as the manifest's prompt
 entry, and the worker substitutes frozen slot contents into the frozen template.
-Workshop items are machine blocks owned by the account with no placement; taking one
-out copies the block.
+Workshop items are saved prompts (`workshop_machines`: name and template, owned by the
+account), beside three built-in ones; taking one out places a new machine block with a
+copy of the prompt.
+
+_Decision (iteration 9): a Workshop item is a stored prompt, not an unplaced machine
+block._ An item is only ever copied, so it needs no live state, revisions or
+placement; as a block it would also have appeared among Unplaced cards.
 
 **The slot is the entry label.** A machine run's references are labelled with the slot
 they filled, and its prompt entry is the machine's own frozen revision. The existing
@@ -61,9 +66,11 @@ template it freezes, and later feed edits affect only later runs. A feed that wo
 close a loop through trays is rejected on write.
 
 _Iteration 3 implements_ `from_placement_id`, `to_placement_id` and `slot`, with
-position given by creation order; _iteration 8_ adds `from_group_id` (migration 006).
-A machine cannot feed a machine yet, so no loop is possible and no cycle check exists.
-`mode` is not implemented.
+position given by creation order; _iteration 8_ adds `from_group_id` (migration 006),
+and _iteration 9_ adds `mode` (migration 007), which only a group feed may set to
+`each` and which is the only part of a feed that may change (`feed.mode`). At most one
+slot of a machine is fed `each`. A machine cannot feed a machine yet, so no loop is
+possible and no cycle check exists.
 
 **Arrow** (brane-scoped, table `relations`): `from_placement_id`, `to_placement_id`,
 `label` (required, 1 to 60 characters). Both ends are cards on the table; removing
@@ -93,6 +100,8 @@ unplaced, so **Update** and **Make reusable** can reach it.
 A machine is stale when what its lever would send now differs from what its last run
 froze: per slot, the fed blocks (a fed group's current members included) and their
 live versions, the arrows between the fed cards, and the machine's template version.
+For a press that ran each, what the last press froze is every run of its batch in
+position order, so a card added to the fed stack, or a change of mode, is a change.
 An asked answer is stale when a source's version or the arrows between its sources
 differ. Each workspace run carries `machine_block_id` and `machine_version`, each
 derivation its slot `label` and the source's `sourceVersion`, so the client computes
