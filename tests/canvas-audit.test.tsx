@@ -48,6 +48,7 @@ const state: BraneState = {
     width: 320,
     height: 220,
     z_index: 0,
+    host_placement_id: null,
     version: 0,
   })),
   runs: [],
@@ -82,6 +83,7 @@ function render(s = state) {
           onManage={noop}
           onInspect={noop}
           onRerun={noop}
+          onDetach={() => {}}
         />
       </StrictMode>,
     ),

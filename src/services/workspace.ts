@@ -26,7 +26,7 @@ import type { Interaction } from '../stores/interaction';
 import type { Imports } from './imports';
 import { estimateIssue, runIssueOf, type RunIssue } from './run-issues';
 import { runMachine as runMachineSchema, type RunMachine } from '../../shared/machines';
-import { machineStaleness } from '../canvas/machines';
+import { machineStaleness, openSpot } from '../canvas/machines';
 
 type DraftState = Pick<
   Interaction,
@@ -857,6 +857,22 @@ export class WorkspaceController {
           toPlacementId,
           slot,
         });
+    }).catch(() => undefined);
+  // Put a card from its host's back onto the table, in the first open space beside
+  // the host, so it can be moved, fed and linked like any other card.
+  detach = (placementId: string) =>
+    this.mutate(`detach:${placementId}`, async () => {
+      const state = this.state;
+      const placement = state?.placements.find((p) => p.id === placementId);
+      const host = placement && state?.placements.find((p) => p.id === placement.host_placement_id);
+      if (!state || !placement || !host) throw new Error('This card is no longer on a back.');
+      const geometry = openSpot(
+        state.placements.filter((p) => !p.host_placement_id),
+        { x: host.x + host.width + 40, y: host.y },
+        placement.width,
+        placement.height,
+      );
+      await this.client.detachPlacement(placementId, placement.version, geometry);
     }).catch(() => undefined);
   unfeed = (feedId: string) =>
     this.mutate(`unfeed:${feedId}`, () => this.client.removeFeed(feedId)).catch(() => undefined);

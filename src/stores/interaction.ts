@@ -20,6 +20,9 @@ export interface Interaction {
   flushRecovery: () => Promise<void>;
   rebase: (id: string, version: number, text: string) => void;
   selectedPlacements: string[];
+  // Placements turned to show their back. Presentation only; nothing is stored.
+  flipped: string[];
+  flip: (id: string, back?: boolean) => void;
   drafts: Record<string, string>;
   inspector: boolean;
   setSelectedPlacements: (ids: string[]) => void;
@@ -97,6 +100,13 @@ export const useInteraction = create<Interaction>((set, get) => ({
     }
   },
   selectedPlacements: [],
+  flipped: [],
+  flip: (id, back) =>
+    set((state) => {
+      const shown = state.flipped.includes(id);
+      if ((back ?? !shown) === shown) return state;
+      return { flipped: shown ? state.flipped.filter((p) => p !== id) : [...state.flipped, id] };
+    }),
   drafts: {},
   inspector: false,
   setSelectedPlacements: (ids) =>

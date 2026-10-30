@@ -175,11 +175,6 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     selectedPlacements: useInteraction((s) => s.selectedPlacements),
     setInspector: useInteraction((s) => s.setInspector),
   };
-  // Selection never changes context by itself; the composer offers to add it.
-  const unreferencedSelection = selectedBlockIds(
-    state?.placements ?? [],
-    ui.selectedPlacements,
-  ).filter((id) => !references.includes(id));
   const navigate = useNavigate();
   const focusBlock = useCallback(
     (id: string) => {
@@ -334,13 +329,69 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     }),
     [controller, needsAccount],
   );
+  const tablePlacements = () =>
+    (controller.state?.placements ?? []).filter((p) => !p.host_placement_id);
   const createMachine = useCallback(async () => {
     const id = await controller.createMachine(
-      openSpot(controller.state?.placements ?? [], canvasInsertion.current(), 400, 340),
+      openSpot(tablePlacements(), canvasInsertion.current(), 400, 340),
     );
     const placementId = controller.state?.placements.find((p) => p.block_id === id)?.id;
     if (placementId) useInteraction.getState().setSelectedPlacements([placementId]);
   }, [controller]);
+  // The cards the selection chips act on, in reading order; machines are excluded.
+  const selectedCards = (() => {
+    if (!state || focusMode || mobile) return [];
+    const kinds = new Map(state.blocks.map((b) => [b.id, b]));
+    return state.placements
+      .filter(
+        (p) =>
+          !p.host_placement_id &&
+          ui.selectedPlacements.includes(p.id) &&
+          kinds.get(p.block_id)?.kind !== 'machine',
+      )
+      .sort((a, b) => a.y - b.y || a.x - b.x);
+  })();
+  const developable =
+    selectedCards.length === 1 &&
+    state?.blocks.find((b) => b.id === selectedCards[0].block_id)?.origin === 'authored'
+      ? selectedCards[0]
+      : undefined;
+  // Selection never changes context by itself; Ask adds the selected cards the prompt
+  // does not already use, once per block.
+  const askable = selectedBlockIds(selectedCards, ui.selectedPlacements).filter(
+    (id) => !ui.references.includes(id),
+  );
+  const ask = () => {
+    ui.addReferences(askable);
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLTextAreaElement>('[aria-label="Run prompt"]')?.focus(),
+    );
+  };
+  // Critique is a machine pre-fed from the selection: the first card in reading order
+  // is the claim and the rest are its evidence. It runs only when its lever is pulled.
+  const critique = async () => {
+    const cards = selectedCards;
+    if (!cards.length) return;
+    const right = Math.max(...cards.map((p) => p.x + p.width));
+    const id = await controller.createMachine(
+      openSpot(tablePlacements(), { x: right + 80, y: cards[0].y }, 400, 340),
+    );
+    const machine = controller.state?.placements.find((p) => p.block_id === id);
+    if (!machine) return;
+    await controller.feed([cards[0].id], machine.id, 'claim');
+    if (cards.length > 1)
+      await controller.feed(
+        cards.slice(1).map((p) => p.id),
+        machine.id,
+        'evidence',
+      );
+    useInteraction.getState().setSelectedPlacements([machine.id]);
+  };
+  const flipSelection = () => {
+    const interaction = useInteraction.getState();
+    const back = !selectedCards.every((p) => interaction.flipped.includes(p.id));
+    for (const p of selectedCards) interaction.flip(p.id, back);
+  };
   const acceptFiles = useCallback(
     (files: File[], target: 'canvas' | 'composer', point?: { x: number; y: number }) => {
       controller.acceptFiles(files, target, point ?? canvasInsertion.current(), !point);
@@ -399,6 +450,24 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
       className="brane-workspace"
       onPointerDownCapture={presentation.getState().interact}
       onKeyDownCapture={presentation.getState().interact}
+      onKeyDown={(event) => {
+        // F turns the selection over and D develops one card, unless typing.
+        const target = event.target as HTMLElement;
+        if (
+          event.metaKey ||
+          event.ctrlKey ||
+          event.altKey ||
+          target.closest('input, textarea, select, [contenteditable="true"]')
+        )
+          return;
+        if (event.key === 'f' && selectedCards.length) {
+          event.preventDefault();
+          flipSelection();
+        } else if (event.key === 'd' && developable) {
+          event.preventDefault();
+          spawn(developable.block_id, developable.id);
+        }
+      }}
       onWheelCapture={presentation.getState().interact}
     >
       <div className="brane-toolbar">
@@ -819,11 +888,41 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 onManage={manage}
                 onInspect={inspectRun}
                 onRerun={rerun}
+                onDetach={controller.detach}
                 machine={machineActions}
               />
             </Suspense>
           )}
           <div className="composer">
+            {selectedCards.length > 0 && (
+              <div className="selection-chips" role="toolbar" aria-label="Selection">
+                <span className="muted">
+                  {selectedCards.length === 1 ? '1 card' : `${selectedCards.length} cards`}
+                </span>
+                {developable && (
+                  <button
+                    title="Develop this card onto its back (D)"
+                    onClick={() => spawn(developable.block_id, developable.id)}
+                  >
+                    Develop
+                  </button>
+                )}
+                {askable.length > 0 && (
+                  <button title="Add to the prompt's context" onClick={ask}>
+                    Ask about {askable.length}
+                  </button>
+                )}
+                <button
+                  title="A Critique machine fed with the first card as the claim and the rest as evidence"
+                  onClick={() => void critique()}
+                >
+                  Critique
+                </button>
+                <button title="Turn over (F)" onClick={flipSelection}>
+                  Flip
+                </button>
+              </div>
+            )}
             <div className="context-chips">
               <button
                 className="context-toggle"
@@ -851,14 +950,6 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                   {state.blocks.find((b) => b.id === id)?.content.text.slice(0, 23) || 'Card'} ×
                 </button>
               ))}
-              {!focusMode && unreferencedSelection.length > 0 && (
-                <button
-                  className="suggest-chip"
-                  onClick={() => ui.addReferences(unreferencedSelection)}
-                >
-                  + Add {unreferencedSelection.length} selected
-                </button>
-              )}
               {!ui.references.length && !ui.continueFrom && (
                 <span className="muted">Prompt only</span>
               )}

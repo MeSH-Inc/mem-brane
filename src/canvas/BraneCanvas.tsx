@@ -30,10 +30,10 @@ import type { Placement } from '../../shared/types/domain';
 import { derivationEdges, machineEdges } from './derivations';
 import { MachineCard, FeedPort, type MachineActions } from './MachineCard';
 import { machineStaleness } from './machines';
+import { CardBack, type BackActions } from './CardBack';
 import { SpawnButton } from '../components/SpawnButton';
 import type { CardAction } from '../components/ArtifactActions';
 import { LiveBlockContent } from '../components/LiveBlockContent';
-import { ResponseSources } from '../components/ResponseSources';
 import type { ResponseActions } from '../components/ResponseContent';
 import { cardKind } from '../lib/labels';
 import { idleActivity, type WorkspaceDocument } from '../services/workspace-document';
@@ -57,6 +57,7 @@ type CardData = ResponseActions & {
   onOpenSource: (blockId: string) => void;
   onInspect: (runId: string) => void;
   onRerun: (runId: string) => void;
+  onDetach: (placementId: string) => void;
   machine: MachineActions;
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
@@ -65,6 +66,33 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
   const block = useStore(data.document.store, (s) => s.blocks[data.blockId]);
   const activity = useStore(data.document.store, (s) => s.activity[data.blockId] ?? idleActivity);
   const observer = useContext(RenderObserver);
+  const flipped = useInteraction((s) => s.flipped.includes(id));
+  const held = useStore(
+    data.document.store,
+    (s) => s.scene.placements.filter((p) => p.host_placement_id === id).length,
+  );
+  // An input edited since this card was generated marks the flip control, whose back
+  // holds the receipt that says which.
+  const changed = useStore(data.document.store, (s) =>
+    s.scene.derivations.some(
+      (d) =>
+        d.outputBlockId === data.blockId &&
+        d.sourceVersion !== null &&
+        !!s.blocks[d.sourceBlockId] &&
+        s.blocks[d.sourceBlockId].version !== d.sourceVersion,
+    ),
+  );
+  const back = useMemo<BackActions>(
+    () => ({
+      onDetach: data.onDetach,
+      onOpenSource: data.onOpenSource,
+      onInspect: data.onInspect,
+      onRerun: data.onRerun,
+      onStop: data.onStop,
+      onRetry: data.onRetry,
+    }),
+    [data.onDetach, data.onOpenSource, data.onInspect, data.onRerun, data.onStop, data.onRetry],
+  );
   if (!block) return null;
   const resize =
     selected &&
@@ -87,7 +115,9 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
         {resize}
       </MachineCard>
     ) : (
-      <article className={`canvas-card ${block.origin} ${selected ? 'selected' : ''}`}>
+      <article
+        className={`canvas-card ${block.origin} ${selected ? 'selected' : ''}${flipped ? ' flipped' : ''}`}
+      >
         <Handle type="target" position={Position.Left} id="input" isConnectable={false} />
         <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
         {!data.mobile && <FeedPort placementId={id} onFeed={data.machine.onFeed} />}
@@ -97,6 +127,15 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
           <span>{cardKind(block)}</span>
           <span className="card-status" />
           <button
+            className={`nodrag nopan flip-button${changed ? ' changed' : ''}`}
+            aria-pressed={flipped}
+            aria-label={`${flipped ? 'Show front' : 'Show back'}${held ? ` · ${held} on the back` : ''}${changed ? ' · an input changed' : ''}`}
+            title={flipped ? 'Show the front (F)' : 'Show the back (F)'}
+            onClick={() => useInteraction.getState().flip(id)}
+          >
+            ↻{held > 0 && <span className="flip-count">{held}</span>}
+          </button>
+          <button
             className="nodrag nopan icon-button"
             title={data.mobile ? 'Open card in Focus' : 'Focus block'}
             onClick={() => data.onFocus(block.id)}
@@ -104,25 +143,20 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
             {data.mobile ? 'Open' : '↗'}
           </button>
         </header>
-        <LiveBlockContent
-          document={data.document}
-          blockId={block.id}
-          focusRequest={data.focusRequest}
-          onFocused={data.onFocused}
-          onEdit={data.onEdit}
-          onStop={data.onStop}
-          onRetry={data.onRetry}
-        />
-        {block.origin === 'generated' && (
-          <ResponseSources
+        {flipped ? (
+          <CardBack placementId={id} blockId={block.id} document={data.document} actions={back} />
+        ) : (
+          <LiveBlockContent
             document={data.document}
             blockId={block.id}
-            onOpenSource={data.onOpenSource}
-            onInspect={data.onInspect}
-            onRerun={data.onRerun}
+            focusRequest={data.focusRequest}
+            onFocused={data.onFocused}
+            onEdit={data.onEdit}
+            onStop={data.onStop}
+            onRetry={data.onRetry}
           />
         )}
-        {!data.mobile && (
+        {!data.mobile && !flipped && (
           <footer className="nodrag nopan">
             {block.origin !== 'generated' && (
               <SpawnButton
@@ -180,12 +214,21 @@ interface Props extends ResponseActions {
   onManage: CardData['onManage'];
   onInspect: CardData['onInspect'];
   onRerun: CardData['onRerun'];
+  onDetach: CardData['onDetach'];
   machine: MachineActions;
 }
 function Inner(props: Props) {
   const { mobile } = props;
   const { screenToFlowPosition, fitView, getViewport, setViewport } = useReactFlow();
-  const scene = useStore(props.document.store, (s) => s.scene);
+  const fullScene = useStore(props.document.store, (s) => s.scene);
+  // Only table placements are drawn; a placement on a back is shown by its host.
+  const scene = useMemo(
+    () =>
+      fullScene.placements.some((p) => p.host_placement_id)
+        ? { ...fullScene, placements: fullScene.placements.filter((p) => !p.host_placement_id) }
+        : fullScene,
+    [fullScene],
+  );
   const actor = useInteraction((s) => s.actor);
   const presentation = presentationFor(actor, scene.braneId);
   const request = useStore(presentation, (s) => s.request);
@@ -286,6 +329,7 @@ function Inner(props: Props) {
           onOpenSource: openSource,
           onInspect: props.onInspect,
           onRerun: props.onRerun,
+          onDetach: props.onDetach,
           onStop: props.onStop,
           onRetry: props.onRetry,
           machine: props.machine,
@@ -325,6 +369,7 @@ function Inner(props: Props) {
     openSource,
     props.onInspect,
     props.onRerun,
+    props.onDetach,
     props.onStop,
     props.onRetry,
     props.machine,
@@ -332,7 +377,15 @@ function Inner(props: Props) {
   useEffect(() => {
     if (!request || request.kind !== 'reveal') return;
     const connections = derivationEdges(scene);
-    const output = scene.placements.filter((p) => p.block_id === request.blockId).map((p) => p.id);
+    // An output on a back is revealed by turning its host over.
+    const hosts = fullScene.placements
+      .filter((p) => p.block_id === request.blockId && p.host_placement_id)
+      .map((p) => p.host_placement_id!);
+    const output = [
+      ...scene.placements.filter((p) => p.block_id === request.blockId).map((p) => p.id),
+      ...hosts,
+    ];
+    for (const host of hosts) useInteraction.getState().flip(host, true);
     const ids = new Set([
       ...output,
       ...connections.filter((e) => output.includes(e.target)).map((e) => e.source),
@@ -345,7 +398,15 @@ function Inner(props: Props) {
       presentation.getState().consume(request.id);
     });
     return () => cancelAnimationFrame(frame);
-  }, [request, scene.placements, scene.derivations, nodes, fitView, presentation]);
+  }, [
+    request,
+    fullScene.placements,
+    scene.placements,
+    scene.derivations,
+    nodes,
+    fitView,
+    presentation,
+  ]);
   // Machine runs and the feeds whose cards changed since the last run, as stable keys.
   const machineRuns = useStore(props.document.store, (s) =>
     (s.state?.runs ?? [])

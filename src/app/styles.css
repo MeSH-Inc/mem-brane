@@ -1995,14 +1995,6 @@ summary:focus-visible {
   color: var(--green);
   font-weight: 600;
 }
-.suggest-chip {
-  border: 1px dashed var(--green);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--green);
-  font-size: 11px;
-  padding: 3px 9px;
-}
 .draft-recovery.attention-item {
   display: block;
 }
@@ -2262,4 +2254,111 @@ summary:focus-visible {
   stroke: var(--green);
   stroke-width: 2;
   stroke-dasharray: 4 4;
+}
+/* Card backs: the receipt and what the card holds, turned over in place. */
+.card-grip .flip-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.flip-button[aria-pressed='true'] {
+  background: #e6ebd6;
+  color: var(--green);
+}
+.flip-button.changed {
+  color: #a8710f;
+}
+.flip-count {
+  font-size: 10px;
+  font-weight: 600;
+}
+.canvas-card.flipped {
+  background: #f3f2ea;
+  border-style: dashed;
+}
+.card-back {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 12px;
+  cursor: auto;
+}
+.card-back .eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.back-receipt {
+  padding: 0 14px;
+}
+.back-receipt .response-sources {
+  padding: 4px 0 0;
+  border-top: 0;
+}
+.back-meta {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.back-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.back-item {
+  border-top: 1px dashed var(--line);
+  padding: 6px 14px 0;
+}
+.back-item > header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+.back-item > header .eyebrow {
+  margin-right: auto;
+}
+.back-item > header .text-button {
+  font-size: 11px;
+}
+.back-empty {
+  margin: 0;
+  padding: 0 14px;
+  color: var(--muted);
+}
+/* Verbs for the current selection, above the composer. */
+.selection-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.selection-chips button {
+  border: 1px solid #c8d2ae;
+  border-radius: 999px;
+  background: #f4f7ea;
+  color: var(--green);
+  padding: 3px 11px;
+  font-size: 12px;
+}
+.selection-chips button:hover {
+  background: var(--lime);
+}
+.back-item .response-content {
+  overflow: visible;
+  padding: 6px 0 4px;
+  font-size: 12px;
+  line-height: 1.6;
 }
