@@ -209,21 +209,84 @@ to the old interface. In iteration 3 that path took 5.
 - A machine's output is placed to the right of the machine, often outside the view,
   and nothing brings it into view. Not fixed in this iteration.
 
-## Recommended iteration 5
+## Iteration 5: no action row, and Ask
 
-Remove the card's action row and replace the composer with Ask, then measure
-scenarios 1, 4 and 6 again.
+Iteration 5 removed the card's action row, added Ask with Make reusable, revealed
+machine outputs, and brought backs and machines into Focus.
 
-1. **Footer removal.** Delete the card footer (Develop, Use as context, More). Develop
-   and Ask are chips. Show on another brane, Version history and Remove move to a
-   context menu on the grip, which also becomes the Reply entry for responses
-   (Continue). This also removes the flip-back action from both scenario 1 paths.
-2. **Ask collapses.** `/` or **Ask about N** opens a prompt at the selection's edge.
-   It runs as a composed run with the selection as references, and the answer takes
-   the prompt's place. The question goes on the answer's back. **Make reusable** on
-   the answer creates a machine with one `{cards}` slot fed from the same cards.
-   After this the bottom composer can go, and scenario 4 can be measured.
-3. **Reveal the tray.** After a lever press, pan only as far as needed to show the
-   machine's output (the reveal request, applied to the output placement).
-4. **Focus and phone.** Show the back in the Focus view, with the lever for machines,
-   so a machine can be run without the desktop canvas.
+- **No action row.** A card's header holds the flip control, a **⋯** menu (Develop,
+  ⑂ Continue, + Use as context, Show on another brane, Version history, Remove) and
+  Focus. Develop's progress and **Retry Develop** stay in the header while they apply.
+  Machines get the same menu with Version history and Remove.
+- **Ask.** **Ask about N** (or `/`) opens an Ask box beside or below the selection,
+  whichever is nearer open space, and brings it into view if needed. It runs as a
+  composed run with the selected cards as references and a new `outputGeometry`, so the
+  answer takes the box's place. The composer's draft and context are untouched. Ask
+  keeps its own recovery journal, as Develop and machine runs do.
+- **The answer's back** shows the question, read from the run's frozen prompt entry,
+  and **Make reusable**. That places a machine whose prompt is the question with one
+  `{cards}` slot, fed with the same cards (`block.create` now takes a starting
+  template).
+- **Reply** is a chip for a selected response. It sets ⑂ Continue in the composer.
+- **Reveal** moves the view only when what is revealed is out of sight, and frames a
+  machine's output with its machine. A lever press now reveals its output.
+- **Focus** lists table cards only. Under a card it shows the card's back (receipt,
+  question, developments, earlier versions). For a machine it shows the slot rows and
+  the lever, so a machine runs without the canvas.
+
+### Decisions taken while building
+
+| Question                                | Decision                                                                         | Rationale                                                                                                                                                 |
+| --------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Remove the bottom composer now?         | No. Ask stands beside it.                                                        | The composer still carries Continue with its conversation lineage, attachments, the model choice and submission recovery. Ask replaces none of them yet.  |
+| Where does Ask's answer go?             | Exactly where the box stood, through `outputGeometry` on the run request.        | The server's anchor placement slid answers away from the box. An explicit geometry is part of the request hash, so a retried delivery places it the same. |
+| What does Make reusable do with braces? | Braces in the question become parentheses; the machine's only slot is `{cards}`. | A question's own braces would otherwise name slots no feed fills.                                                                                         |
+| What does "+ Add N selected" become?    | It returns to the composer's context row; the Ask chip opens the Ask box.        | Adding to the composer is still how a Continue gets context.                                                                                              |
+| Where do the slot rows and lever live?  | In `MachineControls`, shared by the canvas card and Focus.                       | Focus has no React Flow; the canvas passes the slot handles in. A separate module keeps React Flow out of the main bundle.                                |
+| What does the app call Reply?           | ⑂ Continue, as before; the chip reads Reply.                                     | One name per relationship in the code and records; the chip names the gesture.                                                                            |
+
+### Measured
+
+Each composer path now takes its shortest route: one marquee and **+ Add N selected**
+instead of a per-card button.
+
+| Scenario                     | Composer                                                         | Redo                                                                   |
+| ---------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 1. Pressure-test a claim     | 6 actions, 142 characters typed, 3 cards on the table            | 5 actions (⋯, Develop, marquee, Critique, Run), nothing typed, 4 cards |
+| 4. Ask a region (3 cards)    | 4 actions, 63 characters, 3 cards left in the composer's context | 4 actions, 63 characters, nothing left in any context                  |
+| 6. Keep a brief: build       | 4                                                                | 7 (Add, Machine, prompt, 3 drags, Run)                                 |
+| 6. Keep a brief: each update | 3 (flip, Reuse with current sources, Run)                        | 1 (Rerun)                                                              |
+
+The redo's scenario 1 rose from 4 to 5: Develop moved from the action row into the
+menu (or select and `D`, also two). Scenario 4 costs the same on both paths. The
+difference is what remains: the composer keeps the three cards as context for the next
+run, and its answer lands beside the first card wherever there is room. Ask leaves no
+context, and its answer stands where it was asked. Building a brief from the
+composer's best path (4) now costs less than building a machine (7).
+
+### Defects found by building it
+
+- The header menu drew under the card below it. A node now rises while its menu is
+  open.
+- The Ask box never took focus: React Flow keeps a node hidden until it has measured
+  it. The box retries focus each frame until it is shown.
+- With cards and machines to the right of a selection, the box opened far off-screen.
+  It now also tries below the selection and is brought into view.
+- Importing the shared machine controls from the canvas card would have put React
+  Flow in the main bundle. They live in their own module.
+
+## Recommended iteration 6
+
+Retire the bottom composer and make building a machine as cheap as asking.
+
+1. **Continue in the Ask box.** The Reply chip opens an Ask box with `continueFrom`
+   set, drawn with a thread line to the response. Attachments drop onto the table as
+   cards, and the model choice moves to the brane's settings. The submission recovery
+   notices move into the box. Then delete the composer and its context state, as
+   `domain.md` already lists.
+2. **Machine from a selection.** A **Machine** chip places a machine with one
+   `{cards}` slot fed by the selection, like Critique. Scenario 6's build drops from 7
+   to 4 (marquee, Machine, prompt, Run).
+3. **Arrows.** Draw a labelled arrow between two cards (the last step of scenario 1),
+   stored as a brane-scoped relation and sent when both ends are inputs of one run.
+4. Measure scenarios 1, 4 and 6 with the composer gone.

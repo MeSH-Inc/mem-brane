@@ -1,10 +1,13 @@
 # Redo: a table of cards and machines
 
-Status: iteration 4. Machines, feeds, staleness, card backs, tray history and the
-selection chips run in the app beside the existing composer. Ask, Reply, groups,
-arrows and the reduced chrome are still concept. This directory proposes a replacement for the current brane interface; once
-accepted, its decisions move into the numbered architecture documents and this
-directory is removed.
+Status: iteration 5. Machines, feeds, staleness, card backs, tray history, the
+selection chips, Ask with Make reusable, and the header menu that replaced the action
+row all run in the app. The bottom composer still stands beside Ask. Groups, arrows and
+Compare models are still concept.
+
+This directory proposes a replacement for the current brane interface; once accepted,
+its decisions move into the numbered architecture documents and this directory is
+removed.
 
 ## Thesis
 
