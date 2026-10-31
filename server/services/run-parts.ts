@@ -2,7 +2,7 @@ import type { DB } from '../db/index.js';
 import type { Placement } from '../../shared/types/domain.js';
 import { machineName } from '../../shared/machines.js';
 import { MAX_GROUP_MEMBERS } from '../../shared/groups.js';
-import { machineOutput, parseOutput } from '../../shared/machine-output.js';
+import { diagramLayers, machineOutput, parseOutput } from '../../shared/machine-output.js';
 import { DomainError } from '../domain/access.js';
 import { createBlock, now, uid } from './content.js';
 import { moveToBack } from './runs.js';
@@ -15,7 +15,7 @@ const REGION_GAP = 40;
 // places one card per numbered item where its output lay on the table. The whole answer
 // goes on the first card's back, with whatever was on its own back. If the output was in
 // a group the cards take its place there, in order; otherwise they arrive as a stack of
-// cards or a region of the diagram, with its arrows drawn. An answer of fewer than two
+// cards or a region of the diagram laid out by its arrows, with the arrows drawn. An answer of fewer than two
 // items, an output no longer on the table, or a brane without room keeps its one card.
 // Runs inside the completion's transaction; nothing it refuses fails the run.
 export function placeRunParts(db: DB, runId: string, text: string) {
@@ -56,14 +56,21 @@ export function placeRunParts(db: DB, runId: string, text: string) {
     ).n >= MAX_BRANE_GROUPS
   )
     return;
-  // A diagram spreads on a grid unless it joins a stack; cards pile as a stack does.
+  // A diagram is laid in layers by its arrows, each layer a row in item order, or on a
+  // grid when its arrows go round in a cycle; it piles only when it joins a stack.
   const spread = output === 'diagram' && membership?.display !== 'stack';
+  const layers = diagramLayers(parts.items.length, parts.arrows);
   const columns = Math.ceil(Math.sqrt(parts.items.length));
+  const cell = parts.items.map((_, index) => {
+    if (!layers) return { row: Math.floor(index / columns), column: index % columns };
+    const row = layers[index];
+    return { row, column: layers.slice(0, index).filter((l) => l === row).length };
+  });
   const geometry = (index: number) =>
     spread
       ? {
-          x: placed.x + (index % columns) * (placed.width + REGION_GAP),
-          y: placed.y + Math.floor(index / columns) * (placed.height + REGION_GAP),
+          x: placed.x + cell[index].column * (placed.width + REGION_GAP),
+          y: placed.y + cell[index].row * (placed.height + REGION_GAP),
           width: placed.width,
           height: placed.height,
         }

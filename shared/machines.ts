@@ -14,6 +14,8 @@ export const SELECTION_MACHINE_TEMPLATE = 'Summarise {cards} in five sentences.'
 export const MAX_SLOT_NAME = 40;
 // One press of a slot fed 'each' admits at most this many runs.
 export const MAX_EACH_RUNS = 12;
+// One press compares at most this many models, one run each.
+export const MAX_COMPARED_MODELS = 4;
 // The Workshop's built-in machines. Taking one out places a machine with its prompt.
 export const BUILT_IN_MACHINES = [
   { name: 'Critique', template: MACHINE_TEMPLATE },
@@ -30,7 +32,7 @@ export const BUILT_IN_MACHINES = [
   {
     name: 'Diagram',
     template:
-      'Diagram {material}. First list its main ideas as numbered lines ("1. …"), one short sentence each. Then list how they relate, one line per relation, written as "2 —supports→ 1" with a one- or two-word verb.\nOutput: diagram',
+      'Diagram {material}. First list its main ideas as numbered lines ("1. …"), one short sentence each. Then list how they relate, one line per relation, written as "2 —supports→ 1" with a one- or two-word verb. A relation joins two different ideas; leave an idea that relates to none without one.\nOutput: diagram',
   },
   {
     name: 'Extract',
@@ -67,6 +69,14 @@ export const runMachine = z
     edits: z.array(edit).max(33).default([]),
     // The slot fed 'each': one run per card in it, all admitted by this one press.
     each: z.string().trim().min(1).max(40).optional(),
+    // Compare models: one run per model over the same inputs, all admitted by this press.
+    // Each and a comparison are not combined.
+    models: z
+      .array(z.string().min(1).max(100))
+      .min(2)
+      .max(MAX_COMPARED_MODELS)
+      .refine((models) => new Set(models).size === models.length, 'A model is compared once.')
+      .optional(),
     maxOutputTokens: z.number().int().positive().optional(),
     maxReservedMicrousd: z.number().int().nonnegative().safe().optional(),
   })

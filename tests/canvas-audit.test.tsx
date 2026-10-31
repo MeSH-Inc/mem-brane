@@ -69,6 +69,8 @@ const machine = {
   onUnfeed: async () => {},
   onFeedMode: async () => {},
   onSaveToWorkshop: () => {},
+  onDuplicate: () => {},
+  models: ['mock'],
 };
 function render(s = state) {
   act(() => workspace.install(s));
@@ -98,6 +100,7 @@ function render(s = state) {
           onFeedGroup={noop}
           onRenameGroup={noop}
           onTakeOut={noop}
+          onKeep={noop}
           onCloseAsk={noop}
         />
       </StrictMode>,

@@ -50,6 +50,7 @@ import {
   retryRun,
   runMachine,
   estimateMachine,
+  keepOutput,
 } from '../services/runs.js';
 import {
   runMachine as runMachineSchema,
@@ -451,6 +452,11 @@ export function createApi(
   );
   app.post('/runs/:id/cancel', (c) => {
     cancelRun(db, c.get('actor'), id.parse(c.req.param('id')));
+    return c.json({ ok: true });
+  });
+  // Keep one answer of a comparison; the others go on its back.
+  app.post('/runs/:id/keep', (c) => {
+    keepOutput(db, c.get('actor'), id.parse(c.req.param('id')));
     return c.json({ ok: true });
   });
   app.post('/runs/:id/retry', async (c) => {

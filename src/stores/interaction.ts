@@ -24,6 +24,9 @@ export interface Interaction {
   flipped: string[];
   flip: (id: string, back?: boolean) => void;
   drafts: Record<string, string>;
+  // The models a machine's next press compares, by machine placement; that press only.
+  comparisons: Record<string, string[]>;
+  compare: (placementId: string, models: string[]) => void;
   inspector: boolean;
   setSelectedPlacements: (ids: string[]) => void;
   draft: (id: string, text: string, version: number, baseText: string) => void;
@@ -108,6 +111,14 @@ export const useInteraction = create<Interaction>((set, get) => ({
       return { flipped: shown ? state.flipped.filter((p) => p !== id) : [...state.flipped, id] };
     }),
   drafts: {},
+  comparisons: {},
+  compare: (placementId, models) =>
+    set((state) => {
+      const comparisons = { ...state.comparisons };
+      if (models.length) comparisons[placementId] = models;
+      else delete comparisons[placementId];
+      return { comparisons };
+    }),
   inspector: false,
   setSelectedPlacements: (ids) =>
     set((state) => {

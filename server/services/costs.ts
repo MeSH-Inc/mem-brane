@@ -1,3 +1,4 @@
+import { modelProvider } from '../llm/provider.js';
 import {
   committedSpend,
   spendAvailable,
@@ -36,7 +37,7 @@ export const freePrice: ModelPrice = {
   verifiedAt: '2026-09-08',
 };
 export function priceFor(model: string, policy?: CostPolicy): ModelPrice {
-  if (model === 'mock') return { ...freePrice, vision: true };
+  if (modelProvider(model) === 'mock') return { ...freePrice, vision: true };
   const price = policy?.prices[model];
   if (!price || !policy || policy.dailyLimitUsd <= 0)
     throw new DomainError(
@@ -100,7 +101,7 @@ export type CostQuote = ReturnType<typeof quoteCost>;
 export function canAffordQuote(quote: CostQuote, budget: Budget, policy?: CostPolicy): boolean {
   return (
     quote.amount <= budget.availableMicrousd &&
-    (quote.model === 'mock' ||
+    (modelProvider(quote.model) === 'mock' ||
       (usdLimit(policy?.globalDailyLimitUsd ?? 0) > 0 &&
         usdLimit(policy?.globalMonthlyLimitUsd ?? 0) > 0))
   );

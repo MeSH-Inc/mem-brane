@@ -192,8 +192,9 @@ export function machineStaleness(
       arrowsChanged: false,
     };
   // The last press: every run of its batch, the newest at each position (a retry
-  // replaces its run), in position order.
-  const batch = lastRun.batch_id
+  // replaces its run), in position order. A comparison's runs all froze the same inputs
+  // for different models, so what it sent is what its first run sent.
+  const pressed = lastRun.batch_id
     ? [
         ...scene.runs
           .filter((r) => r.batch_id === lastRun.batch_id)
@@ -204,6 +205,7 @@ export function machineStaleness(
         .sort(([a], [b]) => a - b)
         .map(([, r]) => r)
     : [lastRun];
+  const batch = new Set(pressed.map((r) => r.model)).size > 1 ? pressed.slice(0, 1) : pressed;
   const batchIds = new Set(batch.map((r) => r.id));
   const frozen = scene.derivations.filter((d) => batchIds.has(d.runId));
   const frozenOf = (runId: string) =>

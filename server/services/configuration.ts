@@ -1,3 +1,4 @@
+import { modelProvider } from '../llm/provider.js';
 import { isGuestLibrary } from './guest-limits.js';
 import type { Configuration } from '../../shared/contracts.js';
 import type { DB } from '../db/index.js';
@@ -19,7 +20,7 @@ export function readConfiguration(db: DB, actor: string): Configuration {
       config.models.map((model) => [
         model,
         {
-          vision: model === 'mock' || costPolicy.prices[model]?.vision === true,
+          vision: modelProvider(model) === 'mock' || costPolicy.prices[model]?.vision === true,
           pdfText: true,
         },
       ]),

@@ -13,6 +13,15 @@ export function machineOutput(template: string): MachineOutput {
   return match ? (match[1].toLowerCase() as MachineOutput) : 'card';
 }
 
+// The prompt with its declaration set to this output: the line replaced, added or
+// removed, the rest of the prompt untouched.
+export function declareMachineOutput(template: string, output: MachineOutput) {
+  const lines = template.trimEnd().split('\n');
+  const body = declaration.test(lines.at(-1) ?? '') ? lines.slice(0, -1) : lines;
+  const text = body.join('\n').trimEnd();
+  return output === 'card' ? text : `${text}\nOutput: ${output}`;
+}
+
 export interface OutputArrow {
   // Positions in the item list, from zero.
   from: number;
@@ -71,4 +80,20 @@ export function parseOutput(text: string, output: MachineOutput): OutputParts {
     arrows,
     dropped: named.length - arrows.length,
   };
+}
+
+// A diagram's layers: each card one layer past the cards with arrows into it, so an
+// arrow always points down the page. A cycle has no such layering; then none.
+export function diagramLayers(count: number, arrows: OutputArrow[]): number[] | null {
+  const layer = Array.from({ length: count }, () => 0);
+  for (let round = 0; round <= count; round++) {
+    let changed = false;
+    for (const arrow of arrows)
+      if (layer[arrow.to] < layer[arrow.from] + 1) {
+        layer[arrow.to] = layer[arrow.from] + 1;
+        changed = true;
+      }
+    if (!changed) return layer;
+  }
+  return null;
 }

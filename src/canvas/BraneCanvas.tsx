@@ -72,6 +72,7 @@ type CardData = ResponseActions & {
     point: { x: number; y: number },
   ) => void;
   onTakeOut: (placementId: string) => void;
+  onKeep: (runId: string) => void;
   machine: MachineActions;
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
@@ -94,6 +95,20 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
   const grouped = useStore(data.document.store, (s) =>
     s.scene.groups.some((g) => g.members.includes(id)),
   );
+  // An answer of a comparison whose other answers are still on the table names its model
+  // and offers Keep.
+  const compared = useStore(data.document.store, (s) => {
+    const run = s.runs[data.blockId];
+    if (!run?.batch_id || !s.state || run.output_block_id !== data.blockId) return '';
+    const press = s.state.runs.filter((r) => r.batch_id === run.batch_id);
+    if (new Set(press.map((r) => r.model)).size < 2) return '';
+    const table = new Set(
+      s.scene.placements.filter((p) => !p.host_placement_id).map((p) => p.block_id),
+    );
+    return press.some((r) => r.id !== run.id && table.has(r.output_block_id))
+      ? JSON.stringify([run.id, run.model])
+      : '';
+  });
   const back = useMemo<BackActions>(
     () => ({
       onDetach: data.onDetach,
@@ -156,6 +171,19 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
           <span className="kind-mark">{block.origin === 'generated' ? '✳' : '◇'}</span>
           <span>{cardKind(block)}</span>
           <span className="card-status">
+            {compared && (
+              <>
+                <span className="compared-model">{JSON.parse(compared)[1]}</span>
+                <button
+                  className="nodrag nopan keep-button"
+                  aria-label={`Keep the ${JSON.parse(compared)[1]} answer`}
+                  title="Keep this answer on the table; the others go on its back"
+                  onClick={() => data.onKeep(JSON.parse(compared)[0])}
+                >
+                  Keep
+                </button>
+              </>
+            )}
             {/* Develop's progress and recovery stay visible; starting it is in the menu. */}
             {!data.mobile && block.origin !== 'generated' && (activity.busy || activity.retry) && (
               <SpawnButton
@@ -265,6 +293,7 @@ interface Props extends ResponseActions {
   onFeedGroup: GroupNode['data']['onFeed'];
   onRenameGroup: GroupNode['data']['onRename'];
   onTakeOut: CardData['onTakeOut'];
+  onKeep: CardData['onKeep'];
   // The open Ask box: where it stands and the prompt panel it holds.
   ask?: AskPosition & { content: ReactNode };
   onCloseAsk: () => void;
@@ -419,6 +448,7 @@ function Inner(props: Props) {
           onUpdate: props.onUpdate,
           onArrow: drawArrow,
           onTakeOut: props.onTakeOut,
+          onKeep: props.onKeep,
           onStop: props.onStop,
           onRetry: props.onRetry,
           machine: props.machine,
@@ -464,6 +494,7 @@ function Inner(props: Props) {
     props.onUpdate,
     drawArrow,
     props.onTakeOut,
+    props.onKeep,
     groups,
     props.onStop,
     props.onRetry,

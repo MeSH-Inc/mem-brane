@@ -511,14 +511,20 @@ function machineSubmission(
 }
 // The runs of a press that fans a slot out: the cards of the 'each' slot, one per run,
 // each with every card of the other slots. A machine run admitted alone is one part.
-function machineParts(input: RunMachine) {
-  if (!input.each) return [input.inputs];
+// A comparison is one run per model, each with every input.
+function machineParts(input: RunMachine): { inputs: RunMachine['inputs']; model: string }[] {
+  if (input.models) {
+    if (input.each)
+      throw new DomainError(400, 'Compare models with the cards together, not one at a time.');
+    return input.models.map((model) => ({ inputs: input.inputs, model }));
+  }
+  if (!input.each) return [{ inputs: input.inputs, model: input.model }];
   const fanned = input.inputs.filter((i) => i.slot === input.each);
   if (!fanned.length) throw new DomainError(400, `Feed the {${input.each}} slot first.`);
   if (fanned.length > MAX_EACH_RUNS)
     throw new DomainError(400, `One press runs each for at most ${MAX_EACH_RUNS} cards.`);
   const shared = input.inputs.filter((i) => i.slot !== input.each);
-  return fanned.map((card) => [...shared, card]);
+  return fanned.map((card) => ({ inputs: [...shared, card], model: input.model }));
 }
 // Run i of a batch has its own submission key, derived from the press's key.
 function batchKey(key: string, position: number) {
@@ -538,7 +544,7 @@ function machineTray(db: DB, machinePlacementId: string, each: boolean) {
       'SELECT group_id FROM group_members WHERE placement_id=?',
     )
     .get(newest.id);
-  if (!group) return { members: [newest], owned: false };
+  if (!group) return { members: comparedOutputs(db, newest), owned: false };
   const members = db
     .prepare<unknown[], Placement & { produced: number }>(
       `SELECT p.*,EXISTS(SELECT 1 FROM run_placements l WHERE l.anchor_placement_id=?
@@ -556,6 +562,39 @@ function machineTray(db: DB, machinePlacementId: string, each: boolean) {
     owned,
     members: owned || each ? produced : [newest],
   };
+}
+// A loose output of a comparison stands with the other outputs of its press still loose
+// on the table, in the press's order; any other loose output stands alone.
+function comparedOutputs(db: DB, output: Placement): Placement[] {
+  const outputs = db
+    .prepare<unknown[], Placement>(
+      `SELECT p.* FROM run_placements l JOIN run_batches b ON b.run_id=l.run_id
+       JOIN run_batches mate ON mate.batch_id=b.batch_id
+       JOIN run_placements ml ON ml.run_id=mate.run_id
+       JOIN placements p ON p.id=ml.output_placement_id
+       WHERE l.output_placement_id=? AND p.host_placement_id IS NULL
+       AND NOT EXISTS (SELECT 1 FROM group_members WHERE placement_id=p.id)
+       ORDER BY mate.position`,
+    )
+    .all(output.id);
+  return outputs.length ? outputs : [output];
+}
+// Keep one output of a comparison: the press's other outputs still on the table go on
+// its back, as a rerun's earlier outputs do.
+export function keepOutput(db: DB, actor: string, runId: string) {
+  return db.transaction(() => {
+    const run = requireOwned(db, 'runs', actor, runId);
+    canRunOnBrane(db, actor, run.brane_id);
+    const kept = db
+      .prepare<unknown[], Placement>(
+        `SELECT p.* FROM run_placements l JOIN placements p ON p.id=l.output_placement_id
+         WHERE l.run_id=? AND p.host_placement_id IS NULL`,
+      )
+      .get(runId);
+    if (!kept) throw new DomainError(409, 'This answer is no longer on the table.');
+    for (const other of comparedOutputs(db, kept))
+      if (other.id !== kept.id) retire(db, other, kept.id);
+  })();
 }
 // A tray card the new press has no place for goes on the back of the press's first
 // output, without the links it had as a result on the table.
@@ -588,15 +627,15 @@ export function runMachine(
   return db.transaction(() => {
     machineSubmission(db, actor, input);
     const parts = machineParts(input);
-    const batch = input.each ? { id: input.key } : undefined;
+    const batch = input.each || input.models ? { id: input.key } : undefined;
     const submit = (position: number, plan: OutputPlan) => {
       // Edits are applied once, before the first run; every run reads the saved text.
-      const part = machineSubmission(db, actor, input, parts[position], []);
+      const part = machineSubmission(db, actor, input, parts[position].inputs, []);
       return submitRun(
         db,
         snapshots,
         actor,
-        { ...part.submission, key: batchKey(input.key, position) },
+        { ...part.submission, model: parts[position].model, key: batchKey(input.key, position) },
         limits,
         undefined,
         part.machine,
@@ -610,25 +649,34 @@ export function runMachine(
       const runs = parts.map((_, position) => submit(position, replayPlan(batch, position)));
       return runs[0];
     }
-    checkLimits(db, actor, input.model, limits);
+    for (const model of new Set(parts.map((part) => part.model)))
+      checkLimits(db, actor, model, limits);
     const placement = machineSubmission(db, actor, input).machine.placement;
-    const tray = machineTray(db, placement.id, !!batch);
+    const tray = machineTray(db, placement.id, !!input.each);
     const appliedEdits = input.edits.map((edit) => ({
       blockId: edit.blockId,
       ...updateBlockLiveState(db, actor, edit),
     }));
     // New outputs past the tray's cards pile on the first one, as a stack does.
+    // A comparison's outputs stand side by side from the first one.
     const first = tray.members[0] ?? childGeometry(db, placement);
     const runs = parts.map((_, position) => {
       const offset = Math.min(position, 3) * 10;
       return submit(position, {
         replaces: tray.members[position] ?? null,
-        geometry: {
-          x: first.x + offset,
-          y: first.y + offset,
-          width: first.width,
-          height: first.height,
-        },
+        geometry: input.models
+          ? {
+              x: first.x + position * (first.width + 40),
+              y: first.y,
+              width: first.width,
+              height: first.height,
+            }
+          : {
+              x: first.x + offset,
+              y: first.y + offset,
+              width: first.width,
+              height: first.height,
+            },
         batch: batch && { ...batch, position },
         admitted: true,
         appliedEdits: position ? [] : appliedEdits,
@@ -636,8 +684,8 @@ export function runMachine(
     });
     const outputs = runs.map((run) => outputPlacement(db, run.id));
     for (const surplus of tray.members.slice(parts.length)) retire(db, surplus, outputs[0]);
-    if (!batch) {
-      // A run together after its own stack leaves one card where the stack was.
+    if (!input.each) {
+      // A run together, or a comparison, after its own stack leaves no stack behind.
       if (tray.groupId && tray.owned) db.prepare('DELETE FROM groups WHERE id=?').run(tray.groupId);
     } else if (tray.groupId) {
       const add = db.prepare(
@@ -684,10 +732,10 @@ export function estimateMachine(db: DB, actor: string, input: RunMachine, limits
       db,
       actor,
       input,
-      part,
+      part.inputs,
       position ? [] : input.edits,
     );
-    return estimateRun(db, actor, submission, limits, machine);
+    return estimateRun(db, actor, { ...submission, model: part.model }, limits, machine);
   });
   // The press reserves every run's bound at once, so it is affordable only in total.
   const reserved = estimates.reduce((sum, e) => sum + e.reservedMicrousd, 0);

@@ -57,7 +57,8 @@ type DraftState = Pick<
   | 'recoverDraft'
   | 'discardDraft'
   | 'refreshDrafts'
->;
+> &
+  Partial<Pick<Interaction, 'comparisons' | 'compare'>>;
 export interface WorkspaceDependencies {
   request: typeof api;
   storage: WorkspaceStorage;
@@ -834,6 +835,11 @@ export class WorkspaceController {
     if (view.missingSlots.length) throw new Error(`Feed the {${view.missingSlots[0]}} slot first.`);
     if (view.eachConflict) throw new Error('Only one slot can run each card on its own.');
     const inputs = view.inputs.map(({ blockId, slot }) => ({ blockId, slot }));
+    const models = (this.deps.drafts.getState().comparisons?.[placementId] ?? []).filter((model) =>
+      this.models.includes(model),
+    );
+    if (models.length > 1 && view.eachSlot)
+      throw new Error('Compare models with the cards together, not one at a time.');
     return {
       braneId: this.braneId,
       key: crypto.randomUUID(),
@@ -841,6 +847,7 @@ export class WorkspaceController {
       model: this.draft.model ?? 'mock',
       inputs,
       ...(view.eachSlot ? { each: view.eachSlot } : {}),
+      ...(models.length > 1 ? { models } : {}),
       edits: this.edits([placement.block_id, ...inputs.map((i) => i.blockId)]),
     };
   }
@@ -863,12 +870,68 @@ export class WorkspaceController {
         this.client.runMachine,
         progress,
       );
+      // A comparison applies to the press that made it.
+      this.deps.drafts.getState().compare?.(placementId, []);
       if (!this.valid(epoch)) return;
       progress('refreshing');
       await this.refresh();
       if (this.valid(epoch)) return accepted.receipt.outputBlockId;
     }).catch(() => undefined);
   };
+  // Keep one answer of a comparison; the press's other answers go on its back.
+  keepOutput = (runId: string) =>
+    this.mutate(`keep:${runId}`, async () => {
+      await this.client.keepOutput(runId);
+      await this.refresh();
+    }).catch(() => undefined);
+  // A copy of a machine below it, with the same prompt and fed from the same cards and
+  // groups in the same slots and modes; edit its prompt and it asks something else of
+  // the same material.
+  duplicateMachine = (placementId: string) =>
+    this.command(`duplicateMachine:${placementId}`, async () => {
+      const state = this.state;
+      const source = state?.placements.find((p) => p.id === placementId);
+      const block = source && state?.blocks.find((b) => b.id === source.block_id);
+      if (!state || !source || block?.kind !== 'machine')
+        throw new Error('This machine is no longer on the brane.');
+      const template =
+        this.deps.drafts.getState().draftRecords[block.id]?.text ?? block.content.text;
+      const table = state.placements.filter((p) => !p.host_placement_id);
+      const created = await this.client.createMachine(
+        this.braneId,
+        openSpot(
+          table,
+          { x: source.x, y: source.y + source.height + 40 },
+          source.width,
+          source.height,
+        ),
+        template,
+      );
+      await this.refresh();
+      const copy = this.state?.placements.find((p) => p.block_id === created.id);
+      if (!copy) return;
+      for (const feed of state.feeds.filter((f) => f.to_placement_id === placementId)) {
+        await this.client.createFeed({
+          braneId: this.braneId,
+          ...(feed.from_group_id
+            ? { fromGroupId: feed.from_group_id }
+            : { fromPlacementId: feed.from_placement_id! }),
+          toPlacementId: copy.id,
+          slot: feed.slot,
+        });
+        if (feed.mode === 'each') {
+          await this.refresh();
+          const made = this.state?.feeds.find(
+            (f) =>
+              f.to_placement_id === copy.id &&
+              f.slot === feed.slot &&
+              f.from_group_id === feed.from_group_id,
+          );
+          if (made) await this.client.setFeedMode(made.id, this.braneId, 'each');
+        }
+      }
+      return created.id;
+    }).catch(() => undefined);
   createMachine = (geometry: Geometry, template?: string) =>
     this.command(`createMachine:${JSON.stringify(geometry)}`, async (progress) => {
       const epoch = this.epoch;

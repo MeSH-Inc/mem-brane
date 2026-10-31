@@ -443,21 +443,31 @@ test('three Extract machines over one stack make a literature matrix', async ({ 
     await act(() => lasso(page, cards));
     await act(() => page.keyboard.press('g'));
     await act(() => page.getByRole('button', { name: 'Stack', exact: true }).click());
+    // The first Extract comes from the Workshop and is fed and set to each; the second
+    // and third are duplicates of it, fed the same way, with their own question.
+    let previous: Locator | undefined;
     for (const [index, question] of questions.entries()) {
-      const extract = await takeOut(page, act, state, braneId, 'Extract');
       const prompt = `From {source}, answer in one short sentence: ${question}?`;
       counts.typed += prompt.length;
-      await act(() => extract.getByRole('textbox', { name: 'Machine prompt' }).fill(prompt));
-      // The new machine was brought into view; fitting the view brings the stack back too.
-      await page.locator('.react-flow__controls-fitview').click();
-      await act(() =>
-        drag(
-          page,
-          '.react-flow__node[data-id^="group:"]:has([aria-label="Group 1"]) .card-port',
-          extract.locator('[data-feed-slot="source"]'),
-        ),
-      );
-      await act(() => extract.getByRole('button', { name: /one card at a time/ }).click());
+      let extract: Locator;
+      if (!previous) {
+        extract = await takeOut(page, act, state, braneId, 'Extract');
+        await act(() => extract.getByRole('textbox', { name: 'Machine prompt' }).fill(prompt));
+        // The new machine was brought into view; fitting the view brings the stack back too.
+        await page.locator('.react-flow__controls-fitview').click();
+        await act(() =>
+          drag(
+            page,
+            '.react-flow__node[data-id^="group:"]:has([aria-label="Group 1"]) .card-port',
+            extract.locator('[data-feed-slot="source"]'),
+          ),
+        );
+        await act(() => extract.getByRole('button', { name: /one card at a time/ }).click());
+      } else {
+        extract = await duplicate(page, act, state, braneId, previous);
+        await act(() => extract.getByRole('textbox', { name: 'Machine prompt' }).fill(prompt));
+      }
+      previous = extract;
       await expect(extract.locator('.machine-lever')).toHaveText(/^Run ×4/);
       await act(() => extract.locator('.machine-lever').click());
       await completed(braneId, 4 * (index + 1));
@@ -500,6 +510,74 @@ test('three Extract machines over one stack make a literature matrix', async ({ 
       .toEqual([1, 1, 1, 1]);
   });
   record('matrix', counts);
+});
+
+test('two models answer one press side by side, and Keep chooses one', async ({ page }) => {
+  const counts = { actions: 0 };
+  await serve(page, 4209, async ({ seed, completed, state, api, origin }) => {
+    const { braneId, cards } = await seed('Pick a model', [
+      'Cities that announced a transit line saw land prices rise. The rise began early.',
+    ]);
+    const machine = await (
+      await page.request.post(api('/blocks/machine'), {
+        data: {
+          braneId,
+          geometry: { x: 420, y: 40, width: 400, height: 300 },
+          template: 'Summarise {source} for a council briefing.',
+        },
+      })
+    ).json();
+    let read = await state(braneId);
+    const machinePlacement = read.placements.find((p) => p.block_id === machine.id)!.id;
+    await page.request.post(api('/feeds'), {
+      data: {
+        braneId,
+        fromPlacementId: cards[0].placementId,
+        toPlacementId: machinePlacement,
+        slot: 'source',
+      },
+    });
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    const node = page.locator(`.react-flow__node[data-id="${machinePlacement}"]`);
+    await act(() => node.getByRole('button', { name: 'Machine actions' }).click());
+    await act(() => node.getByRole('button', { name: 'Compare models…' }).click());
+    const picker = node.getByRole('group', { name: 'Compare models on the next press' });
+    await act(() => picker.getByRole('checkbox', { name: 'Local mock' }).check());
+    await act(() => picker.getByRole('checkbox', { name: 'mock-brief' }).check());
+    await expect(node.locator('.machine-lever')).toHaveText(/^Run ×2 models/);
+    await act(() => node.locator('.machine-lever').click());
+    await completed(braneId, 2);
+    // The choice applied to that press only.
+    await expect(picker).toHaveCount(0);
+    read = await state(braneId);
+    const answers = read.runs.map((run) => ({
+      run,
+      placement: read.placements.find((p) => p.block_id === run.output_block_id)!,
+    }));
+    expect(answers.map((a) => a.run.model).sort()).toEqual(['mock', 'mock-brief']);
+    expect(answers[0].placement.y).toBe(answers[1].placement.y);
+    const brief = answers.find((a) => a.run.model === 'mock-brief')!;
+    const other = answers.find((a) => a.run.model === 'mock')!;
+    await expect(page.locator('.keep-button')).toHaveCount(2);
+    await act(() => page.getByRole('button', { name: 'Keep the mock-brief answer' }).click());
+    await expect
+      .poll(async () => {
+        read = await state(braneId);
+        return read.placements.find((p) => p.id === other.placement.id)!.host_placement_id;
+      })
+      .toBe(brief.placement.id);
+    await expect(page.getByRole('button', { name: /^Keep the/ })).toHaveCount(0);
+    await expect(
+      page
+        .locator(`.react-flow__node[data-id="${brief.placement.id}"]`)
+        .getByRole('button', { name: /1 on the back/ }),
+    ).toBeVisible();
+  });
+  record('compare-models', counts);
 });
 
 test('a reading pile splits into ideas each, and the ideas become a diagram', async ({ page }) => {
@@ -576,6 +654,30 @@ test('a reading pile splits into ideas each, and the ideas become a diagram', as
   record('pile-diagram', counts);
 });
 
+// Duplicate a machine with its feeds: its menu, then Duplicate. Returns the copy's node.
+async function duplicate(
+  page: Page,
+  act: (work: () => Promise<unknown>) => Promise<void>,
+  state: Server['state'],
+  braneId: string,
+  machine: Locator,
+) {
+  const before = new Set(
+    (await state(braneId)).blocks.filter((b) => b.kind === 'machine').map((b) => b.id),
+  );
+  await act(() => machine.getByRole('button', { name: 'Machine actions' }).click());
+  await act(() => machine.getByRole('button', { name: 'Duplicate with feeds' }).click());
+  let placementId = '';
+  await expect
+    .poll(async () => {
+      const read = await state(braneId);
+      const block = read.blocks.find((b) => b.kind === 'machine' && !before.has(b.id));
+      placementId = read.placements.find((p) => p.block_id === block?.id)?.id ?? '';
+      return placementId;
+    })
+    .not.toBe('');
+  return page.locator(`.react-flow__node[data-id="${placementId}"]`);
+}
 // Take a machine out of the Workshop: Add, Workshop, the machine. Returns its node.
 async function takeOut(
   page: Page,
@@ -737,6 +839,7 @@ interface BraneRead {
   groups: { label: string; members: string[] }[];
   runs: {
     id: string;
+    model: string;
     status: string;
     output_block_id: string;
     machine_block_id: string | null;
@@ -763,6 +866,7 @@ async function serve(page: Page, port: number, scenario: (server: Server) => Pro
     env: testProcessEnvironment({
       PORT: String(port),
       APP_ORIGIN: origin,
+      MODEL_ALLOWLIST: 'mock,mock-brief',
       DATABASE_PATH: join(directory, 'db.sqlite'),
       ASSET_DIRECTORY: join(directory, 'assets'),
     }),

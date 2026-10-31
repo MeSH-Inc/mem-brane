@@ -3,6 +3,7 @@ import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
 import { useStore } from 'zustand';
 import type { WorkspaceDocument } from '../services/workspace-document';
 import { machineSlots } from '../../shared/machines';
+import { declareMachineOutput, machineOutput } from '../../shared/machine-output';
 import { BlockContent } from '../components/BlockContent';
 import { ActionMenu } from '../components/ActionMenu';
 import { useInteraction } from '../stores/interaction';
@@ -10,6 +11,11 @@ import { MachineControls, useMachineView, type MachineActions } from './MachineC
 export type { MachineActions } from './MachineControls';
 
 export const slotHandle = (slot: string) => `slot:${slot}`;
+const outputNames = {
+  card: 'Answer as one card',
+  cards: 'Answer as cards',
+  diagram: 'Answer as a diagram',
+} as const;
 
 // A machine is a prompt with named slots. Each slot row is a feed target; the lever
 // runs it once with exactly the cards fed now. Nothing here runs by itself.
@@ -38,6 +44,7 @@ export const MachineCard = memo(function MachineCard({
 }) {
   const block = useStore(document.store, (s) => s.blocks[blockId]);
   const draft = useInteraction((s) => s.drafts[blockId]);
+  const [comparing, setComparing] = useState(false);
   const view = useMachineView(document, placementId, draft);
   // Slot handles appear and vanish with the template; React Flow must re-measure them
   // or feeds into a new slot have no anchor to draw to.
@@ -45,6 +52,7 @@ export const MachineCard = memo(function MachineCard({
   const slotKey = machineSlots(draft ?? block?.content.text ?? '').join('\u0000');
   useEffect(() => updateNodeInternals(placementId), [slotKey, placementId, updateNodeInternals]);
   if (!block) return null;
+  const template = draft ?? block.content.text;
   const state = view?.stale ? 'stale' : view?.ran ? 'ran' : '';
   return (
     <article
@@ -75,6 +83,20 @@ export const MachineCard = memo(function MachineCard({
             align="right"
             className="card-menu nodrag nopan"
           >
+            {(['card', 'cards', 'diagram'] as const).map((output) => (
+              <button
+                key={output}
+                role="menuitemradio"
+                aria-checked={machineOutput(template) === output}
+                onClick={() => onEdit(blockId, declareMachineOutput(template, output))}
+              >
+                {outputNames[output]}
+              </button>
+            ))}
+            {actions.models.length > 1 && (
+              <button onClick={() => setComparing(true)}>Compare models…</button>
+            )}
+            <button onClick={() => actions.onDuplicate(placementId)}>Duplicate with feeds</button>
             <button onClick={() => actions.onSaveToWorkshop(blockId)}>Save to Workshop</button>
             <button onClick={() => onManage('versions')}>Version history</button>
             <button onClick={() => onManage('remove')}>Remove from this brane</button>
@@ -94,6 +116,8 @@ export const MachineCard = memo(function MachineCard({
         blockId={blockId}
         document={document}
         actions={actions}
+        comparing={comparing}
+        onCloseCompare={() => setComparing(false)}
         handle={(slot) => (
           <Handle
             type="target"

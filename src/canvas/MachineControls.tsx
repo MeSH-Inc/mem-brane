@@ -3,6 +3,7 @@ import { useStore } from 'zustand';
 import type { WorkspaceDocument } from '../services/workspace-document';
 import type { Estimate } from '../../shared/contracts';
 import { machineSlots } from '../../shared/machines';
+import { machineOutput } from '../../shared/machine-output';
 import { useInteraction } from '../stores/interaction';
 import { formatUsd } from '../lib/format';
 import { machineStaleness, type MachineView } from './machines';
@@ -14,6 +15,9 @@ export interface MachineActions {
   onUnfeed: (feedId: string) => Promise<unknown>;
   onFeedMode: (feedId: string, mode: 'together' | 'each') => Promise<unknown>;
   onSaveToWorkshop: (blockId: string) => void;
+  onDuplicate: (placementId: string) => void;
+  // The models a comparison may choose from.
+  models: string[];
 }
 
 export function useMachineView(document: WorkspaceDocument, placementId: string, draft?: string) {
@@ -32,13 +36,23 @@ export function MachineControls({
   document,
   actions,
   handle,
+  comparing = false,
+  onCloseCompare,
 }: {
   placementId: string;
   blockId: string;
   document: WorkspaceDocument;
   actions: MachineActions;
   handle?: (slot: string) => React.ReactNode;
+  // The model picker for the next press is open.
+  comparing?: boolean;
+  onCloseCompare?: () => void;
 }) {
+  const compared = useInteraction((s) => s.comparisons[placementId]);
+  const models = useMemo(
+    () => (compared ?? []).filter((model) => actions.models.includes(model)),
+    [compared, actions.models],
+  );
   const block = useStore(document.store, (s) => s.blocks[blockId]);
   const draft = useInteraction((s) => s.drafts[blockId]);
   const selection = useInteraction((s) => s.selectedPlacements);
@@ -65,6 +79,7 @@ export function MachineControls({
   const labels = useMemo(() => JSON.parse(previews) as Record<string, string>, [previews]);
   const template = draft ?? block?.content.text ?? '';
   const slots = machineSlots(template);
+  const output = machineOutput(template);
   const [running, setRunning] = useState(false);
   const [estimate, setEstimate] = useState<Estimate | 'unavailable'>();
   const estimateFor = useRef('');
@@ -73,7 +88,7 @@ export function MachineControls({
   // Re-estimate when what the lever would send changes; stale answers are discarded.
   useEffect(() => {
     if (!ready) return;
-    const key = `${viewKey}|${template}`;
+    const key = `${viewKey}|${template}|${models.join(',')}`;
     estimateFor.current = key;
     const timer = setTimeout(() => {
       actions
@@ -82,7 +97,7 @@ export function MachineControls({
         .catch(() => estimateFor.current === key && setEstimate('unavailable'));
     }, 400);
     return () => clearTimeout(timer);
-  }, [ready, viewKey, template, placementId, actions]);
+  }, [ready, viewKey, template, models, placementId, actions]);
   const candidates = selection.filter((id) => id !== placementId);
   const missing = slots.find((slot) => !view?.inputs.some((i) => i.slot === slot));
   const refused = estimate && estimate !== 'unavailable' && !estimate.canAfford;
@@ -94,13 +109,21 @@ export function MachineControls({
         ? `Feed ${missing}`
         : view?.eachConflict
           ? 'One slot runs each'
-          : refused
-            ? 'Over today’s allowance'
-            : `${view?.stale ? 'Rerun' : 'Run'}${view && view.runs > 1 ? ` ×${view.runs}` : ''}${
-                estimate && estimate !== 'unavailable' && estimate.reservedMicrousd > 0
-                  ? ` · ${formatUsd(estimate.reservedMicrousd)}`
-                  : ''
-              }`;
+          : models.length > 1 && view?.eachSlot
+            ? 'Compare with the cards together'
+            : refused
+              ? 'Over today’s allowance'
+              : `${view?.stale ? 'Rerun' : 'Run'}${
+                  models.length > 1
+                    ? ` ×${models.length} models`
+                    : view && view.runs > 1
+                      ? ` ×${view.runs}`
+                      : ''
+                }${
+                  estimate && estimate !== 'unavailable' && estimate.reservedMicrousd > 0
+                    ? ` · ${formatUsd(estimate.reservedMicrousd)}`
+                    : ''
+                }`;
   return (
     <>
       <ul className="machine-slots" aria-label="Slots">
@@ -163,11 +186,55 @@ export function MachineControls({
           );
         })}
       </ul>
+      {(comparing || models.length > 0) && (
+        <fieldset className="machine-compare nodrag nopan">
+          <legend>Compare models on the next press</legend>
+          {actions.models.map((model) => (
+            <label key={model}>
+              <input
+                type="checkbox"
+                checked={models.includes(model)}
+                onChange={(event) =>
+                  useInteraction
+                    .getState()
+                    .compare(
+                      placementId,
+                      event.target.checked ? [...models, model] : models.filter((m) => m !== model),
+                    )
+                }
+              />
+              {model === 'mock' ? 'Local mock' : model}
+            </label>
+          ))}
+          <button
+            className="text-button"
+            onClick={() => {
+              useInteraction.getState().compare(placementId, []);
+              onCloseCompare?.();
+            }}
+          >
+            Done
+          </button>
+        </fieldset>
+      )}
       <footer className="machine-footer nodrag nopan">
+        {output !== 'card' && (
+          <span className="machine-output" title="What one answer becomes on the table">
+            → {output}
+          </span>
+        )}
         <button
           className={`machine-lever${view?.stale ? ' stale' : ''}`}
-          disabled={running || !ready || !!refused || !!view?.eachConflict}
+          disabled={
+            running ||
+            !ready ||
+            !!refused ||
+            !!view?.eachConflict ||
+            (models.length > 1 && !!view?.eachSlot)
+          }
           onClick={() => {
+            // A comparison is chosen for one press; the picker closes with it.
+            if (models.length > 1) onCloseCompare?.();
             setRunning(true);
             void actions.onRunMachine(placementId).finally(() => setRunning(false));
           }}

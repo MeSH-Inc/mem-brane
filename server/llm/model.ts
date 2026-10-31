@@ -54,7 +54,7 @@ function mockParts(texts: string[], output: MachineOutput) {
   return lines.join('\n');
 }
 export const executeModel: ModelExecutor = async (request, onChunk) => {
-  if (request.model === 'mock') {
+  if (modelProvider(request.model) === 'mock') {
     const prompt = request.inputs.filter((i) => i.kind === 'prompt').at(-1)?.content.text ?? '';
     const refs = request.inputs.filter((i) => i.kind === 'source' || i.kind === 'reference');
     const relations = request.inputs
@@ -63,15 +63,17 @@ export const executeModel: ModelExecutor = async (request, onChunk) => {
       .join('');
     const shape = machineOutput(prompt);
     const text =
-      shape !== 'card'
-        ? mockParts(
-            refs.map((r) => representationText(r.content)),
-            shape,
-          )
-        : `A little room to think.\n\n${prompt}\n\n${refs.length ? refs.map((r) => `${r.label}: ${representationText(r.content)}`).join('\n\n') : 'Add a block with “Use as context” to explore your notes.'}\n\n${relations}This is a deterministic mock response. Your submitted context is frozen; you can keep editing the brane.`.slice(
-            0,
-            request.maxOutputTokens * 4,
-          );
+      request.model === 'mock-brief'
+        ? `In brief: ${refs.map((r) => representationText(r.content).split(/(?<=[.!?])\s/)[0]).join(' ') || 'nothing was sent.'}`
+        : shape !== 'card'
+          ? mockParts(
+              refs.map((r) => representationText(r.content)),
+              shape,
+            )
+          : `A little room to think.\n\n${prompt}\n\n${refs.length ? refs.map((r) => `${r.label}: ${representationText(r.content)}`).join('\n\n') : 'Add a block with “Use as context” to explore your notes.'}\n\n${relations}This is a deterministic mock response. Your submitted context is frozen; you can keep editing the brane.`.slice(
+              0,
+              request.maxOutputTokens * 4,
+            );
     let output = '';
     for (let i = 0; i < text.length; i += 18) {
       request.signal.throwIfAborted();

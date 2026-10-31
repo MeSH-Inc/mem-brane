@@ -99,6 +99,7 @@ export function createClient(request: typeof api) {
     runPage: (braneId: string, cursor?: string) =>
       read(response.runPageResponse, page(`/branes/${braneId}/runs`, cursor)),
     cancelRun: (id: string) => request(`/runs/${id}/cancel`, {}),
+    keepOutput: (runId: string) => request(`/runs/${runId}/keep`, {}),
     retryRun: (id: string, key: string) =>
       read(response.runIdentityResponse, `/runs/${id}/retry`, { key }),
     lineage: (id: string) => read(response.lineageResponse, `/context/lineage/${id}`),

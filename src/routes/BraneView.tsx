@@ -343,8 +343,19 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
       onFeedMode: controller.setFeedMode,
       onSaveToWorkshop: (blockId: string) =>
         void controller.saveToWorkshop(blockId).then((saved) => saved && setWorkshopOpen(true)),
+      // The copy is brought into view and selected, ready for its prompt to be edited.
+      onDuplicate: (placementId: string) =>
+        void controller.duplicateMachine(placementId).then((id) => {
+          const copy = controller.state?.placements.find((p) => p.block_id === id);
+          if (!id || !copy) return;
+          useInteraction.getState().setSelectedPlacements([copy.id]);
+          presentation
+            .getState()
+            .reveal(presentation.getState().attention, { blockId: id, kind: 'reveal' });
+        }),
+      models,
     }),
-    [controller, needsAccount, presentation],
+    [controller, needsAccount, presentation, models],
   );
   const tablePlacements = () =>
     (controller.state?.placements ?? []).filter((p) => !p.host_placement_id);
@@ -1234,6 +1245,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 onFeedGroup={controller.feedGroup}
                 onRenameGroup={controller.renameGroup}
                 onTakeOut={controller.takeOutOfGroup}
+                onKeep={controller.keepOutput}
                 ask={canvasAsk && askAt ? { ...askAt, content: promptPanel } : undefined}
                 onCloseAsk={closeAsk}
                 machine={machineActions}
