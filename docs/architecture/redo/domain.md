@@ -33,8 +33,26 @@ with LiveState and revisions, and placed like text. Slots are derived from the
 template on save. A run freezes the machine's revision as the manifest's prompt
 entry, and the worker substitutes frozen slot contents into the frozen template.
 Workshop items are saved prompts (`workshop_machines`: name and template, owned by the
-account), beside three built-in ones; taking one out places a new machine block with a
+account), beside five built-in ones; taking one out places a new machine block with a
 copy of the prompt.
+
+**Outputs of several cards** (table `run_parts`, migration 008). A prompt whose last
+line is `Output: cards` or `Output: diagram` declares that its answer is placed as one
+card per numbered item; the declaration is read from the frozen prompt revision, so
+the prompt stays the only authority over a machine's inputs and its output's shape.
+The run's output is still one block holding the whole answer. On completion, in the
+completion's transaction, the server adds one generated block per item, each with one
+revision (the item's text) and a `run_parts` row (run, position, block, revision),
+places them where the output lay and puts the whole answer on the first card's back.
+Each part is an output of the run: the workspace read lists the parts (`parts`), and
+derivations carry a row per part and frozen input, so backs, staleness and Update work
+for a part as for the answer. A diagram's relation lines (`2 —supports→ 1`) become
+arrows between the parts. _(Implemented in iteration 10.)_
+
+_Decision (iteration 10): the server splits the answer at completion, not the model
+call nor the client._ The split must happen once, survive a closed tab, and be part of
+the run's record; the worker's completion is the one moment that holds the full text
+inside a transaction.
 
 _Decision (iteration 9): a Workshop item is a stored prompt, not an unplaced machine
 block._ An item is only ever copied, so it needs no live state, revisions or
@@ -81,7 +99,7 @@ when both ends are inputs to one run. _(Implemented in iteration 7; relabel in
 iteration 8.)_
 
 **Group** (brane-scoped, tables `groups` and `group_members`): a label (1 to 60
-characters), a display (`region` | `stack`), and an ordered list of member card
+characters), a display (`region` | `stack` | `matrix`), and an ordered list of member card
 placements on the table. A card belongs to at most one group; a group whose last member
 is removed is removed with its feeds, and a rerun or Update puts its new output in the
 replaced card's place in its group. Groups are synchronized as `group.create`,
@@ -89,7 +107,10 @@ replaced card's place in its group. Groups are synchronized as `group.create`,
 is presentation: a region frames the cards where they lie, a stack piles them into the
 first member's space. A feed from a group expands, when the machine is run, to its
 members in member order, which is reading order at the time each card joined.
-_(Implemented in iteration 8; `matrix` is not.)_
+A matrix is computed, not stored beyond its display: a member's column is the machine
+whose run produced it and its row is the card that run ran over (the input no other run
+of its batch sent); the client lays the cells out and the frame draws the headings.
+_(Implemented in iteration 8; `matrix` in iteration 10.)_
 
 **Loose Ask.** `/` creates a machine block and placement. After the run, the machine's
 placement is removed and the output takes its position; the machine block stays,

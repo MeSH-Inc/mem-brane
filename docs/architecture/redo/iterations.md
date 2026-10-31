@@ -561,22 +561,100 @@ matrix display (iteration 10) is what turns the three stacks into one table.
 - Browser tests that dragged right after fitting the view read positions from before
   the view moved; the drag helper now waits two frames.
 
-## Recommended iteration 10
+## Iteration 10: outputs of several cards, and the matrix
 
-Machines whose output is several cards, and the matrix.
+Iteration 10 let a machine's answer arrive as several cards, and set the outputs of
+machines run each over one stack out as a table.
 
-1. **Split.** A built-in machine whose output is one card per idea. The run's output
-   stays one block, as every run's does; on completion the worker parses its
-   numbered items and the server places one generated card per item as a stack on the
-   output's place, each a derivation of the run, so Update and backs work as for any
-   output. A run that yields no items keeps its single card.
-2. **Diagram.** A built-in machine whose output is cards joined by arrows: items as in
-   Split, and lines of the form `2 —supports→ 1`, placed as a region with the arrows
-   drawn. A line naming an item that does not exist is dropped and reported on the
-   receipt.
-3. **Matrix.** A third group display, offered when a group's cards are the outputs of
-   machines fed one stack each: rows are the stack's cards, columns the machines, each
-   cell the output for that card. Selecting the outputs and pressing `G`, then
-   _Matrix_, makes it.
-4. Measure scenario 2 end to end (through Diagram and rearranging) and scenario 3
-   through the matrix.
+- **The prompt declares the output.** A prompt whose last line reads `Output: cards`
+  or `Output: diagram` has its answer placed as one card per numbered item. Without
+  the line an answer is one card, as before. The declaration is part of the frozen
+  prompt revision, so a saved or copied machine carries it, and changing it is an edit
+  that makes the machine stale.
+- **Split and Diagram.** Both are in the Workshop. Split asks for one numbered line per
+  idea and declares cards; Diagram asks for numbered ideas and then relation lines
+  such as `2 —supports→ 1`, and declares a diagram.
+- **Parts.** When such a run completes, the server adds one generated card per item
+  (`run_parts`, migration 008) where the answer lay, in the completion's transaction,
+  and puts the whole answer on the first card's back. Alone, the cards arrive as a
+  stack named after the machine (_Split_), or for a diagram as a region laid on a grid
+  with the arrows drawn. If the answer was in a group, the cards take its place there
+  in order, so Split run each over a stack of papers yields one stack of every paper's
+  ideas, in paper order. Each card is an output of the run: its back shows the frozen
+  inputs, it goes stale when they change, and a rerun replaces the whole set, the old
+  cards going onto the new answer's back.
+- **The matrix.** `G` over cards of several groups now merges them into the first
+  group. For a group whose cards are outputs of machines run each, the chip row offers
+  _Matrix_: a column per machine, headed by its prompt's last question, and a row per
+  card the machines ran over, headed by that card's first line. The matrix is laid
+  clear of other cards and machines. A machine rerun each replaces its own column.
+- **One read per burst of status reports.** A run's start and end each made the page
+  read the whole brane and the budget again; reports now gather for 200 ms before one
+  read.
+
+### Decisions taken while building
+
+| Question                                                          | Decision                                                                                                                               | Rationale                                                                                                                                                         |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Where is an output's shape declared?                              | In the prompt's last line, `Output: cards` or `Output: diagram`.                                                                       | The prompt already decides the slots; a separate setting would be a switch the prompt does not show, and would need its own field on machines and Workshop items. |
+| Who splits the answer?                                            | The server, in the transaction that completes the run.                                                                                 | The split must happen once, with the tab closed or open, and belong to the run's record; completion is the one moment that holds the whole text.                  |
+| What is a card an answer was split into?                          | A generated block with one revision, listed in `run_parts`; the run's output is still the whole answer, kept on the first card's back. | Every read finds a run by its output. Parts that join the derivations, rather than replace the output, need no second rule for backs, staleness or Update.        |
+| Where do the cards go when the answer was in a group?             | Into that group, in its place, in item order.                                                                                          | Split run each over a stack then gives one stack of all the ideas, which is what Diagram is fed next.                                                             |
+| What does an answer with one item, or none, do?                   | It stays one card.                                                                                                                     | A stack of one is a card.                                                                                                                                         |
+| How many cards may one answer make?                               | 24. Items past the 24th stay in the whole answer; no split happens if the group would pass 200 cards or the brane is out of room.      | One answer that floods the table is not an answer anyone reads; the whole text is never lost.                                                                     |
+| What happens to a relation line naming an item that is not there? | It is dropped; the whole answer on the first card's back still shows it.                                                               | The receipt is written at the press, before the answer exists; the back already holds the full text, so a separate report would repeat it.                        |
+| How is a diagram laid out?                                        | On a grid in item order, framed as a region.                                                                                           | Its next step in scenario 2 is the user's own rearranging; a layout from the arrows is recommended next.                                                          |
+| How do three stacks become one matrix?                            | `G` over cards of several groups merges them into the first group, which keeps its name, display and feeds.                            | Scenario 3 lassoes three stacks; refusing because they were in different groups ended it there.                                                                   |
+| What are a matrix's rows and columns?                             | A card's column is the machine that produced it; its row is the card its run ran over, the input no other run of its batch sent.       | Both are read from runs and derivations the workspace already holds; nothing new is stored, and the display stays presentation.                                   |
+| Where is a matrix laid?                                           | From its cards' top left corner, moved right past any card or machine it would cover.                                                  | The three stacks lie between their machines; laid where they were, the matrix covered the machines.                                                               |
+| What does a machine's rerun do to a matrix it shares?             | It replaces its own column: a machine's tray in a group that holds other machines' outputs is its own outputs there.                   | Without this, a rerun after regrouping added its outputs to a second group, which the database refuses.                                                           |
+| How often does a run's status report read the brane?              | Once, 200 ms after the first report, for every report that arrives meanwhile.                                                          | A press of twelve runs made 48 requests; with the page's own saves that reached the account's limit of 240 a minute in scenario 3.                                |
+
+### Measured
+
+| Scenario                                                           | Actions                                                                                                                      |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| 2. Reading pile, through Split each, Diagram and one rearrangement | 16 (drop, marquee, `G`, Stack, Add, Workshop, Split, port, _each_, Run ×N, Add, Workshop, Diagram, port, Run, drag one card) |
+| 3. Three Extract machines over one stack, each, through the matrix | 28 (the 25 of iteration 9, then marquee the three stacks, `G`, Matrix), 188 characters typed                                 |
+
+Scenario 2 now runs to its end. The browser test splits three papers of two sentences
+each into one stack of six ideas in paper order, feeds that stack to Diagram, and gets
+a region of six cards with five arrows drawn, one of which the user then drags. The
+count does not depend on how many papers there are. Scenario 3 reaches its table: four
+rows headed by the papers, three columns headed by the questions, each paper's three
+answers level with each other. Of its 28 actions, 9 take Extract out of the Workshop
+three times and 3 type the questions; a machine that could be duplicated with its feed
+would cut most of them.
+
+### Defects found by building it
+
+- `G` over cards from several groups was refused ("These cards are in different
+  groups"), which ended scenario 3 before the matrix. Grouping now merges them.
+- A machine whose outputs had been regrouped with other machines' outputs could not be
+  rerun each: the tray took any group holding its newest output to be its own, and
+  tried to add the new outputs to a second group, which the database refuses.
+- Each run's start and end made the page read the whole brane and the budget: four
+  requests per run, 48 for one press of twelve. In scenario 3 the browser test reached
+  the account's request limit and the page reported _Too many requests_.
+- A matrix laid where its stacks lay covered the machines between them.
+
+## Recommended iteration 11
+
+Compare models, and machines whose output shape is visible without reading the prompt.
+
+1. **Compare models.** On a machine's back, tick several models; the lever reads
+   `Run ×3 models`, and one press admits one run per model as a batch (as _each_ does,
+   with the model in place of the card). The outputs stand side by side at the tray;
+   **Keep** on one leaves it on the table and puts the others on its back. Scenario 5.
+2. **The output shape on the machine.** The machine shows _→ cards_ or _→ diagram_
+   beside its tray, and its ⋯ menu offers One card, Cards and Diagram, which rewrite
+   the prompt's declaration line, so nobody needs to know its wording.
+3. **A diagram laid out by its arrows.** Lay a diagram's cards in layers, each card
+   one layer past the cards with arrows into it, keeping the grid for cards in a cycle.
+4. **Duplicate a machine with its feeds.** A ⋯ menu item that places a copy fed from
+   the same cards and groups, so scenario 3's second and third Extract cost a
+   duplicate and a question rather than five actions each.
+5. Measure scenario 5, and scenario 3 again with duplication. Run Split and Diagram
+   against DeepSeek on the twelve-paper fixture and record how many answers split
+   (two items or more) and how many relation lines are dropped; adjust the built-in
+   prompts until every answer splits.

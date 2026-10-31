@@ -1,14 +1,14 @@
 # Redo: a table of cards and machines
 
-Status: iteration 9. Machines, feeds, the slot's **each** mode (one run per card of a
-fed group, admitted in one press, with the outputs as a stack), the Workshop with
-Critique, Distill and Extract and saved machines, arrows (rewordable), groups as
-regions and stacks that feed as one, staleness that sees edited cards, changed group
-membership, changed arrows and changed mode, card backs, tray history, Update for
-machines and asked answers, the selection chips, the header menu, the Ask box on the
-desktop canvas and the Ask sheet in Focus and on phones run in the app. Split and
-Diagram (outputs of several cards), the matrix display and Compare models are still
-concept.
+Status: iteration 10. Machines, feeds, the slot's **each** mode (one run per card of a
+fed group, admitted in one press, with the outputs as a stack), outputs of several
+cards (Split's stack of ideas and Diagram's region of cards and arrows), the Workshop
+with Critique, Distill, Split, Diagram and Extract and saved machines, arrows
+(rewordable), groups as regions, stacks and matrices that feed as one, staleness that
+sees edited cards, changed group membership, changed arrows and changed mode, card
+backs, tray history, Update for machines and asked answers, the selection chips, the
+header menu, the Ask box on the desktop canvas and the Ask sheet in Focus and on phones
+run in the app. Compare models is still concept.
 
 This directory proposes a replacement for the current brane interface; once accepted,
 its decisions move into the numbered architecture documents and this directory is
