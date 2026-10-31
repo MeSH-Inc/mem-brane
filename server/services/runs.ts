@@ -358,6 +358,46 @@ function replacedAnswer(db: DB, braneId: string, placementId: string) {
 // back. Feeds it gave other machines follow the tray, keeping their position in each
 // slot, so those machines see the new output and go stale instead of running on;
 // arrows and group membership follow it too.
+// What a feed comes from: one card, or one group.
+export type FeedSource = { placementId: string } | { groupId: string };
+// The feeds a source gives move to another source, each keeping its place in its slot
+// (its rowid) and its creation time; a feed the new source already gives is dropped.
+// A feed onto a card runs together, since only a group runs each.
+export function moveFeeds(db: DB, braneId: string, from: FeedSource, to: FeedSource) {
+  const feeds = db
+    .prepare<
+      unknown[],
+      {
+        position: number;
+        id: string;
+        to_placement_id: string;
+        slot: string;
+        mode: string;
+        created_at: number;
+      }
+    >(
+      `SELECT rowid position,id,to_placement_id,slot,mode,created_at FROM feeds
+       WHERE ${'placementId' in from ? 'from_placement_id' : 'from_group_id'}=?`,
+    )
+    .all('placementId' in from ? from.placementId : from.groupId);
+  for (const feed of feeds) {
+    db.prepare('DELETE FROM feeds WHERE id=?').run(feed.id);
+    db.prepare(
+      `INSERT OR IGNORE INTO feeds (rowid,id,brane_id,from_placement_id,from_group_id,to_placement_id,slot,mode,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      feed.position,
+      uid(),
+      braneId,
+      'placementId' in to ? to.placementId : null,
+      'groupId' in to ? to.groupId : null,
+      feed.to_placement_id,
+      feed.slot,
+      'groupId' in to ? feed.mode : 'together',
+      feed.created_at,
+    );
+  }
+}
 export function moveToBack(db: DB, replaced: Placement, outputPlacementId: string) {
   const time = now();
   // The new card takes the replaced card's place in its group while both are on the table.
@@ -372,28 +412,12 @@ export function moveToBack(db: DB, replaced: Placement, outputPlacementId: strin
   db.prepare(
     'UPDATE placements SET host_placement_id=?,version=version+1,updated_at=? WHERE id=?',
   ).run(outputPlacementId, time, replaced.id);
-  const feeds = db
-    .prepare<
-      unknown[],
-      { position: number; id: string; to_placement_id: string; slot: string; created_at: number }
-    >(
-      'SELECT rowid position,id,to_placement_id,slot,created_at FROM feeds WHERE from_placement_id=?',
-    )
-    .all(replaced.id);
-  for (const feed of feeds) {
-    db.prepare('DELETE FROM feeds WHERE id=?').run(feed.id);
-    db.prepare(
-      'INSERT INTO feeds (rowid,id,brane_id,from_placement_id,to_placement_id,slot,created_at) VALUES (?,?,?,?,?,?,?)',
-    ).run(
-      feed.position,
-      uid(),
-      replaced.brane_id,
-      outputPlacementId,
-      feed.to_placement_id,
-      feed.slot,
-      feed.created_at,
-    );
-  }
+  moveFeeds(
+    db,
+    replaced.brane_id,
+    { placementId: replaced.id },
+    { placementId: outputPlacementId },
+  );
   // Arrows to and from the replaced card now join the card that replaced it.
   db.prepare('UPDATE relations SET from_placement_id=? WHERE from_placement_id=?').run(
     outputPlacementId,
@@ -593,7 +617,11 @@ export function keepOutput(db: DB, actor: string, runId: string) {
       .get(runId);
     if (!kept) throw new DomainError(409, 'This answer is no longer on the table.');
     for (const other of comparedOutputs(db, kept))
-      if (other.id !== kept.id) retire(db, other, kept.id);
+      if (other.id !== kept.id) {
+        // A machine fed from another answer of the comparison is now fed the kept one.
+        moveFeeds(db, run.brane_id, { placementId: other.id }, { placementId: kept.id });
+        retire(db, other, kept.id);
+      }
   })();
 }
 // A tray card the new press has no place for goes on the back of the press's first
@@ -686,7 +714,11 @@ export function runMachine(
     for (const surplus of tray.members.slice(parts.length)) retire(db, surplus, outputs[0]);
     if (!input.each) {
       // A run together, or a comparison, after its own stack leaves no stack behind.
-      if (tray.groupId && tray.owned) db.prepare('DELETE FROM groups WHERE id=?').run(tray.groupId);
+      if (tray.groupId && tray.owned) {
+        // What the stack fed, its one card now feeds.
+        moveFeeds(db, input.braneId, { groupId: tray.groupId }, { placementId: outputs[0] });
+        db.prepare('DELETE FROM groups WHERE id=?').run(tray.groupId);
+      }
     } else if (tray.groupId) {
       const add = db.prepare(
         'INSERT INTO group_members VALUES (?,?,(SELECT coalesce(max(position),-1)+1 FROM group_members WHERE group_id=?))',
@@ -704,6 +736,8 @@ export function runMachine(
       );
       const add = db.prepare('INSERT INTO group_members VALUES (?,?,?)');
       outputs.forEach((output, position) => add.run(groupId, output, position));
+      // What the one card fed, the stack that replaced it now feeds.
+      moveFeeds(db, input.braneId, { placementId: outputs[0] }, { groupId });
     }
     return runs[0];
   })();

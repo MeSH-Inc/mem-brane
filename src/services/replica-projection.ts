@@ -2,7 +2,7 @@ import type { BraneState, Block } from '../../shared/types/domain';
 import type { WorkspaceCommand } from '../../shared/workspace-commands';
 import type { ReplicaState } from './replica-storage';
 import { blockResponse } from '../../shared/contracts';
-import { MACHINE_TEMPLATE } from '../../shared/machines';
+import { MACHINE_TEMPLATE, LOOP_REFUSAL, feedClosesLoop } from '../../shared/machines';
 
 export function findBlock(state: ReplicaState, id: string) {
   let found: Block | undefined;
@@ -192,6 +192,10 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
     }
     case 'feed.create': {
       const workspace = requireWorkspace(state, command.braneId);
+      const source = command.fromGroupId
+        ? { groupId: command.fromGroupId }
+        : { placementId: command.fromPlacementId! };
+      if (feedClosesLoop(workspace, source, command.toPlacementId)) throw new Error(LOOP_REFUSAL);
       const feed = {
         id: command.id,
         brane_id: command.braneId,

@@ -1,6 +1,7 @@
 import type { DB } from '../db/index.js';
 import type { Feed } from '../../shared/types/domain.js';
 import { canEditBrane, canReadBrane, DomainError } from '../domain/access.js';
+import { closesLoop, LOOP_REFUSAL, type MachineEdge } from '../../shared/machines.js';
 
 export const MAX_BRANE_FEEDS = 400;
 
@@ -64,6 +65,12 @@ export function createFeed(db: DB, actor: string, input: FeedRequest): Feed {
         ? 'This group already feeds that slot.'
         : 'This card already feeds that slot.',
     );
+  const producers = sourceProducers(db, input);
+  if (closesLoop(machineEdges(db, input.braneId), producers, input.toPlacementId))
+    throw new DomainError(
+      409,
+      'This feed would close a loop: the machine would feed its own input.',
+    );
   if (
     (
       db.prepare('SELECT count(*) n FROM feeds WHERE brane_id=?').get(input.braneId) as {
@@ -94,6 +101,40 @@ export function createFeed(db: DB, actor: string, input: FeedRequest): Feed {
     feed.created_at,
   );
   return feed;
+}
+
+// The machines that produced a placement: its run's anchor, for an answer or a card an
+// answer was split into.
+const PRODUCERS = `SELECT DISTINCT l.anchor_placement_id FROM placements p
+  JOIN runs r ON r.output_block_id=p.block_id
+    OR r.id IN (SELECT run_id FROM run_parts WHERE block_id=p.block_id)
+  JOIN run_placements l ON l.run_id=r.id
+  JOIN placements m ON m.id=l.anchor_placement_id JOIN blocks mb ON mb.id=m.block_id
+  WHERE mb.kind='machine' AND p.id`;
+function sourceProducers(db: DB, input: Pick<FeedRequest, 'fromPlacementId' | 'fromGroupId'>) {
+  return (
+    input.fromPlacementId
+      ? db.prepare(`${PRODUCERS}=?`).pluck().all(input.fromPlacementId)
+      : db
+          .prepare(`${PRODUCERS} IN (SELECT placement_id FROM group_members WHERE group_id=?)`)
+          .pluck()
+          .all(input.fromGroupId)
+  ) as string[];
+}
+// Every machine-to-machine edge the brane's feeds make.
+function machineEdges(db: DB, braneId: string): MachineEdge[] {
+  const feeds = db
+    .prepare<
+      unknown[],
+      { from_placement_id: string | null; from_group_id: string | null; to_placement_id: string }
+    >('SELECT from_placement_id,from_group_id,to_placement_id FROM feeds WHERE brane_id=?')
+    .all(braneId);
+  return feeds.flatMap((feed) =>
+    sourceProducers(db, {
+      fromPlacementId: feed.from_placement_id ?? undefined,
+      fromGroupId: feed.from_group_id ?? undefined,
+    }).map((producer) => ({ producer, consumer: feed.to_placement_id })),
+  );
 }
 
 // A group feed runs its machine with all its cards at once, or once per card. Only one

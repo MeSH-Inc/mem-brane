@@ -59,6 +59,11 @@ export const MachineCard = memo(function MachineCard({
       className={`canvas-card machine-card ${selected ? 'selected' : ''} ${view?.stale ? 'stale' : ''}`}
     >
       <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
+      <CardPort
+        owner={placementId}
+        title="Drag onto another machine’s slot to feed it this machine’s answers"
+        onFeed={(machine, slot) => void actions.onFeedTray(placementId, machine, slot)}
+      />
       {children}
       <header className="card-grip">
         <span className="kind-mark">⚙</span>

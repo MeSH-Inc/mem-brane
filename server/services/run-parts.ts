@@ -5,7 +5,7 @@ import { MAX_GROUP_MEMBERS } from '../../shared/groups.js';
 import { diagramLayers, machineOutput, parseOutput } from '../../shared/machine-output.js';
 import { DomainError } from '../domain/access.js';
 import { createBlock, now, uid } from './content.js';
-import { moveToBack } from './runs.js';
+import { moveFeeds, moveToBack } from './runs.js';
 import { MAX_BRANE_GROUPS } from './groups.js';
 
 const STACK_OFFSET = 10;
@@ -129,6 +129,8 @@ export function placeRunParts(db: DB, runId: string, text: string) {
         );
         const add = db.prepare('INSERT INTO group_members VALUES (?,?,?)');
         cards.forEach((card, position) => add.run(groupId, card, position));
+        // What the answer fed, all of its cards now feed.
+        moveFeeds(db, run.brane_id, { placementId: cards[0] }, { groupId });
       }
       const relate = db.prepare('INSERT INTO relations VALUES (?,?,?,?,?,?)');
       for (const arrow of parts.arrows)

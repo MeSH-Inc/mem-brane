@@ -66,6 +66,7 @@ const machine = {
     throw new Error('unused');
   },
   onFeed: async () => {},
+  onFeedTray: async () => {},
   onUnfeed: async () => {},
   onFeedMode: async () => {},
   onSaveToWorkshop: () => {},

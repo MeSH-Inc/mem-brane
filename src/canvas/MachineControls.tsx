@@ -12,6 +12,8 @@ export interface MachineActions {
   onRunMachine: (placementId: string) => Promise<unknown>;
   onEstimateMachine: (placementId: string) => Promise<Estimate>;
   onFeed: (fromPlacementIds: string[], toPlacementId: string, slot: string) => Promise<unknown>;
+  // The machine's tray feeds another machine's slot.
+  onFeedTray: (machinePlacementId: string, toPlacementId: string, slot: string) => Promise<unknown>;
   onUnfeed: (feedId: string) => Promise<unknown>;
   onFeedMode: (feedId: string, mode: 'together' | 'each') => Promise<unknown>;
   onSaveToWorkshop: (blockId: string) => void;

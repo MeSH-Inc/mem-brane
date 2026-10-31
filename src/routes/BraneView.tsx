@@ -339,6 +339,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
       },
       onEstimateMachine: controller.estimateMachine,
       onFeed: controller.feed,
+      onFeedTray: controller.feedTray,
       onUnfeed: controller.unfeed,
       onFeedMode: controller.setFeedMode,
       onSaveToWorkshop: (blockId: string) =>

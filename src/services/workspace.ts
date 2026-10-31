@@ -31,7 +31,7 @@ import {
   machineName,
   type RunMachine,
 } from '../../shared/machines';
-import { machineStaleness, openSpot } from '../canvas/machines';
+import { machineStaleness, machineTray, openSpot } from '../canvas/machines';
 import {
   bounds,
   groupOf,
@@ -984,6 +984,18 @@ export class WorkspaceController {
       );
       await this.client.detachPlacement(placementId, placement.version, geometry);
     }).catch(() => undefined);
+  // A machine's tray feeds another machine's slot: its newest answer, or the stack its
+  // answers stand in. The feed follows the tray as it is rerun.
+  feedTray = (machinePlacementId: string, toPlacementId: string, slot: string) => {
+    const tray = this.state && machineTray(this.state, machinePlacementId);
+    if (!tray)
+      return this.mutate(`feedTray:${machinePlacementId}`, async () => {
+        throw new Error('Run this machine before feeding its answers to another.');
+      }).catch(() => undefined);
+    return 'groupId' in tray
+      ? this.feedGroup(tray.groupId, toPlacementId, slot)
+      : this.feed([tray.placementId], toPlacementId, slot);
+  };
   // Each runs the machine once per card of a group feed; together, once with all of them.
   setFeedMode = (feedId: string, mode: 'together' | 'each') =>
     this.mutate(`feedMode:${feedId}`, () =>

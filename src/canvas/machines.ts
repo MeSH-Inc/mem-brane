@@ -295,3 +295,31 @@ export function openSpot(
   }
   return { x, y: point.y, width, height };
 }
+
+// What a machine's tray holds: its newest output on the table, as one card; or, when
+// every card of the group that output stands in came from this machine (an each press,
+// or an answer split into cards), that group. None if the machine has not run.
+export function machineTray(
+  state: Pick<BraneState, 'placements' | 'groups' | 'runs' | 'parts' | 'derivations'>,
+  machinePlacementId: string,
+): { placementId: string } | { groupId: string } | null {
+  const runIds = new Set(
+    state.derivations.filter((d) => d.anchorPlacementId === machinePlacementId).map((d) => d.runId),
+  );
+  const runs = new Map(state.runs.filter((r) => runIds.has(r.id)).map((r) => [r.id, r]));
+  const producer = new Map<string, Run>();
+  for (const run of runs.values()) producer.set(run.output_block_id, run);
+  for (const part of state.parts) {
+    const run = runs.get(part.runId);
+    if (run) producer.set(part.blockId, run);
+  }
+  const produced = state.placements.filter((p) => !p.host_placement_id && producer.has(p.block_id));
+  if (!produced.length) return null;
+  const newest = produced.reduce((a, b) =>
+    producer.get(b.block_id)!.created_at > producer.get(a.block_id)!.created_at ? b : a,
+  );
+  const group = state.groups.find((g) => g.members.includes(newest.id));
+  const own = new Set(produced.map((p) => p.id));
+  if (group && group.members.every((id) => own.has(id))) return { groupId: group.id };
+  return { placementId: newest.id };
+}

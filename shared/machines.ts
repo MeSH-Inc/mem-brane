@@ -1,3 +1,4 @@
+import type { BraneState, Feed } from './types/domain.js';
 import { z } from 'zod';
 import { id, edit } from './schemas/index.js';
 import { MAX_BLOCK_TEXT_CHARACTERS } from './limits.js';
@@ -106,3 +107,73 @@ export function machineName(template: string) {
       .slice(0, 60) || template.trim().slice(0, 60)
   );
 }
+
+// Feeds join machines into an acyclic graph: a machine feeds another when a card or
+// group it produced fills one of the other's slots. A new feed from cards the given
+// machines produced into the consumer closes a loop when the consumer is one of those
+// producers, or feeds one of them through other feeds.
+export interface MachineEdge {
+  producer: string;
+  consumer: string;
+}
+export function closesLoop(edges: MachineEdge[], producers: string[], consumer: string) {
+  const downstream = new Set([consumer]);
+  const pending = [consumer];
+  while (pending.length) {
+    const machine = pending.pop()!;
+    for (const edge of edges)
+      if (edge.producer === machine && !downstream.has(edge.consumer)) {
+        downstream.add(edge.consumer);
+        pending.push(edge.consumer);
+      }
+  }
+  return producers.some((producer) => downstream.has(producer));
+}
+
+// The machines whose outputs feed each machine: a feed from a card a machine produced,
+// or from a group holding one, joins the two.
+function machineEdges(
+  state: Pick<BraneState, 'placements' | 'groups' | 'feeds' | 'runs' | 'parts' | 'derivations'>,
+) {
+  const anchor = new Map<string, string>();
+  for (const d of state.derivations)
+    if (d.anchorPlacementId) anchor.set(d.runId, d.anchorPlacementId);
+  const producerOf = new Map<string, string>();
+  for (const run of state.runs)
+    if (anchor.has(run.id)) producerOf.set(run.output_block_id, anchor.get(run.id)!);
+  for (const part of state.parts)
+    if (anchor.has(part.runId)) producerOf.set(part.blockId, anchor.get(part.runId)!);
+  const blockOf = new Map(state.placements.map((p) => [p.id, p.block_id]));
+  return {
+    edges: state.feeds.flatMap((feed) =>
+      sourceMembers(state, feed).flatMap((id) => {
+        const producer = producerOf.get(blockOf.get(id) ?? '');
+        return producer ? [{ producer, consumer: feed.to_placement_id }] : [];
+      }),
+    ),
+    producers: (source: { placementId: string } | { groupId: string }) =>
+      sourceMembers(state, {
+        from_placement_id: 'placementId' in source ? source.placementId : null,
+        from_group_id: 'groupId' in source ? source.groupId : null,
+      }).flatMap((id) => producerOf.get(blockOf.get(id) ?? '') ?? []),
+  };
+}
+function sourceMembers(
+  state: Pick<BraneState, 'groups'>,
+  feed: Pick<Feed, 'from_placement_id' | 'from_group_id'>,
+) {
+  return feed.from_group_id
+    ? (state.groups.find((g) => g.id === feed.from_group_id)?.members ?? [])
+    : [feed.from_placement_id!];
+}
+
+// Whether a feed from this source into this machine would close a loop.
+export function feedClosesLoop(
+  state: Pick<BraneState, 'placements' | 'groups' | 'feeds' | 'runs' | 'parts' | 'derivations'>,
+  source: { placementId: string } | { groupId: string },
+  consumer: string,
+) {
+  const { edges, producers } = machineEdges(state);
+  return closesLoop(edges, producers(source), consumer);
+}
+export const LOOP_REFUSAL = 'This feed would close a loop: the machine would feed its own input.';
