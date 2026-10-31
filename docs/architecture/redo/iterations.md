@@ -702,17 +702,93 @@ drawing none.
 - A duplicate's feeds were created before the workspace held the copy, so the first
   attempt fed nothing; the copy is now read back before it is fed.
 
-## Recommended iteration 12
+## Iteration 12: Machines that feed machines, and the back of a machine
 
-Machines that feed machines, and the back of a machine.
+Iteration 12 let one machine's answers feed another machine, so a change upstream
+reaches the end of a chain one press at a time, and gave a machine a back.
 
-1. **A tray feeds a slot.** Drag a machine's tray port onto another machine's slot:
-   the feed follows the tray (its newest answer, or the stack an each press made), so a
-   rerun upstream makes the downstream machine stale rather than running it. A feed
-   that would close a loop is refused as it is drawn.
-2. **Update along a chain.** After an upstream Update, the downstream machine shows its
-   own Update with its own estimate; one press per machine, as decided in the concept.
-3. **The back of a machine.** Its revision number, its past presses (models, runs,
-   cost) and the Compare picker, which moves there from the footer.
-4. Measure scenario 6 as a two-machine chain (sources into Distill into a Brief), and
-   scenario 1 again with everything since iteration 6.
+- **A tray feeds a slot.** A machine has a port beside its lever. Dragging it onto
+  another machine's slot feeds that slot what the tray holds: the newest answer, or the
+  stack an each press made, or the cards an answer was split into. The feed follows the
+  tray: a rerun, a press each or together, a split and Keep each move it to whatever
+  the tray now holds, in the same place in the slot. Nothing downstream runs by itself.
+  A machine that has not run says _Run this machine before feeding its answers to
+  another._
+- **Loops are refused.** A feed whose cards come from the target machine, or from any
+  machine it feeds, is refused as it is drawn: _This feed would close a loop: the
+  machine would feed its own input._ The check runs in the offline replica and again on
+  the server.
+- **Update along a chain.** After an upstream rerun the downstream machine reads
+  _stale · material changed_ and its lever _Rerun · $…_ with its own estimate. An edit
+  to a source makes only the first machine stale; each machine is pressed once.
+- **The back of a machine.** ↻ in a machine's header, or `F` with it selected, turns
+  it over. The back shows the prompt's version (and, when the prompt was edited since,
+  the version the last press ran), the models to compare on the next press, the lever,
+  and every past press, newest first: when, which models, how many runs and how they
+  ended, and what it cost once settled.
+- **Compare models moved to the back.** The ⋯ menu item and the picker under the slots
+  are gone. A comparison is chosen and pressed on the back, which then lists the press.
+- **Settled cost in the brane read.** Each run carries `confirmed_microusd`, the cost
+  of its settled usage, so the back can sum a press without a request per run.
+
+### Decisions taken while building
+
+| Question                                             | Decision                                                                                                                      | Rationale                                                                                                                                                   |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| What does a tray feed record?                        | An ordinary feed from the tray's card or group; a machine is still never a feed's source.                                     | Runs already send cards; a feed from a machine would be a second source kind whose inputs depend on run history, read by staleness, estimate and run alike. |
+| How does the feed follow the tray?                   | The server moves a tray's feeds wherever the tray changes shape, keeping each feed's position in its slot.                    | Reruns already moved a replaced card's feeds; the same move at the four other points (each, together, split, Keep) covers every shape the tray takes.       |
+| What does a tray feed hold when the tray is a group? | The group, when every card in it came from the feeding machine; otherwise the newest card.                                    | A stack the machine made is its answer; a shared group such as a matrix is not, and feeding all of it would send other machines' answers.                   |
+| What is a loop?                                      | A feed whose cards were produced by the target machine or by a machine downstream of it, through any number of machines.      | Producers are read from the runs' anchors, which the workspace already holds, so the same check runs offline and on the server.                             |
+| Where are presses grouped?                           | By batch: an each press or a comparison is one press; a run alone is its own.                                                 | The batch is the press as the server admitted it; the lever's one press is what the back lists.                                                             |
+| What does the back say about cost?                   | The sum of the press's settled costs; _cost pending_ while a run is under way, _cost not known_ if a run ended without usage. | The settled cost is the one figure that is true; the held amount is already shown on the lever before the press.                                            |
+| Is the lever on the back?                            | Yes, below the models to compare.                                                                                             | Choosing models and pressing are one step; flipping back to press cost an action for nothing.                                                               |
+| Where is a machine's tray port?                      | Beside its lever, not at the middle of its right edge as on a card.                                                           | A selected machine's resize handle sits at the middle of its edge and took the drag; the lever is also where the answers come from.                         |
+| Is the prompt's version called a revision?           | No; the back says _version_, as Version history and the runs' `machine_version` do.                                           | One name per concept: the version number is what the history and staleness already use.                                                                     |
+
+### Measured
+
+| Scenario                                       | Actions                                                                                                                                   |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 6. Sources into Distill into a Brief, built    | 15 (drop, lasso, `G`, Stack, Add, Workshop, Distill, port, Run, Add, Machine, prompt, fit view, Distill's port, Run), 57 characters typed |
+| 6. The same chain after a source is edited     | 3 (the edit, Rerun on Distill, Rerun on the Brief)                                                                                        |
+| 5. Pick a model by looking, from a fed machine | 5, from 6 (↻, tick, tick, `Run ×2 models` on the back, Keep)                                                                              |
+| 1. Pressure-test a claim                       | 7, unchanged since iteration 8, nothing typed, 4 cards                                                                                    |
+
+Scenario 6 runs end to end for the first time. Of its 15 building actions, the second
+machine costs 6 (Add, Machine, the prompt, fit view, the port, Run); a Brief in the
+Workshop would remove the typing. Keeping the chain current costs one press per machine
+after the edit, which is what the concept asked: nothing downstream spends without a
+press. The browser test also draws the Brief's tray back into Distill and sees it
+refused with the slot unchanged. Scenario 1 needed no change and still takes 7.
+
+### Defects found by building it
+
+- A press together on a machine whose answers were a stack deleted the stack and with
+  it every feed from it, so a downstream machine lost its input. The stack's feeds now
+  move to the one card first.
+- An answer split into cards, or a compared answer that was not kept, kept or dropped
+  its feeds by accident of which card took the output's place. Both now move them.
+- A selected machine's resize handle covered its new tray port; see the decision above.
+- Revealing a new answer moves the view, and in scenario 6 it moved Distill out of
+  sight twice, so the test fits the view before drawing from it. A chain wider than the
+  screen needs a way to draw a feed without both ends in view.
+
+## Recommended iteration 13
+
+Chains that are easy to build and to read.
+
+1. **Feed from a slot.** A slot row offers _Feed from…_, listing the machines on the
+   brane that could feed it without a loop, by name, so a feed can be drawn without
+   both machines in view. The Brief chain should no longer need the fit view.
+2. **Brief in the Workshop.** A built-in Brief machine (`Write a brief for {audience}
+from {material}`), so scenario 6's second machine is taken out, not typed.
+3. **A chain's state at a glance.** A machine stale only because a machine upstream
+   reran shows _stale · waiting on Distill_ while Distill is itself stale or running,
+   and its lever names the upstream machine to press first; a feed edge from a tray is
+   drawn from the machine's port, not from the card, so the chain reads as machines.
+4. **Run the chain.** On a stale machine whose upstream machines are stale too, the
+   lever's menu offers _Rerun the chain · $…_: one press per machine, in order, each
+   admitted only after the one before completes, with one estimate for all of them and
+   the same refusal when the day's allowance would not cover it.
+5. Measure scenario 6 again (build and update), and scenario 4 with the matrix and a
+   Brief over it.

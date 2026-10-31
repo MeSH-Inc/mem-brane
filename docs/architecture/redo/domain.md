@@ -87,8 +87,25 @@ _Iteration 3 implements_ `from_placement_id`, `to_placement_id` and `slot`, with
 position given by creation order; _iteration 8_ adds `from_group_id` (migration 006),
 and _iteration 9_ adds `mode` (migration 007), which only a group feed may set to
 `each` and which is the only part of a feed that may change (`feed.mode`). At most one
-slot of a machine is fed `each`. A machine cannot feed a machine yet, so no loop is
-possible and no cycle check exists.
+slot of a machine is fed `each`.
+
+_Iteration 12_ feeds one machine from another's tray. A machine placement is still
+never a feed's source: the tray port creates an ordinary feed from what the tray holds
+now, the newest output card, or the group when every card in it came from that
+machine. The feed then follows the tray. Whenever the tray changes shape, its feeds
+move with it, keeping their position in the slot: a rerun moves them to the new output
+(as it already moved a card's feeds); a press each that makes a stack moves the one
+card's feeds to the stack; a press together that dissolves the machine's stack moves
+the stack's feeds to the one card; an answer split into cards moves its feeds to the
+new group; Keep moves a compared answer's feeds to the kept one. A feed closes a loop
+when any card it sends was produced by the target machine or by a machine downstream
+of it; the producing machine of a card is the anchor of the run that made it. Such a
+feed is refused on write, by the replica's projection and again by the server.
+
+_Decision (iteration 12): the feed records the card or group, not the producing
+machine._ A feed from a machine would need a second source kind whose inputs depend on
+the run history; the cards are already the run's inputs, and moving feeds at the few
+points the tray changes keeps every reader of feeds unchanged.
 
 **Arrow** (brane-scoped, table `relations`): `from_placement_id`, `to_placement_id`,
 `label` (required, 1 to 60 characters). Both ends are cards on the table; removing
