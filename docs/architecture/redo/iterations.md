@@ -638,23 +638,81 @@ would cut most of them.
   the account's request limit and the page reported _Too many requests_.
 - A matrix laid where its stacks lay covered the machines between them.
 
-## Recommended iteration 11
+## Iteration 11: Compare models, and the output shape on the machine
 
-Compare models, and machines whose output shape is visible without reading the prompt.
+Iteration 11 let one press ask several models, made a machine's output shape something
+to choose rather than type, laid diagrams out by their arrows, and let a machine be
+copied with its feeds.
 
-1. **Compare models.** On a machine's back, tick several models; the lever reads
-   `Run ×3 models`, and one press admits one run per model as a batch (as _each_ does,
-   with the model in place of the card). The outputs stand side by side at the tray;
-   **Keep** on one leaves it on the table and puts the others on its back. Scenario 5.
-2. **The output shape on the machine.** The machine shows _→ cards_ or _→ diagram_
-   beside its tray, and its ⋯ menu offers One card, Cards and Diagram, which rewrite
-   the prompt's declaration line, so nobody needs to know its wording.
-3. **A diagram laid out by its arrows.** Lay a diagram's cards in layers, each card
-   one layer past the cards with arrows into it, keeping the grid for cards in a cycle.
-4. **Duplicate a machine with its feeds.** A ⋯ menu item that places a copy fed from
-   the same cards and groups, so scenario 3's second and third Extract cost a
-   duplicate and a question rather than five actions each.
-5. Measure scenario 5, and scenario 3 again with duplication. Run Split and Diagram
-   against DeepSeek on the twelve-paper fixture and record how many answers split
-   (two items or more) and how many relation lines are dropped; adjust the built-in
-   prompts until every answer splits.
+- **Compare models.** **Compare models…** in a machine's ⋯ menu opens a picker under
+  its slots. With two or more models ticked the lever reads `Run ×2 models`, and one
+  press admits one run per model over the same inputs, as one batch. The answers stand
+  side by side at the tray, each naming its model with a **Keep** button; Keep leaves
+  that answer on the table and puts the others on its back. The choice is for that
+  press only: the picker closes with it. A rerun puts each new answer in its
+  predecessor's place; a run together leaves one answer.
+- **A second local model.** `mock-brief` answers in one line, in process and free, so
+  comparisons can be tried and tested without a provider.
+- **The output shape on the machine.** A machine whose prompt declares cards or a
+  diagram shows _→ cards_ or _→ diagram_ beside its lever. Its ⋯ menu offers _Answer
+  as one card_, _as cards_ and _as a diagram_, which rewrite the declaration line and
+  nothing else of the prompt.
+- **Diagrams laid out by their arrows.** Each card sits one row below the cards with
+  arrows into it, so every arrow points down the page; cards whose arrows go round in a
+  cycle keep the grid.
+- **Duplicate with feeds.** A machine's ⋯ menu places a copy below it with the same
+  prompt, unsaved edits included, fed from the same cards and groups in the same slots
+  and modes. The copy is brought into view and selected, ready for a new question.
+- **Live check.** `scripts/check-machine-output.ts` runs the built-in Split and
+  Diagram against a live model on twelve invented abstracts and reports how the
+  answers parse.
+
+### Decisions taken while building
+
+| Question                                    | Decision                                                                                                          | Rationale                                                                                                                                                       |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Where are the models to compare chosen?     | In a picker under the machine's slots, opened from its ⋯ menu.                                                    | Machines have no back yet; building one for a single control would add a surface to reach before the control.                                                   |
+| Is the choice kept?                         | No. It lives in the page for the machine's next press and closes with it.                                         | The concept says the choice applies to that run only; a remembered comparison would multiply every later press's cost unseen.                                   |
+| Can a comparison run each?                  | No: refused by the server, and the lever reads _Compare with the cards together_.                                 | Models times cards is a grid of runs the lever could not state in one figure.                                                                                   |
+| What is Keep?                               | A request to the server (`POST /runs/:id/keep`) that puts the press's other loose answers on the kept one's back. | Running a comparison already needs the connection, so its last step does not need the offline outbox; the move is the tray's existing rule for retired answers. |
+| What does a comparison's staleness compare? | What its first run froze.                                                                                         | Every run of a comparison froze the same inputs; compared run after run, as each is, every comparison read as stale.                                            |
+| How is the output shape chosen?             | By menu items that rewrite the prompt's last line.                                                                | The prompt stays the one authority (iteration 10); the menu spares the wording.                                                                                 |
+| How is a diagram laid out?                  | In rows by arrows, each card one row below the cards pointing to it; a cycle falls back to the grid.              | Arrows then read in one direction, which a grid in item order did not give.                                                                                     |
+| What does Duplicate copy?                   | The prompt, unsaved edits included, and every feed with its slot and mode; never the runs.                        | The copy exists to ask something else of the same material; scenario 3's second and third machines differ only in their question.                               |
+| Must every Split answer split?              | No. A text with one idea stays one card.                                                                          | Live, the two abstracts that stated one finding each gave one item; a prompt that forced two would invent an idea.                                              |
+| What did the live check change?             | Diagram's prompt now says a relation joins two different ideas and an idea that relates to none goes without one. | Over four unrelated papers DeepSeek wrote `3 —supports→ 3` for every idea; the parser dropped them all, and one run gave two ideas for four papers.             |
+
+### Measured
+
+| Scenario                                                                       | Actions                                                                                                  |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| 5. Pick a model by looking, from a fed machine                                 | 6 (⋯, Compare models…, tick, tick, `Run ×2 models`, Keep)                                                |
+| 3. Three Extract machines over one stack, each, through the matrix, duplicated | 22, from 28 (the second and third machine: ⋯, Duplicate with feeds, question, Run), 188 characters typed |
+
+Live check against `deepseek-chat`, after the Diagram prompt change: 11 of 12 Split
+answers split, into 1 to 3 cards (the one that did not stated a single finding); the
+three Diagrams over four papers each gave 6, 4 and 4 cards with 2, 0 and 2 arrows and
+no line dropped. The middle four papers share no relation, and the answer said so by
+drawing none.
+
+### Defects found by building it
+
+- Over unrelated material the Diagram prompt drew each idea supporting itself; see the
+  decision above.
+- A duplicate's feeds were created before the workspace held the copy, so the first
+  attempt fed nothing; the copy is now read back before it is fed.
+
+## Recommended iteration 12
+
+Machines that feed machines, and the back of a machine.
+
+1. **A tray feeds a slot.** Drag a machine's tray port onto another machine's slot:
+   the feed follows the tray (its newest answer, or the stack an each press made), so a
+   rerun upstream makes the downstream machine stale rather than running it. A feed
+   that would close a loop is refused as it is drawn.
+2. **Update along a chain.** After an upstream Update, the downstream machine shows its
+   own Update with its own estimate; one press per machine, as decided in the concept.
+3. **The back of a machine.** Its revision number, its past presses (models, runs,
+   cost) and the Compare picker, which moves there from the footer.
+4. Measure scenario 6 as a two-machine chain (sources into Distill into a Brief), and
+   scenario 1 again with everything since iteration 6.
