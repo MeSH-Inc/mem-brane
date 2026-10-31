@@ -25,10 +25,11 @@ export function readWorkspaceRuns(db: DB, actor: string, braneId: string): Run[]
     AND status IN ('queued','claimed','running','cancel_requested')
   ) SELECT ${fields},COALESCE(c.text,'') partial,
   machine.id machine_block_id,CASE WHEN machine.id IS NULL THEN NULL ELSE pv.source_version END machine_version,
-  b.batch_id,b.position batch_position
+  b.batch_id,b.position batch_position,sc.confirmed_microusd
   FROM selected s
   CROSS JOIN runs r ON r.id=s.id
   LEFT JOIN run_batches b ON b.run_id=r.id
+  LEFT JOIN spend_commitments sc ON sc.run_id=r.id
   LEFT JOIN run_checkpoints c ON c.run_id=r.id AND r.status!='completed'
   LEFT JOIN context_entries pe ON pe.context_id=r.context_id AND pe.kind='prompt'
   LEFT JOIN block_revisions pv ON pv.id=pe.revision_id

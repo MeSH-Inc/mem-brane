@@ -38,17 +38,15 @@ export function MachineControls({
   document,
   actions,
   handle,
-  comparing = false,
-  onCloseCompare,
+  slots: showSlots = true,
 }: {
   placementId: string;
   blockId: string;
   document: WorkspaceDocument;
   actions: MachineActions;
   handle?: (slot: string) => React.ReactNode;
-  // The model picker for the next press is open.
-  comparing?: boolean;
-  onCloseCompare?: () => void;
+  // The slot rows show; the back of a machine shows the lever alone.
+  slots?: boolean;
 }) {
   const compared = useInteraction((s) => s.comparisons[placementId]);
   const models = useMemo(
@@ -128,96 +126,67 @@ export function MachineControls({
                 }`;
   return (
     <>
-      <ul className="machine-slots" aria-label="Slots">
-        {slots.map((slot) => {
-          const fed = view?.feeds.filter((f) => f.slot === slot) ?? [];
-          return (
-            <li
-              key={slot}
-              className={`machine-slot${view?.inputs.some((i) => i.slot === slot) ? '' : ' empty'}`}
-              data-feed-slot={slot}
-              data-feed-machine={placementId}
-            >
-              {handle?.(slot)}
-              <span className="slot-name">{slot}</span>
-              <span className="slot-feeds nodrag nopan">
-                {fed.map((feed) => (
-                  <span
-                    key={feed.feedId}
-                    className={`slot-chip${feed.groupId ? ' group' : ''}${view?.changedFeeds.includes(feed.feedId) && view.ran ? ' changed' : ''}`}
-                  >
-                    <span className="slot-chip-label">{labels[feed.feedId]}</span>
-                    {feed.groupId && (
-                      <button
-                        className={`slot-mode${feed.mode === 'each' ? ' each' : ''}`}
-                        aria-pressed={feed.mode === 'each'}
-                        aria-label={`Run ${labels[feed.feedId]} one card at a time`}
-                        title={
-                          feed.mode === 'each'
-                            ? 'Each: one run per card. Press to send them together in one run.'
-                            : 'Together: one run with every card. Press to run once per card.'
-                        }
-                        onClick={() =>
-                          void actions.onFeedMode(
-                            feed.feedId,
-                            feed.mode === 'each' ? 'together' : 'each',
-                          )
-                        }
-                      >
-                        {feed.mode === 'each' ? 'each' : 'together'}
-                      </button>
-                    )}
-                    <button
-                      aria-label={`Remove ${labels[feed.feedId]} from ${slot}`}
-                      onClick={() => void actions.onUnfeed(feed.feedId)}
+      {showSlots && (
+        <ul className="machine-slots" aria-label="Slots">
+          {slots.map((slot) => {
+            const fed = view?.feeds.filter((f) => f.slot === slot) ?? [];
+            return (
+              <li
+                key={slot}
+                className={`machine-slot${view?.inputs.some((i) => i.slot === slot) ? '' : ' empty'}`}
+                data-feed-slot={slot}
+                data-feed-machine={placementId}
+              >
+                {handle?.(slot)}
+                <span className="slot-name">{slot}</span>
+                <span className="slot-feeds nodrag nopan">
+                  {fed.map((feed) => (
+                    <span
+                      key={feed.feedId}
+                      className={`slot-chip${feed.groupId ? ' group' : ''}${view?.changedFeeds.includes(feed.feedId) && view.ran ? ' changed' : ''}`}
                     >
-                      ×
+                      <span className="slot-chip-label">{labels[feed.feedId]}</span>
+                      {feed.groupId && (
+                        <button
+                          className={`slot-mode${feed.mode === 'each' ? ' each' : ''}`}
+                          aria-pressed={feed.mode === 'each'}
+                          aria-label={`Run ${labels[feed.feedId]} one card at a time`}
+                          title={
+                            feed.mode === 'each'
+                              ? 'Each: one run per card. Press to send them together in one run.'
+                              : 'Together: one run with every card. Press to run once per card.'
+                          }
+                          onClick={() =>
+                            void actions.onFeedMode(
+                              feed.feedId,
+                              feed.mode === 'each' ? 'together' : 'each',
+                            )
+                          }
+                        >
+                          {feed.mode === 'each' ? 'each' : 'together'}
+                        </button>
+                      )}
+                      <button
+                        aria-label={`Remove ${labels[feed.feedId]} from ${slot}`}
+                        onClick={() => void actions.onUnfeed(feed.feedId)}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {candidates.length > 0 && (
+                    <button
+                      className="slot-add"
+                      onClick={() => void actions.onFeed(candidates, placementId, slot)}
+                    >
+                      + {candidates.length} selected
                     </button>
-                  </span>
-                ))}
-                {candidates.length > 0 && (
-                  <button
-                    className="slot-add"
-                    onClick={() => void actions.onFeed(candidates, placementId, slot)}
-                  >
-                    + {candidates.length} selected
-                  </button>
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-      {(comparing || models.length > 0) && (
-        <fieldset className="machine-compare nodrag nopan">
-          <legend>Compare models on the next press</legend>
-          {actions.models.map((model) => (
-            <label key={model}>
-              <input
-                type="checkbox"
-                checked={models.includes(model)}
-                onChange={(event) =>
-                  useInteraction
-                    .getState()
-                    .compare(
-                      placementId,
-                      event.target.checked ? [...models, model] : models.filter((m) => m !== model),
-                    )
-                }
-              />
-              {model === 'mock' ? 'Local mock' : model}
-            </label>
-          ))}
-          <button
-            className="text-button"
-            onClick={() => {
-              useInteraction.getState().compare(placementId, []);
-              onCloseCompare?.();
-            }}
-          >
-            Done
-          </button>
-        </fieldset>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       )}
       <footer className="machine-footer nodrag nopan">
         {output !== 'card' && (
@@ -235,8 +204,6 @@ export function MachineControls({
             (models.length > 1 && !!view?.eachSlot)
           }
           onClick={() => {
-            // A comparison is chosen for one press; the picker closes with it.
-            if (models.length > 1) onCloseCompare?.();
             setRunning(true);
             void actions.onRunMachine(placementId).finally(() => setRunning(false));
           }}

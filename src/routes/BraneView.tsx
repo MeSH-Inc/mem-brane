@@ -578,10 +578,17 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
   const matrixAvailable =
     !!state && !!chosenGroup && chosenGroup.display !== 'matrix' && !!matrixOf(state, chosenGroup);
   const groupSelection = () => void controller.group(selectedCards.map((p) => p.id));
+  // Cards and machines on the table that the selection turns over.
+  const flippable = (() => {
+    if (!state || focusMode || mobile) return [];
+    return state.placements.filter(
+      (p) => !p.host_placement_id && ui.selectedPlacements.includes(p.id),
+    );
+  })();
   const flipSelection = () => {
     const interaction = useInteraction.getState();
-    const back = !selectedCards.every((p) => interaction.flipped.includes(p.id));
-    for (const p of selectedCards) interaction.flip(p.id, back);
+    const back = !flippable.every((p) => interaction.flipped.includes(p.id));
+    for (const p of flippable) interaction.flip(p.id, back);
   };
   const acceptFiles = useCallback(
     (files: File[], target: 'canvas' | 'composer', point?: { x: number; y: number }) => {
@@ -779,7 +786,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
           target.closest('input, textarea, select, [contenteditable="true"]')
         )
           return;
-        if (event.key === 'f' && selectedCards.length) {
+        if (event.key === 'f' && flippable.length) {
           event.preventDefault();
           flipSelection();
         } else if (event.key === '/') {

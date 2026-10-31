@@ -543,16 +543,21 @@ test('two models answer one press side by side, and Keep chooses one', async ({ 
       await work();
     };
     const node = page.locator(`.react-flow__node[data-id="${machinePlacement}"]`);
-    await act(() => node.getByRole('button', { name: 'Machine actions' }).click());
-    await act(() => node.getByRole('button', { name: 'Compare models…' }).click());
+    // The models to compare are chosen on the machine's back, and pressed from there.
+    await act(() => node.getByRole('button', { name: 'Show back' }).click());
+    await expect(node.getByLabel('Presses')).toContainText('Not run yet.');
     const picker = node.getByRole('group', { name: 'Compare models on the next press' });
     await act(() => picker.getByRole('checkbox', { name: 'Local mock' }).check());
     await act(() => picker.getByRole('checkbox', { name: 'mock-brief' }).check());
     await expect(node.locator('.machine-lever')).toHaveText(/^Run ×2 models/);
     await act(() => node.locator('.machine-lever').click());
     await completed(braneId, 2);
-    // The choice applied to that press only.
-    await expect(picker).toHaveCount(0);
+    // The choice applied to that press only; the back lists the press.
+    await expect(picker.getByRole('checkbox', { checked: true })).toHaveCount(0);
+    await expect(node.locator('.machine-presses li')).toHaveCount(1);
+    await expect(node.locator('.machine-presses li')).toContainText('Local mock · mock-brief');
+    await expect(node.locator('.machine-presses li')).toContainText('2 runs, done');
+    await node.screenshot({ path: 'test-results/machine-back.png' });
     read = await state(braneId);
     const answers = read.runs.map((run) => ({
       run,
@@ -578,6 +583,107 @@ test('two models answer one press side by side, and Keep chooses one', async ({ 
     ).toBeVisible();
   });
   record('compare-models', counts);
+});
+
+test('sources feed Distill, Distill’s tray feeds a Brief, and an edit updates the chain one press per machine', async ({
+  page,
+}) => {
+  const counts = { build: 0, update: 0, typed: 0 };
+  await serve(page, 4210, async ({ seed, completed, state, origin }) => {
+    const { braneId, cards } = await seed('Chain', sources, grid);
+    counts.build++; // the drop
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (phase: 'build' | 'update', work: () => Promise<unknown>) => {
+      counts[phase]++;
+      await work();
+    };
+    const build = (work: () => Promise<unknown>) => act('build', work);
+    await build(() => lasso(page, cards));
+    await build(() => page.keyboard.press('g'));
+    await build(() => page.getByRole('button', { name: 'Stack', exact: true }).click());
+    const distill = await takeOut(page, build, state, braneId, 'Distill');
+    await build(() =>
+      drag(
+        page,
+        '.react-flow__node[data-id^="group:"] .card-port',
+        distill.locator('[data-feed-slot="material"]'),
+      ),
+    );
+    const distillLever = distill.locator('.machine-lever');
+    const distillPlacement = await distill.getAttribute('data-id');
+    await build(() => distillLever.click());
+    await completed(braneId, 1);
+    // A second machine, written here, takes Distill's tray.
+    const before = new Set((await state(braneId)).blocks.map((b) => b.id));
+    await build(() => page.getByRole('button', { name: '＋ Add' }).click());
+    await build(() => page.getByRole('button', { name: '⚙ Machine' }).click());
+    let briefPlacement = '';
+    await expect
+      .poll(async () => {
+        const read = await state(braneId);
+        const block = read.blocks.find((b) => b.kind === 'machine' && !before.has(b.id));
+        briefPlacement = read.placements.find((p) => p.block_id === block?.id)?.id ?? '';
+        return briefPlacement;
+      })
+      .not.toBe('');
+    const brief = page.locator(`.react-flow__node[data-id="${briefPlacement}"]`);
+    const prompt = 'Write a council brief from {material} in three sentences.';
+    counts.typed += prompt.length;
+    await build(() => brief.getByRole('textbox', { name: 'Machine prompt' }).fill(prompt));
+    await expect(brief.locator('[data-feed-slot="material"]')).toBeVisible();
+    // Distill is out of sight past the new machine; the whole table is brought into view.
+    await build(() => page.locator('.react-flow__controls-fitview').click());
+    await build(() =>
+      drag(
+        page,
+        `.react-flow__node[data-id="${distillPlacement}"] .card-port`,
+        brief.locator('[data-feed-slot="material"]'),
+      ),
+    );
+    await expect(brief.locator('[data-feed-slot="material"] .slot-chip')).toHaveCount(1);
+    const briefLever = brief.locator('.machine-lever');
+    await expect(briefLever).toHaveText(/^Run/);
+    await build(() => briefLever.click());
+    await completed(braneId, 2);
+    await expect(brief.locator('.machine-state')).toHaveText('ran');
+    // A loop is refused as it is drawn: Brief's tray into Distill.
+    await page.locator('.react-flow__controls-fitview').click();
+    await drag(
+      page,
+      `.react-flow__node[data-id="${briefPlacement}"] .card-port`,
+      distill.locator('[data-feed-slot="material"]'),
+    );
+    await expect(page.getByRole('alert')).toContainText('would close a loop');
+    await expect(distill.locator('[data-feed-slot="material"] .slot-chip')).toHaveCount(1);
+
+    // An edit upstream: Distill goes stale, Brief waits; one press per machine.
+    const editor = page
+      .locator(`.react-flow__node[data-id="${cards[0].placementId}"]`)
+      .getByRole('textbox', { name: 'Block text' });
+    await act('update', () =>
+      editor.fill(`${sources[0]} Land sales show the rise began at announcement.`),
+    );
+    await expect(distill.locator('.machine-state')).toHaveText('stale · material changed');
+    await expect(brief.locator('.machine-state')).toHaveText('ran');
+    await act('update', () => distillLever.click());
+    await completed(braneId, 3);
+    await expect(brief.locator('.machine-state')).toHaveText('stale · material changed');
+    await expect(briefLever).toHaveText(/^Rerun/);
+    await act('update', () => briefLever.click());
+    await completed(braneId, 4);
+    await expect(brief.locator('.machine-state')).toHaveText('ran');
+    // Brief's last run read Distill's newest answer.
+    const read = await state(braneId);
+    const newestDistill = read.runs
+      .filter((r) => r.machine_block_id === read.runs[0].machine_block_id)
+      .at(-1)!;
+    const feeds = read.feeds.filter((f) => f.to_placement_id === briefPlacement);
+    expect(
+      feeds.map((f) => read.placements.find((p) => p.id === f.from_placement_id)?.block_id),
+    ).toEqual([newestDistill.output_block_id]);
+    await page.screenshot({ path: 'test-results/machine-chain.png' });
+  });
+  record('chain', counts);
 });
 
 test('a reading pile splits into ideas each, and the ideas become a diagram', async ({ page }) => {
@@ -837,6 +943,7 @@ interface BraneRead {
   blocks: { id: string; kind: string; version: number }[];
   relations: { from_placement_id: string; to_placement_id: string; label: string }[];
   groups: { label: string; members: string[] }[];
+  feeds: { to_placement_id: string; from_placement_id: string | null }[];
   runs: {
     id: string;
     model: string;

@@ -14,7 +14,12 @@ export interface RevisionPage {
 export interface RunPage {
   items: Omit<
     Run,
-    'partial' | 'machine_block_id' | 'machine_version' | 'batch_id' | 'batch_position'
+    | 'partial'
+    | 'machine_block_id'
+    | 'machine_version'
+    | 'batch_id'
+    | 'batch_position'
+    | 'confirmed_microusd'
   >[];
   nextCursor: string | null;
 }

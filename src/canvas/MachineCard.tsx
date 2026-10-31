@@ -8,6 +8,7 @@ import { BlockContent } from '../components/BlockContent';
 import { ActionMenu } from '../components/ActionMenu';
 import { useInteraction } from '../stores/interaction';
 import { MachineControls, useMachineView, type MachineActions } from './MachineControls';
+import { MachineBack } from './MachineBack';
 export type { MachineActions } from './MachineControls';
 
 export const slotHandle = (slot: string) => `slot:${slot}`;
@@ -44,7 +45,7 @@ export const MachineCard = memo(function MachineCard({
 }) {
   const block = useStore(document.store, (s) => s.blocks[blockId]);
   const draft = useInteraction((s) => s.drafts[blockId]);
-  const [comparing, setComparing] = useState(false);
+  const flipped = useInteraction((s) => s.flipped.includes(placementId));
   const view = useMachineView(document, placementId, draft);
   // Slot handles appear and vanish with the template; React Flow must re-measure them
   // or feeds into a new slot have no anchor to draw to.
@@ -56,7 +57,7 @@ export const MachineCard = memo(function MachineCard({
   const state = view?.stale ? 'stale' : view?.ran ? 'ran' : '';
   return (
     <article
-      className={`canvas-card machine-card ${selected ? 'selected' : ''} ${view?.stale ? 'stale' : ''}`}
+      className={`canvas-card machine-card ${selected ? 'selected' : ''} ${view?.stale ? 'stale' : ''}${flipped ? ' flipped' : ''}`}
     >
       <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
       <CardPort
@@ -81,6 +82,19 @@ export const MachineCard = memo(function MachineCard({
             </span>
           )}
         </span>
+        <button
+          className="nodrag nopan flip-button"
+          aria-pressed={flipped}
+          aria-label={flipped ? 'Show front' : 'Show back'}
+          title={
+            flipped
+              ? 'Show the front (F)'
+              : 'Show the back: revision, past presses, models to compare (F)'
+          }
+          onClick={() => useInteraction.getState().flip(placementId)}
+        >
+          ↻
+        </button>
         {onManage && (
           <ActionMenu
             label="Machine actions"
@@ -98,9 +112,6 @@ export const MachineCard = memo(function MachineCard({
                 {outputNames[output]}
               </button>
             ))}
-            {actions.models.length > 1 && (
-              <button onClick={() => setComparing(true)}>Compare models…</button>
-            )}
             <button onClick={() => actions.onDuplicate(placementId)}>Duplicate with feeds</button>
             <button onClick={() => actions.onSaveToWorkshop(blockId)}>Save to Workshop</button>
             <button onClick={() => onManage('versions')}>Version history</button>
@@ -108,31 +119,48 @@ export const MachineCard = memo(function MachineCard({
           </ActionMenu>
         )}
       </header>
-      <div className="machine-prompt">
-        <BlockContent
-          block={block}
-          onEdit={onEdit}
-          focusRequest={focusRequest}
-          onFocused={onFocused}
-        />
-      </div>
-      <MachineControls
-        placementId={placementId}
-        blockId={blockId}
-        document={document}
-        actions={actions}
-        comparing={comparing}
-        onCloseCompare={() => setComparing(false)}
-        handle={(slot) => (
-          <Handle
-            type="target"
-            position={Position.Left}
-            id={slotHandle(slot)}
-            isConnectable={false}
-            className="slot-handle"
+      {flipped ? (
+        <MachineBack
+          placementId={placementId}
+          blockId={blockId}
+          document={document}
+          models={actions.models}
+        >
+          <MachineControls
+            placementId={placementId}
+            blockId={blockId}
+            document={document}
+            actions={actions}
+            slots={false}
           />
-        )}
-      />
+        </MachineBack>
+      ) : (
+        <>
+          <div className="machine-prompt">
+            <BlockContent
+              block={block}
+              onEdit={onEdit}
+              focusRequest={focusRequest}
+              onFocused={onFocused}
+            />
+          </div>
+          <MachineControls
+            placementId={placementId}
+            blockId={blockId}
+            document={document}
+            actions={actions}
+            handle={(slot) => (
+              <Handle
+                type="target"
+                position={Position.Left}
+                id={slotHandle(slot)}
+                isConnectable={false}
+                className="slot-handle"
+              />
+            )}
+          />
+        </>
+      )}
     </article>
   );
 });

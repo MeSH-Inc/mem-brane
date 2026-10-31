@@ -130,6 +130,8 @@ export interface Run {
   // and this run's card's position in that slot; null for a run admitted alone.
   batch_id: string | null;
   batch_position: number | null;
+  // What the run cost once its usage was settled; null until then, or if never known.
+  confirmed_microusd: number | null;
 }
 // One placed card, or one group's members, fills one slot of a placed machine on the
 // same brane. Exactly one of the two sources is set.

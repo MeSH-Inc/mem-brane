@@ -57,6 +57,7 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
         machine_version: null,
         batch_id: null,
         batch_position: null,
+        confirmed_microusd: null,
         created_at: 0,
       },
     ],
