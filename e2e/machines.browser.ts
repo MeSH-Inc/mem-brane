@@ -428,7 +428,7 @@ test('a stack fed each runs Extract once per paper and the outputs arrive as a s
   record('pile-each', counts);
 });
 
-test('three Extract machines over one stack make a stack of answers each', async ({ page }) => {
+test('three Extract machines over one stack make a literature matrix', async ({ page }) => {
   const counts = { actions: 0, typed: 0 };
   const questions = ['what method it uses', 'its sample size', 'its main finding'];
   await serve(page, 4207, async ({ seed, completed, state, origin }) => {
@@ -465,8 +465,115 @@ test('three Extract machines over one stack make a stack of answers each', async
     const read = await state(braneId);
     expect(new Set(read.runs.map((r) => r.batch_id)).size).toBe(3);
     await expect(page.getByRole('region', { name: 'Each source' })).toHaveCount(3);
+    // Lasso the three stacks of answers, group them, and set them out as a matrix.
+    await page.locator('.react-flow__controls-fitview').click();
+    const outputs = read.runs.map((run) => ({
+      placementId: read.placements.find((p) => p.block_id === run.output_block_id)!.id,
+    }));
+    // From below, so the rectangle reaches the answers and not the papers above them.
+    await act(() => lasso(page, outputs, 'below'));
+    await act(() => page.keyboard.press('g'));
+    await act(() => page.getByRole('button', { name: 'Matrix', exact: true }).click());
+    const matrix = page.locator('[aria-roledescription="group"]').filter({ hasText: '4 × 3' });
+    await expect(matrix).toHaveCount(1);
+    await expect(matrix.getByRole('columnheader')).toHaveText(
+      questions.map((q) => `${q.charAt(0).toUpperCase()}${q.slice(1)}?`),
+    );
+    await expect(matrix.getByRole('rowheader')).toHaveText(papers);
+    // One row per paper: each paper's three answers stand level, one column per question.
+    await expect
+      .poll(
+        async () => {
+          const after = await state(braneId);
+          const at = new Map(after.placements.map((p) => [p.block_id, p]));
+          const rows = new Map<number, Set<number>>();
+          for (const run of after.runs) {
+            const ys = rows.get(run.batch_position!) ?? new Set<number>();
+            ys.add(at.get(run.output_block_id)!.y);
+            rows.set(run.batch_position!, ys);
+          }
+          return [...rows.values()].map((ys) => ys.size);
+          // Slowly: the account's requests share one rate limit with the page's saves.
+        },
+        { intervals: [1000] },
+      )
+      .toEqual([1, 1, 1, 1]);
   });
   record('matrix', counts);
+});
+
+test('a reading pile splits into ideas each, and the ideas become a diagram', async ({ page }) => {
+  const counts = { actions: 0 };
+  await serve(page, 4208, async ({ seed, completed, state, origin }) => {
+    const papers = [1, 2, 3].map(
+      (n) => `Paper ${n} finds that sleep helps memory. Its effect holds for naps.`,
+    );
+    const { braneId, cards } = await seed('Pile to diagram', papers, grid);
+    counts.actions++; // the drop
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    await act(() => lasso(page, cards));
+    await act(() => page.keyboard.press('g'));
+    await act(() => page.getByRole('button', { name: 'Stack', exact: true }).click());
+    const split = await takeOut(page, act, state, braneId, 'Split');
+    await page.locator('.react-flow__controls-fitview').click();
+    await act(() =>
+      drag(
+        page,
+        '.react-flow__node[data-id^="group:"]:has([aria-label="Group 1"]) .card-port',
+        split.locator('[data-feed-slot="text"]'),
+      ),
+    );
+    await act(() => split.getByRole('button', { name: /one card at a time/ }).click());
+    await expect(split.locator('.machine-lever')).toHaveText(/^Run ×3/);
+    await act(() => split.locator('.machine-lever').click());
+    await completed(braneId, 3);
+    // Every paper's answer became its two ideas, in the stack the press made.
+    const ideas = page.locator('[aria-roledescription="group"][aria-label="Each text"]');
+    await expect(ideas).toContainText('Stack · 6');
+    const diagram = await takeOut(page, act, state, braneId, 'Diagram');
+    await page.locator('.react-flow__controls-fitview').click();
+    await act(() =>
+      drag(
+        page,
+        '.react-flow__node[data-id^="group:"]:has([aria-label="Each text"]) .card-port',
+        diagram.locator('[data-feed-slot="material"]'),
+      ),
+    );
+    await act(() => diagram.locator('.machine-lever').click());
+    await completed(braneId, 4);
+    const region = page.locator('[aria-roledescription="group"][aria-label="Diagram"]');
+    await expect(region).toContainText('6 cards');
+    let read = await state(braneId);
+    const map = read.groups.find((g) => g.label === 'Diagram')!;
+    expect(read.relations.filter((r) => map.members.includes(r.from_placement_id))).toHaveLength(5);
+    await expect(page.locator('.relation-word', { hasText: 'supports' })).toHaveCount(5);
+    // Rearrange it: it is now the user's diagram.
+    await page.locator('.react-flow__controls-fitview').click();
+    const moved = map.members[1];
+    const before = read.placements.find((p) => p.id === moved)!;
+    const card = page.locator(`.react-flow__node[data-id="${moved}"]`);
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+    const box = (await card.boundingBox())!;
+    await act(async () => {
+      await page.mouse.move(box.x + box.width / 2, box.y + 12);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width / 2 + 120, box.y + 80, { steps: 8 });
+      await page.mouse.up();
+    });
+    await expect
+      .poll(async () => {
+        read = await state(braneId);
+        return read.placements.find((p) => p.id === moved)!.x;
+      })
+      .toBeGreaterThan(before.x);
+  });
+  record('pile-diagram', counts);
 });
 
 // Take a machine out of the Workshop: Add, Workshop, the machine. Returns its node.
@@ -586,8 +693,16 @@ async function marquee(page: Page, cards: { placementId: string }[]) {
   );
 }
 
-// One marquee across a grid of cards, from the empty table beyond its right edge.
-async function lasso(page: Page, cards: { placementId: string }[]) {
+// One marquee across a grid of cards, from the empty table beyond its right edge: from
+// above its top, or from below its bottom up to just inside its top.
+async function lasso(
+  page: Page,
+  cards: { placementId: string }[],
+  from: 'above' | 'below' = 'above',
+) {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
   const boxes = await Promise.all(
     cards.map(
       async (c) =>
@@ -598,9 +713,9 @@ async function lasso(page: Page, cards: { placementId: string }[]) {
   const top = Math.min(...boxes.map((b) => b.y));
   const left = Math.min(...boxes.map((b) => b.x));
   const bottom = Math.max(...boxes.map((b) => b.y + b.height));
-  await page.mouse.move(right + 40, top - 10);
+  await page.mouse.move(right + 40, from === 'above' ? top - 10 : bottom + 10);
   await page.mouse.down();
-  await page.mouse.move(left + 20, bottom - 20, { steps: 10 });
+  await page.mouse.move(left + 20, from === 'above' ? bottom - 20 : top + 20, { steps: 10 });
   await page.mouse.up();
   await expect(page.getByRole('toolbar', { name: 'Selection' })).toContainText(
     `${cards.length} cards`,

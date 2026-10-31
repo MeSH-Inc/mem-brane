@@ -31,6 +31,7 @@ import type { Placement } from '../../shared/types/domain';
 import { derivationEdges, machineEdges, groupNodeId } from './derivations';
 import { GroupFrame, type GroupNode } from './GroupFrame';
 import { frame, groupOf, STACK_EDGES, tableMembers } from './groups';
+import { matrixOf, MATRIX_COLUMN_HEADER, MATRIX_ROW_HEADER } from './matrix';
 import { MachineCard, CardPort, type MachineActions } from './MachineCard';
 import { RelationEdge, RelationPicker, relationEdges, type ArrowDraft } from './RelationEdge';
 import { answerStaleness, machineStaleness } from './machines';
@@ -468,13 +469,75 @@ function Inner(props: Props) {
     props.onRetry,
     props.machine,
   ]);
+  // A matrix's headings and each member's cell, as a primitive key so streaming text
+  // elsewhere does not redraw the frames.
+  const matrixKey = useStore(props.document.store, (s) =>
+    JSON.stringify(
+      s.state
+        ? s.state.groups.flatMap((group) => {
+            const matrix = group.display === 'matrix' ? matrixOf(s.state!, group) : null;
+            return matrix
+              ? [
+                  {
+                    groupId: group.id,
+                    rows: matrix.rows.map((r) => r.label),
+                    columns: matrix.columns.map((c) => c.label),
+                    cells: Object.fromEntries(matrix.cells),
+                  },
+                ]
+              : [];
+          })
+        : [],
+    ),
+  );
+  const matrices = useMemo(
+    () =>
+      new Map(
+        (
+          JSON.parse(matrixKey) as {
+            groupId: string;
+            rows: string[];
+            columns: string[];
+            cells: Record<string, { row: number; column: number }>;
+          }[]
+        ).map((m) => [m.groupId, m]),
+      ),
+    [matrixKey],
+  );
   // Frames follow their members as they are dragged, so they read the gesture's preview.
   const frames = useMemo<GroupNode[]>(
     () =>
       groups.flatMap((group) => {
-        const members = tableMembers({ placements }, group).map((p) => geometry[p.id] ?? p);
+        const placed = tableMembers({ placements }, group);
+        const members = placed.map((p) => geometry[p.id] ?? p);
         if (!members.length) return [];
-        const box = frame(members);
+        const matrix = group.display === 'matrix' ? matrices.get(group.id) : undefined;
+        const fitted = frame(members);
+        // A matrix's frame leaves room for its headings above and to the left.
+        const box = matrix
+          ? {
+              x: fitted.x - MATRIX_ROW_HEADER,
+              y: fitted.y - MATRIX_COLUMN_HEADER,
+              width: fitted.width + MATRIX_ROW_HEADER,
+              height: fitted.height + MATRIX_COLUMN_HEADER,
+            }
+          : fitted;
+        const headings = matrix && {
+          rows: matrix.rows.map((label, row) => {
+            const inRow = members.filter((_, i) => matrix.cells[placed[i].id]?.row === row);
+            return { label, top: inRow.length ? Math.min(...inRow.map((m) => m.y)) - box.y : -1 };
+          }),
+          columns: matrix.columns.map((label, column) => {
+            const inColumn = members.filter(
+              (_, i) => matrix.cells[placed[i].id]?.column === column,
+            );
+            return {
+              label,
+              left: inColumn.length ? Math.min(...inColumn.map((m) => m.x)) - box.x : -1,
+              width: inColumn.length ? Math.max(...inColumn.map((m) => m.width)) : 0,
+            };
+          }),
+        };
         return [
           {
             id: groupNodeId(group.id),
@@ -489,6 +552,7 @@ function Inner(props: Props) {
               label: group.label,
               display: group.display,
               count: members.length,
+              matrix: headings || undefined,
               chosen: group.members.every((id) => selected.includes(id)),
               onFeed: props.onFeedGroup,
               onRename: props.onRenameGroup,
@@ -496,7 +560,7 @@ function Inner(props: Props) {
           },
         ];
       }),
-    [groups, placements, geometry, selected, props.onFeedGroup, props.onRenameGroup],
+    [groups, placements, geometry, selected, matrices, props.onFeedGroup, props.onRenameGroup],
   );
   const askData = useMemo(
     () => props.ask && { content: props.ask.content, onClose: props.onCloseAsk },

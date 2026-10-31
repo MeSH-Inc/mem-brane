@@ -11,6 +11,7 @@ import {
   readWorkspaceRuns,
   readVisibleDerivations,
   readVisibleRelationEntries,
+  readVisibleParts,
 } from './run-reads.js';
 import { readFeeds } from './feeds.js';
 import { readRelations } from './relations.js';
@@ -338,11 +339,14 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
     .all(id) as Placement[];
   const blockRows = db
     .prepare<unknown[], WorkspaceBlockRow>(
-      `SELECT b.id,b.kind,b.origin,l.content_json,l.version,v.content_json final_content,o.message_id
+      `SELECT b.id,b.kind,b.origin,l.content_json,l.version,
+        COALESCE(v.content_json,pv.content_json) final_content,o.message_id
         FROM blocks b LEFT JOIN block_live_state l ON l.block_id=b.id
         LEFT JOIN runs r ON r.output_block_id=b.id
         LEFT JOIN run_outputs o ON o.run_id=r.id
         LEFT JOIN block_revisions v ON v.id=o.revision_id
+        LEFT JOIN run_parts x ON x.block_id=b.id
+        LEFT JOIN block_revisions pv ON pv.id=x.revision_id
         WHERE b.id IN (SELECT block_id FROM placements WHERE brane_id=?)
         ORDER BY b.created_at,b.id`,
     )
@@ -367,6 +371,7 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
   const relations = readRelations(db, actor, id);
   const groups = readGroups(db, actor, id);
   const relationEntries = readVisibleRelationEntries(db, actor, id);
+  const parts = readVisibleParts(db, actor, id);
   return {
     brane,
     placements,
@@ -377,6 +382,7 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
     runs,
     derivations,
     relationEntries,
+    parts,
   };
 }
 

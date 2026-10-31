@@ -10,6 +10,7 @@ import {
 } from './costs.js';
 import type { ModelResult } from '../llm/model.js';
 import { fitsArtifactContent } from '../../shared/limits.js';
+import { placeRunParts } from './run-parts.js';
 
 /** The stored error for each cause, written for the person who started the run. */
 export const failureMessages: Record<RunFailureReason, string> = {
@@ -233,7 +234,7 @@ export function completeAttempt(
         token.attemptId,
       );
       settleCost(db, run.id, result.usage);
-
+      placeRunParts(db, run.id, result.text);
       return true;
     })
     .immediate();

@@ -158,7 +158,7 @@ export interface Group {
   id: string;
   brane_id: string;
   label: string;
-  display: 'region' | 'stack';
+  display: 'region' | 'stack' | 'matrix';
   created_at: number;
   // Member placements in member order, which is the order a feed sends them.
   members: string[];
@@ -170,6 +170,13 @@ export interface RelationEntry {
   toBlockId: string;
   label: string;
 }
+// A card a run's answer was split into, at its item's position: an output of the run
+// as much as the whole answer is.
+export interface RunPart {
+  runId: string;
+  blockId: string;
+  position: number;
+}
 export interface BraneState {
   brane: Brane;
   blocks: Block[];
@@ -180,6 +187,7 @@ export interface BraneState {
   runs: Run[];
   derivations: Derivation[];
   relationEntries: RelationEntry[];
+  parts: RunPart[];
 }
 export interface RunInput {
   position: number;

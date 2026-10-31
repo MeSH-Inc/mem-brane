@@ -264,6 +264,8 @@ it('keeps saved machines in the Workshop beside the built-in ones', () => {
   expect(readWorkshop(db, actor).builtIn.map((m) => m.name)).toEqual([
     'Critique',
     'Distill',
+    'Split',
+    'Diagram',
     'Extract',
   ]);
   const saved = saveWorkshopMachine(db, actor, 'Method', 'Extract the method of {source}.');

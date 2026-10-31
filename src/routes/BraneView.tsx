@@ -1,3 +1,4 @@
+import { matrixOf } from '../canvas/matrix';
 import { ActionMenu } from '../components/ActionMenu';
 import { Dialog } from '../components/Dialog';
 import { RunActivity } from '../components/RunActivity';
@@ -561,6 +562,9 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     return members.length === selectedCards.length && members.length === g.members.length;
   });
   const groupable = selectedCards.length > 1 && !chosenGroup;
+  // Matrix is offered for a group of machines' outputs run each over one stack.
+  const matrixAvailable =
+    !!state && !!chosenGroup && chosenGroup.display !== 'matrix' && !!matrixOf(state, chosenGroup);
   const groupSelection = () => void controller.group(selectedCards.map((p) => p.id));
   const flipSelection = () => {
     const interaction = useInteraction.getState();
@@ -1298,6 +1302,14 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                     >
                       {chosenGroup.display === 'stack' ? 'Spread' : 'Stack'}
                     </button>
+                    {matrixAvailable && (
+                      <button
+                        title="A row per card the machines ran over, a column per machine"
+                        onClick={() => void controller.arrangeGroup(chosenGroup.id, 'matrix')}
+                      >
+                        Matrix
+                      </button>
+                    )}
                     <button
                       title="Keep the cards where they are, without the group"
                       onClick={() => void controller.ungroup(chosenGroup.id)}

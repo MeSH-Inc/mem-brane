@@ -57,6 +57,7 @@ export class WorkspaceDocument {
           relationEntries: same(previous.relationEntries, next.relationEntries)
             ? previous.relationEntries
             : next.relationEntries,
+          parts: same(previous.parts, next.parts) ? previous.parts : next.parts,
         }
       : next;
     this.reproject();
@@ -87,10 +88,11 @@ export class WorkspaceDocument {
       previous.state?.blocks === base.blocks
         ? previous.blocks
         : Object.fromEntries(base.blocks.map((b) => [b.id, b]));
+    // A run is found by its output, and by each card its answer was split into.
     const runs =
-      previous.state?.runs === base.runs
+      previous.state?.runs === base.runs && previous.state?.parts === base.parts
         ? previous.runs
-        : Object.fromEntries(base.runs.map((r) => [r.output_block_id, r]));
+        : runsByOutput(base);
     if (
       previous.state &&
       Object.keys(state).every(
@@ -119,4 +121,14 @@ export class WorkspaceDocument {
       return;
     this.store.setState({ activity });
   }
+}
+export function runsByOutput(state: Pick<BraneState, 'runs' | 'parts'>): Record<string, Run> {
+  const byId = new Map(state.runs.map((r) => [r.id, r]));
+  return Object.fromEntries([
+    ...state.runs.map((r) => [r.output_block_id, r] as const),
+    ...state.parts.flatMap((part) => {
+      const run = byId.get(part.runId);
+      return run ? [[part.blockId, run] as const] : [];
+    }),
+  ]);
 }

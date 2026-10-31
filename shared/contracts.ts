@@ -115,7 +115,7 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
       id: identity,
       brane_id: identity,
       label: z.string(),
-      display: z.enum(['region', 'stack']),
+      display: z.enum(['region', 'stack', 'matrix']),
       created_at: z.number(),
       members: z.array(identity),
     }),
@@ -137,6 +137,9 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
   ),
   relationEntries: z.array(
     z.object({ runId: identity, fromBlockId: identity, toBlockId: identity, label: z.string() }),
+  ),
+  parts: z.array(
+    z.object({ runId: identity, blockId: identity, position: z.number().int().nonnegative() }),
   ),
 });
 export const budgetResponse = z.object({

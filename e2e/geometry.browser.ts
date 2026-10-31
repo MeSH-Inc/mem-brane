@@ -36,6 +36,7 @@ test('delayed saves retain newer moves, conflicts pause, and explicit retry uses
     relations: [],
     groups: [],
     relationEntries: [],
+    parts: [],
     derivations: [],
   };
   let releaseFirst!: () => void;

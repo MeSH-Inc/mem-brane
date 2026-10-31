@@ -328,14 +328,18 @@ function contextAnchor(db: DB, braneId: string, references: string[], continueFr
     .get(continueFrom);
   return message ? find.get(braneId, message.block_id) : undefined;
 }
-// The machine's current tray output: its newest output still on the table.
+// The machine's current tray output: its newest output still on the table, which for
+// an answer split into cards is its first card still there.
 function trayOutput(db: DB, machinePlacementId: string) {
   return db
     .prepare<unknown[], Placement>(
       `SELECT p.* FROM run_placements l JOIN runs r ON r.id=l.run_id
-       JOIN placements p ON p.id=l.output_placement_id
+       JOIN (SELECT o.run_id,o.output_placement_id placement_id,-1 position FROM run_placements o
+         UNION ALL SELECT x.run_id,q.id,x.position FROM run_parts x
+         JOIN placements q ON q.block_id=x.block_id) out ON out.run_id=r.id
+       JOIN placements p ON p.id=out.placement_id
        WHERE l.anchor_placement_id=? AND p.host_placement_id IS NULL
-       ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1`,
+       ORDER BY r.created_at DESC,r.rowid DESC,out.position LIMIT 1`,
     )
     .get(machinePlacementId);
 }
@@ -354,7 +358,7 @@ function replacedAnswer(db: DB, braneId: string, placementId: string) {
 // back. Feeds it gave other machines follow the tray, keeping their position in each
 // slot, so those machines see the new output and go stale instead of running on;
 // arrows and group membership follow it too.
-function moveToBack(db: DB, replaced: Placement, outputPlacementId: string) {
+export function moveToBack(db: DB, replaced: Placement, outputPlacementId: string) {
   const time = now();
   // The new card takes the replaced card's place in its group while both are on the table.
   db.prepare('UPDATE group_members SET placement_id=? WHERE placement_id=?').run(
@@ -523,28 +527,35 @@ function batchKey(key: string, position: number) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 // The machine's tray: its newest output still on the table, or, when that output is in
-// a group of this machine's outputs (the stack an 'each' press made), the whole group.
-function machineTray(db: DB, machinePlacementId: string) {
+// a group, this machine's outputs in that group in member order. The group is the
+// machine's own (the stack an 'each' press made, or the cards an answer was split into)
+// when every member came from this machine; otherwise it is shared, as a matrix is.
+function machineTray(db: DB, machinePlacementId: string, each: boolean) {
   const newest = trayOutput(db, machinePlacementId);
-  if (!newest) return { members: [] as Placement[] };
+  if (!newest) return { members: [] as Placement[], owned: false };
   const group = db
     .prepare<unknown[], { group_id: string }>(
       'SELECT group_id FROM group_members WHERE placement_id=?',
     )
     .get(newest.id);
-  const members = group
-    ? db
-        .prepare<unknown[], Placement & { produced: number }>(
-          `SELECT p.*,EXISTS(SELECT 1 FROM run_placements l WHERE l.output_placement_id=p.id
-           AND l.anchor_placement_id=?) produced
-           FROM group_members m JOIN placements p ON p.id=m.placement_id
-           WHERE m.group_id=? ORDER BY m.position`,
-        )
-        .all(machinePlacementId, group.group_id)
-    : [];
-  return group && members.every((m) => m.produced)
-    ? { groupId: group.group_id, members: members.map(({ produced: _, ...p }) => p as Placement) }
-    : { members: [newest] };
+  if (!group) return { members: [newest], owned: false };
+  const members = db
+    .prepare<unknown[], Placement & { produced: number }>(
+      `SELECT p.*,EXISTS(SELECT 1 FROM run_placements l WHERE l.anchor_placement_id=?
+       AND (l.output_placement_id=p.id OR l.run_id IN (
+         SELECT run_id FROM run_parts WHERE block_id=p.block_id))) produced
+       FROM group_members m JOIN placements p ON p.id=m.placement_id
+       WHERE m.group_id=? ORDER BY m.position`,
+    )
+    .all(machinePlacementId, group.group_id);
+  const produced = members.filter((m) => m.produced).map(({ produced: _, ...p }) => p as Placement);
+  const owned = produced.length === members.length;
+  // A press together over a shared group replaces only the newest output in it.
+  return {
+    groupId: group.group_id,
+    owned,
+    members: owned || each ? produced : [newest],
+  };
 }
 // A tray card the new press has no place for goes on the back of the press's first
 // output, without the links it had as a result on the table.
@@ -601,7 +612,7 @@ export function runMachine(
     }
     checkLimits(db, actor, input.model, limits);
     const placement = machineSubmission(db, actor, input).machine.placement;
-    const tray = machineTray(db, placement.id);
+    const tray = machineTray(db, placement.id, !!batch);
     const appliedEdits = input.edits.map((edit) => ({
       blockId: edit.blockId,
       ...updateBlockLiveState(db, actor, edit),
@@ -626,8 +637,8 @@ export function runMachine(
     const outputs = runs.map((run) => outputPlacement(db, run.id));
     for (const surplus of tray.members.slice(parts.length)) retire(db, surplus, outputs[0]);
     if (!batch) {
-      // A run together after a stack leaves one card where the stack was.
-      if (tray.groupId) db.prepare('DELETE FROM groups WHERE id=?').run(tray.groupId);
+      // A run together after its own stack leaves one card where the stack was.
+      if (tray.groupId && tray.owned) db.prepare('DELETE FROM groups WHERE id=?').run(tray.groupId);
     } else if (tray.groupId) {
       const add = db.prepare(
         'INSERT INTO group_members VALUES (?,?,(SELECT coalesce(max(position),-1)+1 FROM group_members WHERE group_id=?))',

@@ -51,6 +51,7 @@ export function scene(): BraneState {
     relations: [],
     groups: [],
     relationEntries: [],
+    parts: [],
     derivations: [],
   };
 }

@@ -9,6 +9,7 @@ import type {
   Edit,
   SubmissionReceipt,
   Revision,
+  Group,
 } from '../../shared/types/domain';
 import type { ConversationMessage } from '../../shared/types/conversation';
 import { submitRun, spawnArtifact } from '../../shared/schemas';
@@ -25,9 +26,14 @@ import { draftDisposition, type Draft } from './drafts';
 import type { Interaction } from '../stores/interaction';
 import type { Imports } from './imports';
 import { estimateIssue, runIssueOf, type RunIssue } from './run-issues';
-import { runMachine as runMachineSchema, type RunMachine } from '../../shared/machines';
+import {
+  runMachine as runMachineSchema,
+  machineName,
+  type RunMachine,
+} from '../../shared/machines';
 import { machineStaleness, openSpot } from '../canvas/machines';
 import {
+  bounds,
   groupOf,
   nextGroupLabel,
   readingOrder,
@@ -35,7 +41,10 @@ import {
   stackLayout,
   tableMembers,
 } from '../canvas/groups';
+import { matrixOf, matrixLayout, matrixFootprint } from '../canvas/matrix';
 
+// How long run status reports gather before one read catches up with them.
+const STATUS_REFRESH_MS = 200;
 type DraftState = Pick<
   Interaction,
   | 'actor'
@@ -87,6 +96,7 @@ export class WorkspaceController {
   private epoch = 0;
   private active = false;
   private refreshGeneration = 0;
+  private statusRefresh?: ReturnType<typeof setTimeout>;
   private estimateGeneration = 0;
   private lineageGeneration = 0;
   private inspectionGeneration = 0;
@@ -306,6 +316,8 @@ export class WorkspaceController {
     this.timers.clear();
     clearTimeout(this.estimateTimer);
     clearTimeout(this.titleTimer);
+    clearTimeout(this.statusRefresh);
+    this.statusRefresh = undefined;
     clearInterval(this.poll);
     this.delivering.clear();
   }
@@ -449,8 +461,16 @@ export class WorkspaceController {
       (data.braneId !== this.braneId && !this.serverState?.runs.some((r) => r.id === data.runId))
     )
       return;
-    if (data.status) this.background(this.refresh());
-    else if (data.text !== undefined && this.serverState) {
+    if (data.status) {
+      // A press of a dozen runs reports each run's start and end; one read a moment after
+      // the first report catches up with every report that arrived meanwhile.
+      if (this.statusRefresh) return;
+      const epoch = this.epoch;
+      this.statusRefresh = setTimeout(() => {
+        this.statusRefresh = undefined;
+        if (this.valid(epoch)) this.background(this.refresh());
+      }, STATUS_REFRESH_MS);
+    } else if (data.text !== undefined && this.serverState) {
       this.streamed.set(data.runId, { revision: ++this.streamRevision, text: data.text });
       this.document.install({
         ...this.serverState,
@@ -911,13 +931,7 @@ export class WorkspaceController {
     this.command(`workshop:${blockId}`, async () => {
       const template = this.state?.blocks.find((b) => b.id === blockId)?.content.text ?? '';
       if (!template.trim()) throw new Error('Write a prompt before saving this machine.');
-      const name =
-        template
-          .split('{')[0]
-          .trim()
-          .replace(/[\s,:;]+$/, '')
-          .slice(0, 60) || template.trim().slice(0, 60);
-      await this.client.saveToWorkshop(name, template);
+      await this.client.saveToWorkshop(machineName(template), template);
       return true;
     }).catch(() => false);
   unfeed = (feedId: string) =>
@@ -948,7 +962,9 @@ export class WorkspaceController {
       this.client.relabelRelation(relationId, this.braneId, label.trim()),
     ).catch(() => undefined);
   // Grouping runs nothing. The cards become one group in reading order; when some of
-  // them are already in one group, the others join it at its end.
+  // them are already in groups, the others join the first of those at its end, and the
+  // other groups merge into it, their members in member order. The first group keeps
+  // its name, display and feeds.
   group = (placementIds: string[]) =>
     this.mutate(`group:${[...placementIds].sort().join(',')}`, async () => {
       const state = this.state;
@@ -965,9 +981,7 @@ export class WorkspaceController {
       if (cards.length < 2 && !cards.some((p) => groupOf(state.groups, p.id)))
         throw new Error('Select two or more cards to group them.');
       const touched = [...new Set(cards.flatMap((p) => groupOf(state.groups, p.id) ?? []))];
-      if (touched.length > 1)
-        throw new Error('These cards are in different groups. Ungroup one of them first.');
-      const [existing] = touched;
+      const [existing, ...merged] = touched;
       if (!existing) {
         await this.client.createGroup({
           braneId: this.braneId,
@@ -977,8 +991,12 @@ export class WorkspaceController {
         });
         return;
       }
-      const joining = cards.filter((p) => !existing.members.includes(p.id)).map((p) => p.id);
+      const joining = [
+        ...merged.flatMap((g) => g.members),
+        ...cards.filter((p) => !touched.some((g) => g.members.includes(p.id))).map((p) => p.id),
+      ];
       if (!joining.length) return;
+      for (const g of merged) await this.client.removeGroup(g.id);
       await this.client.editGroup(existing.id, {
         braneId: this.braneId,
         label: existing.label,
@@ -1003,14 +1021,31 @@ export class WorkspaceController {
     }).catch(() => undefined);
   // Stack piles the members into the first one's space; Region spreads a stack back out
   // on a grid. What the group feeds is the same either way.
-  arrangeGroup = (groupId: string, display: 'region' | 'stack') =>
+  arrangeGroup = (groupId: string, display: Group['display']) =>
     this.mutate(`arrangeGroup:${groupId}`, async () => {
       const state = this.state;
       const group = state?.groups.find((g) => g.id === groupId);
       if (!state || !group) throw new Error('This group is no longer on the brane.');
       if (group.display === display) return;
       const members = tableMembers(state, group);
-      const layout = display === 'stack' ? stackLayout(members) : regionLayout(members);
+      const matrix = display === 'matrix' ? matrixOf(state, group) : null;
+      if (display === 'matrix' && !matrix)
+        throw new Error('A matrix needs the outputs of machines run each over one stack.');
+      // A matrix is laid from the members' corner, moved right until it covers no other
+      // card or machine.
+      const corner = () => {
+        const others = state.placements.filter(
+          (p) => !p.host_placement_id && !group.members.includes(p.id),
+        );
+        const size = matrixFootprint(members, matrix!);
+        return openSpot(others, bounds(members), size.width, size.height);
+      };
+      const layout =
+        display === 'stack'
+          ? stackLayout(members)
+          : matrix
+            ? matrixLayout(members, matrix, corner())
+            : regionLayout(members);
       await this.client.editGroup(groupId, {
         braneId: this.braneId,
         label: group.label,

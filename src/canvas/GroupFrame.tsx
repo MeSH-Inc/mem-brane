@@ -2,12 +2,18 @@ import { memo, useState } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { MAX_GROUP_LABEL } from '../../shared/groups';
 import { CardPort } from './MachineCard';
+import type { Group } from '../../shared/types/domain';
 
 export type GroupData = {
   groupId: string;
   label: string;
-  display: 'region' | 'stack';
+  display: Group['display'];
   count: number;
+  // A matrix's headings, placed from the frame's corner: a row's top, a column's left.
+  matrix?: {
+    rows: { label: string; top: number }[];
+    columns: { label: string; left: number; width: number }[];
+  };
   // Every member is selected.
   chosen: boolean;
   onFeed: (groupId: string, toPlacementId: string, slot: string) => void;
@@ -33,7 +39,11 @@ export const GroupFrame = memo(function GroupFrame({ data }: NodeProps<GroupNode
           <>
             <span className="group-label">{data.label}</span>
             <span className="group-count">
-              {data.display === 'stack' ? `Stack · ${data.count}` : `${data.count} cards`}
+              {data.display === 'stack'
+                ? `Stack · ${data.count}`
+                : data.matrix
+                  ? `${data.matrix.rows.length} × ${data.matrix.columns.length}`
+                  : `${data.count} cards`}
             </span>
             <button
               className="icon-button"
@@ -76,6 +86,36 @@ export const GroupFrame = memo(function GroupFrame({ data }: NodeProps<GroupNode
           onFeed={(machine, slot) => data.onFeed(data.groupId, machine, slot)}
         />
       </header>
+      {data.matrix && (
+        <div className="matrix-headings">
+          {data.matrix.columns.map(
+            (column, index) =>
+              column.left >= 0 && (
+                <span
+                  key={`column:${index}`}
+                  className="matrix-column"
+                  role="columnheader"
+                  style={{ left: column.left, width: column.width }}
+                >
+                  {column.label}
+                </span>
+              ),
+          )}
+          {data.matrix.rows.map(
+            (row, index) =>
+              row.top >= 0 && (
+                <span
+                  key={`row:${index}`}
+                  className="matrix-row"
+                  role="rowheader"
+                  style={{ top: row.top }}
+                >
+                  {row.label}
+                </span>
+              ),
+          )}
+        </div>
+      )}
     </section>
   );
 });

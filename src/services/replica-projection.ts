@@ -69,6 +69,7 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         runs: [],
         derivations: [],
         relationEntries: [],
+        parts: [],
       };
       return brane;
     }

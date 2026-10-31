@@ -60,6 +60,7 @@ async function fixture() {
     relations: [],
     groups: [],
     relationEntries: [],
+    parts: [],
     derivations: [],
   };
   const sent: { path: string; body: any }[] = [];

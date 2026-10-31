@@ -23,6 +23,16 @@ export const BUILT_IN_MACHINES = [
       'Distill {material} into one card: the main claims, where they agree, and where they conflict.',
   },
   {
+    name: 'Split',
+    template:
+      'Split {text} into its separate ideas. Write each as a numbered line ("1. …"), one self-contained sentence, with nothing before or after the list.\nOutput: cards',
+  },
+  {
+    name: 'Diagram',
+    template:
+      'Diagram {material}. First list its main ideas as numbered lines ("1. …"), one short sentence each. Then list how they relate, one line per relation, written as "2 —supports→ 1" with a one- or two-word verb.\nOutput: diagram',
+  },
+  {
     name: 'Extract',
     template: 'From {source}, answer in one short sentence: what is its main finding?',
   },
@@ -73,4 +83,16 @@ export interface MachineInput {
 export function orderMachineInputs<T extends MachineInput>(template: string, inputs: T[]): T[] {
   const slots = machineSlots(template);
   return slots.flatMap((slot) => inputs.filter((input) => input.slot === slot));
+}
+
+// A machine is called by its prompt's words before its first slot ("Split" from
+// "Split {text} into…"), else by the prompt's first 60 characters.
+export function machineName(template: string) {
+  return (
+    template
+      .split('{')[0]
+      .trim()
+      .replace(/[\s,:;]+$/, '')
+      .slice(0, 60) || template.trim().slice(0, 60)
+  );
 }

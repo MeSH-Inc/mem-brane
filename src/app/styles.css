@@ -2531,6 +2531,38 @@ summary:focus-visible {
 .group-frame .react-flow__handle {
   opacity: 0;
 }
+/* A matrix: a column per machine, headed by its question, and a row per card it ran
+   over, headed by that card's first words. */
+.group-frame.matrix {
+  position: relative;
+  border-style: solid;
+  border-color: #b9c3a8;
+}
+.matrix-headings {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.matrix-column,
+.matrix-row {
+  position: absolute;
+  overflow: hidden;
+  color: #4e5547;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.matrix-column {
+  top: 40px;
+  height: 48px;
+  display: flex;
+  align-items: flex-end;
+}
+.matrix-row {
+  left: 12px;
+  width: 146px;
+  max-height: 4em;
+}
 .slot-chip.group .slot-chip-label {
   font-weight: 600;
 }

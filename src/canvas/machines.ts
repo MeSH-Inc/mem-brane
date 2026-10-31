@@ -81,11 +81,15 @@ const sameList = (a: string[], b: string[]) =>
 export function answerStaleness(
   scene: Pick<
     BraneState,
-    'blocks' | 'placements' | 'relations' | 'runs' | 'derivations' | 'relationEntries'
+    'blocks' | 'placements' | 'relations' | 'runs' | 'derivations' | 'relationEntries' | 'parts'
   >,
   outputBlockId: string,
 ) {
-  const run = scene.runs.find((r) => r.output_block_id === outputBlockId);
+  // A card an answer was split into is that run's output as much as the answer is.
+  const runId = scene.parts.find((p) => p.blockId === outputBlockId)?.runId;
+  const run = scene.runs.find((r) =>
+    runId ? r.id === runId : r.output_block_id === outputBlockId,
+  );
   const frozen = scene.derivations.filter((d) => d.outputBlockId === outputBlockId);
   const version = new Map(scene.blocks.map((b) => [b.id, b.version]));
   const sourcesChanged = frozen.some(

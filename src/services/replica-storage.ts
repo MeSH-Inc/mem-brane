@@ -33,7 +33,7 @@ export class IndexedReplicaStorage implements ReplicaStorage {
   constructor(private name = 'mem-brane-local') {}
   private open() {
     return (this.database ??= new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(this.name, 5);
+      const request = indexedDB.open(this.name, 6);
       request.onupgradeneeded = (event) => {
         if (event.oldVersion === 0) {
           request.result.createObjectStore('replicas');
@@ -44,12 +44,19 @@ export class IndexedReplicaStorage implements ReplicaStorage {
         records.onsuccess = () => {
           const cursor = records.result;
           if (!cursor) return;
-          // Version 4 adds arrows, and version 5 groups and the arrows each run sent; a
-          // stored workspace without them has none.
+          // Version 4 adds arrows, version 5 groups and the arrows each run sent, and
+          // version 6 the cards answers were split into; a stored workspace without them
+          // has none.
           const workspaces = Object.fromEntries(
             Object.entries(cursor.value.workspaces ?? {}).map(([id, workspace]) => [
               id,
-              { relations: [], groups: [], relationEntries: [], ...(workspace as object) },
+              {
+                relations: [],
+                groups: [],
+                relationEntries: [],
+                parts: [],
+                ...(workspace as object),
+              },
             ]),
           );
           cursor.update({ ...cursor.value, workspaces, fetches: {} });

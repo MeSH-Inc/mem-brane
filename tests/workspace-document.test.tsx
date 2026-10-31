@@ -58,6 +58,7 @@ const state: BraneState = {
   relations: [],
   groups: [],
   relationEntries: [],
+  parts: [],
   derivations: [],
 };
 it('reuses equal refreshes and keeps scene identity during content, stream and command changes', () => {

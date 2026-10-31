@@ -34,6 +34,7 @@ for (const mode of ['explicit Focus', 'mobile default'] as const) {
       relations: [],
       groups: [],
       relationEntries: [],
+      parts: [],
       derivations: [],
     };
     await page.route('**/api/**', (route) => {

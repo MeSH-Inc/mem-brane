@@ -56,6 +56,7 @@ const state: BraneState = {
   relations: [],
   groups: [],
   relationEntries: [],
+  parts: [],
   derivations: [],
 };
 const workspace = new WorkspaceDocument();

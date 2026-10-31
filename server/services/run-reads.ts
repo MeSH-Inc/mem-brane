@@ -2,7 +2,7 @@ import type { RunRecord } from '../db/records.js';
 import type { RunSummary, RunDetail } from '../../shared/contracts.js';
 import { readInputs } from './context-reader.js';
 import type { DB } from '../db/index.js';
-import type { Run, Derivation, RelationEntry } from '../../shared/types/domain.js';
+import type { Run, Derivation, RelationEntry, RunPart } from '../../shared/types/domain.js';
 import type { RunPage } from '../../shared/types/history.js';
 import { canReadBrane, DomainError, requireOwned } from '../domain/access.js';
 
@@ -18,6 +18,9 @@ export function readWorkspaceRuns(db: DB, actor: string, braneId: string): Run[]
     CROSS JOIN runs r INDEXED BY runs_output_block ON r.output_block_id=p.block_id
     WHERE r.owner_id=?
     UNION
+    SELECT x.run_id FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p
+    CROSS JOIN run_parts x ON x.block_id=p.block_id
+    UNION
     SELECT id FROM runs INDEXED BY runs_brane_active WHERE brane_id=?
     AND status IN ('queued','claimed','running','cancel_requested')
   ) SELECT ${fields},COALESCE(c.text,'') partial,
@@ -32,7 +35,7 @@ export function readWorkspaceRuns(db: DB, actor: string, braneId: string): Run[]
   LEFT JOIN blocks machine ON machine.id=pv.block_id AND machine.kind='machine'
   ORDER BY r.created_at,r.id`,
     )
-    .all(braneId, actor, braneId) as Run[];
+    .all(braneId, actor, braneId, braneId) as Run[];
 }
 
 export function readVisibleDerivations(db: DB, actor: string, braneId: string): Derivation[] {
@@ -41,7 +44,7 @@ export function readVisibleDerivations(db: DB, actor: string, braneId: string): 
   // the size of the owner's run history. The unique index enforces one producer.
   return db
     .prepare(
-      `SELECT r.id runId,i.kind,i.label,v.block_id sourceBlockId,i.revision_id sourceRevisionId,v.source_version sourceVersion,
+      `SELECT * FROM (SELECT r.id runId,i.kind,i.label,v.block_id sourceBlockId,i.revision_id sourceRevisionId,v.source_version sourceVersion,
     r.output_block_id outputBlockId,i.position,l.anchor_placement_id anchorPlacementId,
     l.output_placement_id outputPlacementId
     FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p
@@ -49,9 +52,36 @@ export function readVisibleDerivations(db: DB, actor: string, braneId: string): 
     CROSS JOIN context_entries i ON i.context_id=r.context_id AND i.kind IN ('source','reference')
     JOIN block_revisions v ON v.id=i.revision_id
     LEFT JOIN run_placements l ON l.run_id=r.id
-    WHERE r.owner_id=? ORDER BY r.created_at,i.position`,
+    WHERE r.owner_id=?
+    UNION ALL
+    SELECT r.id runId,i.kind,i.label,v.block_id sourceBlockId,i.revision_id sourceRevisionId,v.source_version sourceVersion,
+    x.block_id outputBlockId,i.position,l.anchor_placement_id anchorPlacementId,NULL outputPlacementId
+    FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p
+    CROSS JOIN run_parts x ON x.block_id=p.block_id
+    JOIN runs r ON r.id=x.run_id
+    CROSS JOIN context_entries i ON i.context_id=r.context_id AND i.kind IN ('source','reference')
+    JOIN block_revisions v ON v.id=i.revision_id
+    LEFT JOIN run_placements l ON l.run_id=r.id
+    WHERE r.owner_id=?) d
+    ORDER BY (SELECT created_at FROM runs WHERE id=d.runId),d.runId,d.outputBlockId,d.position`,
     )
-    .all(braneId, actor) as Derivation[];
+    .all(braneId, actor, braneId, actor) as Derivation[];
+}
+
+// The cards a visible run's answer was split into, in item order: each is an output of
+// the run as much as its whole answer is.
+export function readVisibleParts(db: DB, actor: string, braneId: string): RunPart[] {
+  canReadBrane(db, actor, braneId);
+  return db
+    .prepare(
+      `SELECT x.run_id runId,x.block_id blockId,x.position FROM run_parts x
+    JOIN runs r ON r.id=x.run_id
+    WHERE r.owner_id=? AND x.run_id IN (
+      SELECT x2.run_id FROM (SELECT DISTINCT block_id FROM placements WHERE brane_id=?) p
+      CROSS JOIN run_parts x2 ON x2.block_id=p.block_id
+    ) ORDER BY x.run_id,x.position`,
+    )
+    .all(actor, braneId) as RunPart[];
 }
 
 // The relations each visible output's run sent, by the blocks of the inputs they
