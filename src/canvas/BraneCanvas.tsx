@@ -34,7 +34,7 @@ import { frame, groupOf, STACK_EDGES, tableMembers } from './groups';
 import { matrixOf, MATRIX_COLUMN_HEADER, MATRIX_ROW_HEADER } from './matrix';
 import { MachineCard, CardPort, type MachineActions } from './MachineCard';
 import { RelationEdge, RelationPicker, relationEdges, type ArrowDraft } from './RelationEdge';
-import { answerStaleness, machineStaleness } from './machines';
+import { answerStaleness, machineStaleness, trayOwners } from './machines';
 import { CardBack, type BackActions } from './CardBack';
 import { AskBox, ASK_WIDTH, type AskNode, type AskPosition } from './AskBox';
 import { SpawnButton } from '../components/SpawnButton';
@@ -686,13 +686,20 @@ function Inner(props: Props) {
       })
       .join(' ');
   });
+  const trays = useStore(props.document.store, (s) =>
+    JSON.stringify(s.state ? [...trayOwners(s.state)] : []),
+  );
   const edges = useMemo(
     () => [
       ...derivationEdges(scene, new Set(machineRuns.split(' ').filter(Boolean))),
-      ...machineEdges(scene, new Set(changedFeeds.split(' ').filter(Boolean))),
+      ...machineEdges(
+        scene,
+        new Set(changedFeeds.split(' ').filter(Boolean)),
+        new Map(JSON.parse(trays) as [string, string][]),
+      ),
       ...relationEdges(scene, props.onUnrelate, relabelArrow),
     ],
-    [scene, machineRuns, changedFeeds, props.onUnrelate, relabelArrow],
+    [scene, machineRuns, changedFeeds, trays, props.onUnrelate, relabelArrow],
   );
   return (
     <div

@@ -1,5 +1,10 @@
 import type { BraneState, Feed, Run } from '../../shared/types/domain';
-import { machineSlots, type MachineInput } from '../../shared/machines';
+import {
+  machineDependencies,
+  machineName,
+  machineSlots,
+  type MachineInput,
+} from '../../shared/machines';
 
 type MachineScene = Pick<
   BraneState,
@@ -206,10 +211,13 @@ export function machineStaleness(
         .map(([, r]) => r)
     : [lastRun];
   const batch = new Set(pressed.map((r) => r.model)).size > 1 ? pressed.slice(0, 1) : pressed;
-  const batchIds = new Set(batch.map((r) => r.id));
-  const frozen = scene.derivations.filter((d) => batchIds.has(d.runId));
-  const frozenOf = (runId: string) =>
-    scene.derivations.filter((d) => d.runId === runId).sort((a, b) => a.position - b.position);
+  // A run's sources are listed once for each card its answer became; its own output's
+  // list is the one that counts.
+  const frozenOf = (run: Run) =>
+    scene.derivations
+      .filter((d) => d.runId === run.id && d.outputBlockId === run.output_block_id)
+      .sort((a, b) => a.position - b.position);
+  const frozen = batch.flatMap(frozenOf);
   // Generated blocks are immutable: their frozen version is null and identity suffices.
   const current = (blockId: string) => {
     const b = blockVersion.get(blockId);
@@ -234,7 +242,7 @@ export function machineStaleness(
       part.filter((i) => i.slot === slot).map((i) => `${i.blockId}@${current(i.blockId)}`),
     );
     const then = batch.flatMap((run) =>
-      frozenOf(run.id)
+      frozenOf(run)
         .filter((d) => d.label === slot)
         .map((d) => `${d.sourceBlockId}@${d.sourceVersion}`),
     );
@@ -322,4 +330,72 @@ export function machineTray(
   const own = new Set(produced.map((p) => p.id));
   if (group && group.members.every((id) => own.has(id))) return { groupId: group.id };
   return { placementId: newest.id };
+}
+
+const ACTIVE_RUN = new Set(['queued', 'claimed', 'running', 'cancel_requested']);
+type ChainScene = MachineScene & Pick<BraneState, 'parts'>;
+
+// Which machine's tray each feed source is: a card or group key (a placement id, or
+// "group:" and a group id) to the machine placement whose tray it is now.
+export function trayOwners(scene: ChainScene) {
+  const machines = new Set(scene.blocks.filter((b) => b.kind === 'machine').map((b) => b.id));
+  const owners = new Map<string, string>();
+  for (const placement of scene.placements) {
+    if (!machines.has(placement.block_id) || placement.host_placement_id) continue;
+    const tray = machineTray(scene, placement.id);
+    if (tray)
+      owners.set('groupId' in tray ? `group:${tray.groupId}` : tray.placementId, placement.id);
+  }
+  return owners;
+}
+
+// A machine's place in a chain. It waits on the first machine upstream, in feeding
+// order, that is stale or running: that machine's answer will change what this one is
+// fed. The chain is what one press reruns, in order: every machine upstream that is
+// stale or fed by one that will rerun, then this one.
+export interface MachineChain {
+  waitingOn: { placementId: string; name: string; running: boolean } | null;
+  chain: string[];
+}
+export function machineChain(scene: ChainScene, machinePlacementId: string): MachineChain {
+  const { edges } = machineDependencies(scene);
+  const producersOf = (machine: string) => [
+    ...new Set(edges.filter((e) => e.consumer === machine).map((e) => e.producer)),
+  ];
+  // Every machine upstream, ordered so a producer comes before what it feeds.
+  const ordered: string[] = [];
+  const visiting = new Set<string>();
+  const visit = (machine: string) => {
+    if (ordered.includes(machine) || visiting.has(machine)) return;
+    visiting.add(machine);
+    for (const producer of producersOf(machine)) visit(producer);
+    ordered.push(machine);
+  };
+  visit(machinePlacementId);
+  const upstream = ordered.filter((machine) => machine !== machinePlacementId);
+  const anchored = new Map<string, string>();
+  for (const d of scene.derivations)
+    if (d.anchorPlacementId) anchored.set(d.runId, d.anchorPlacementId);
+  const running = new Set(
+    scene.runs.filter((r) => ACTIVE_RUN.has(r.status)).flatMap((r) => anchored.get(r.id) ?? []),
+  );
+  const stale = (machine: string) => machineStaleness(scene, machine).stale;
+  const rerun = new Set<string>();
+  for (const machine of upstream)
+    if (stale(machine) || running.has(machine) || producersOf(machine).some((p) => rerun.has(p)))
+      rerun.add(machine);
+  const first = upstream.find((machine) => stale(machine) || running.has(machine));
+  if (!first) return { waitingOn: null, chain: [machinePlacementId] };
+  const busy = upstream.find((machine) => running.has(machine));
+  const block = scene.blocks.find(
+    (b) => b.id === scene.placements.find((p) => p.id === (busy ?? first))?.block_id,
+  );
+  return {
+    waitingOn: {
+      placementId: busy ?? first,
+      name: machineName(block?.content.text ?? ''),
+      running: !!busy,
+    },
+    chain: [...upstream.filter((machine) => rerun.has(machine)), machinePlacementId],
+  };
 }

@@ -62,6 +62,9 @@ export function derivationEdges(
 export function machineEdges(
   state: Pick<BraneState, 'placements' | 'feeds' | 'groups'>,
   changedFeeds: Set<string> = new Set(),
+  // A feed from a machine's tray is drawn from that machine's port, so a chain reads as
+  // machines: a source key (placement id, or "group:" and group id) to its machine.
+  trays: Map<string, string> = new Map(),
 ): Edge[] {
   const placed = new Set(state.placements.map((p) => p.id));
   const groups = new Set(state.groups.map((g) => g.id));
@@ -70,12 +73,13 @@ export function machineEdges(
       ? groups.has(f.from_group_id) && groupNodeId(f.from_group_id)
       : placed.has(f.from_placement_id!) && f.from_placement_id!;
     if (!source || !placed.has(f.to_placement_id)) return [];
+    const machine = trays.get(source);
     return [
       {
         id: `feed:${f.id}`,
-        source,
+        source: machine ?? source,
         target: f.to_placement_id,
-        sourceHandle: 'output',
+        sourceHandle: machine ? 'tray' : 'output',
         targetHandle: `slot:${f.slot}`,
         type: 'default',
         selectable: false,

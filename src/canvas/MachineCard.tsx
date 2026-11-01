@@ -7,7 +7,12 @@ import { declareMachineOutput, machineOutput } from '../../shared/machine-output
 import { BlockContent } from '../components/BlockContent';
 import { ActionMenu } from '../components/ActionMenu';
 import { useInteraction } from '../stores/interaction';
-import { MachineControls, useMachineView, type MachineActions } from './MachineControls';
+import {
+  MachineControls,
+  useMachineChain,
+  useMachineView,
+  type MachineActions,
+} from './MachineControls';
 import { MachineBack } from './MachineBack';
 export type { MachineActions } from './MachineControls';
 
@@ -47,6 +52,8 @@ export const MachineCard = memo(function MachineCard({
   const draft = useInteraction((s) => s.drafts[blockId]);
   const flipped = useInteraction((s) => s.flipped.includes(placementId));
   const view = useMachineView(document, placementId, draft);
+  const chain = useMachineChain(document, placementId);
+  const waitingOn = chain?.waitingOn;
   // Slot handles appear and vanish with the template; React Flow must re-measure them
   // or feeds into a new slot have no anchor to draw to.
   const updateNodeInternals = useUpdateNodeInternals();
@@ -54,12 +61,20 @@ export const MachineCard = memo(function MachineCard({
   useEffect(() => updateNodeInternals(placementId), [slotKey, placementId, updateNodeInternals]);
   if (!block) return null;
   const template = draft ?? block.content.text;
-  const state = view?.stale ? 'stale' : view?.ran ? 'ran' : '';
+  const state = waitingOn ? 'waiting' : view?.stale ? 'stale' : view?.ran ? 'ran' : '';
   return (
     <article
       className={`canvas-card machine-card ${selected ? 'selected' : ''} ${view?.stale ? 'stale' : ''}${flipped ? ' flipped' : ''}`}
     >
       <Handle type="source" position={Position.Right} id="output" isConnectable={false} />
+      {/* Feeds from the machine's tray are drawn from its port. */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="tray"
+        isConnectable={false}
+        className="tray-handle"
+      />
       <CardPort
         owner={placementId}
         title="Drag onto another machine’s slot to feed it this machine’s answers"
@@ -72,13 +87,15 @@ export const MachineCard = memo(function MachineCard({
         <span className="card-status">
           {state && (
             <span className={`machine-state ${state}`}>
-              {view?.stale
-                ? view.templateChanged
-                  ? 'stale · prompt edited'
-                  : view.changedSlots.length
-                    ? `stale · ${view.changedSlots.join(', ')} changed`
-                    : 'stale · arrows changed'
-                : 'ran'}
+              {waitingOn
+                ? `${view?.stale ? 'stale' : view?.ran ? 'ran' : 'not run'} · waiting on ${waitingOn.name}`
+                : view?.stale
+                  ? view.templateChanged
+                    ? 'stale · prompt edited'
+                    : view.changedSlots.length
+                      ? `stale · ${view.changedSlots.join(', ')} changed`
+                      : 'stale · arrows changed'
+                  : 'ran'}
             </span>
           )}
         </span>

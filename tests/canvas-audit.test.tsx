@@ -67,6 +67,7 @@ const machine = {
   },
   onFeed: async () => {},
   onFeedTray: async () => {},
+  onRunChain: async () => {},
   onUnfeed: async () => {},
   onFeedMode: async () => {},
   onSaveToWorkshop: () => {},

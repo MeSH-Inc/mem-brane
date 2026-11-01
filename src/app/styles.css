@@ -2708,10 +2708,33 @@ summary:focus-visible {
   grid-row: 1;
   text-align: right;
 }
-/* A machine's tray port sits beside its lever, where its answers come from, clear of
-   the resize handle at the middle of its edge. */
+/* A machine's tray port sits on its edge beside its lever, where its answers come
+   from, clear of the lever and of the resize handle at the middle of its edge. */
 .machine-card > .card-port {
   top: auto;
+  right: -7px;
   bottom: 24px;
   margin-top: 0;
+}
+/* The tray handle sits under the tray port, beside the lever. */
+.machine-card > .react-flow__handle.tray-handle {
+  top: auto;
+  bottom: 31px;
+  opacity: 0;
+  pointer-events: none;
+}
+.machine-state.waiting {
+  color: #a8710f;
+}
+.slot-source summary {
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.machine-footer:has(.machine-only) {
+  flex-wrap: wrap;
+}
+.machine-only {
+  flex-basis: 100%;
+  font-size: 11px;
 }

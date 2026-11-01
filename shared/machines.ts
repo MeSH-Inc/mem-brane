@@ -36,6 +36,11 @@ export const BUILT_IN_MACHINES = [
       'Diagram {material}. First list its main ideas as numbered lines ("1. …"), one short sentence each. Then list how they relate, one line per relation, written as "2 —supports→ 1" with a one- or two-word verb. A relation joins two different ideas; leave an idea that relates to none without one.\nOutput: diagram',
   },
   {
+    name: 'Brief',
+    template:
+      'Write a brief from {material} in five sentences: the situation, what is known, what is disputed, what to decide, and what to do next.',
+  },
+  {
     name: 'Extract',
     template: 'From {source}, answer in one short sentence: what is its main finding?',
   },
@@ -132,7 +137,7 @@ export function closesLoop(edges: MachineEdge[], producers: string[], consumer: 
 
 // The machines whose outputs feed each machine: a feed from a card a machine produced,
 // or from a group holding one, joins the two.
-function machineEdges(
+export function machineDependencies(
   state: Pick<BraneState, 'placements' | 'groups' | 'feeds' | 'runs' | 'parts' | 'derivations'>,
 ) {
   const anchor = new Map<string, string>();
@@ -173,7 +178,7 @@ export function feedClosesLoop(
   source: { placementId: string } | { groupId: string },
   consumer: string,
 ) {
-  const { edges, producers } = machineEdges(state);
+  const { edges, producers } = machineDependencies(state);
   return closesLoop(edges, producers(source), consumer);
 }
 export const LOOP_REFUSAL = 'This feed would close a loop: the machine would feed its own input.';

@@ -16,7 +16,7 @@ import type { WorkspaceCommand } from '../shared/workspace-commands';
 import { machineOutput, parseOutput, MAX_OUTPUT_CARDS } from '../shared/machine-output';
 import { BUILT_IN_MACHINES } from '../shared/machines';
 import type { BraneState } from '../shared/types/domain';
-import { answerStaleness, machineStaleness } from '../src/canvas/machines';
+import { answerStaleness, machineChain, machineStaleness } from '../src/canvas/machines';
 import { columnHeading, matrixLayout, matrixOf } from '../src/canvas/matrix';
 import { tableMembers } from '../src/canvas/groups';
 
@@ -381,5 +381,40 @@ describe('a matrix', () => {
     expect(group.members.slice(3)).toEqual(before.slice(3));
     expect(group.members.slice(0, 3).every((id, index) => id !== before[index])).toBe(true);
     expect(state.groups).toHaveLength(2);
+  });
+});
+
+it('does not wait on a split whose answers are its cards', () => {
+  const papers = [1, 2].map((n) => card(`Paper ${n}`, n * 300));
+  const groupId = uid();
+  apply({
+    type: 'group.create',
+    id: groupId,
+    braneId: brane,
+    label: 'Papers',
+    display: 'stack',
+    members: papers.map((p) => p.placement.id),
+  });
+  const split = machineCard(SPLIT);
+  feed(split.placement.id, 'text', { groupId });
+  apply({
+    type: 'feed.mode',
+    id: readBrane(db, actor, brane).feeds[0].id,
+    braneId: brane,
+    mode: 'each',
+  });
+  press(split.placement.id);
+  const [first, second] = runsOf(split.placement.id);
+  complete(first, '1. A one.\n2. A two.');
+  complete(second, '1. B one.\n2. B two.');
+  let state = readBrane(db, actor, brane);
+  const stack = state.groups.find((g) => g.label === 'Each text')!;
+  const diagram = machineCard(DIAGRAM, 900);
+  feed(diagram.placement.id, 'material', { groupId: stack.id });
+  state = readBrane(db, actor, brane);
+  expect(machineStaleness(state, split.placement.id)).toMatchObject({ ran: true, stale: false });
+  expect(machineChain(state, diagram.placement.id)).toEqual({
+    waitingOn: null,
+    chain: [diagram.placement.id],
   });
 });

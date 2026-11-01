@@ -66,7 +66,7 @@ export function createFeed(db: DB, actor: string, input: FeedRequest): Feed {
         : 'This card already feeds that slot.',
     );
   const producers = sourceProducers(db, input);
-  if (closesLoop(machineEdges(db, input.braneId), producers, input.toPlacementId))
+  if (closesLoop(machineDependencies(db, input.braneId), producers, input.toPlacementId))
     throw new DomainError(
       409,
       'This feed would close a loop: the machine would feed its own input.',
@@ -122,7 +122,7 @@ function sourceProducers(db: DB, input: Pick<FeedRequest, 'fromPlacementId' | 'f
   ) as string[];
 }
 // Every machine-to-machine edge the brane's feeds make.
-function machineEdges(db: DB, braneId: string): MachineEdge[] {
+function machineDependencies(db: DB, braneId: string): MachineEdge[] {
   const feeds = db
     .prepare<
       unknown[],

@@ -428,8 +428,10 @@ test('a stack fed each runs Extract once per paper and the outputs arrive as a s
   record('pile-each', counts);
 });
 
-test('three Extract machines over one stack make a literature matrix', async ({ page }) => {
-  const counts = { actions: 0, typed: 0 };
+test('three Extract machines over one stack make a literature matrix, and a Brief reads it', async ({
+  page,
+}) => {
+  const counts = { actions: 0, typed: 0, brief: 0 };
   const questions = ['what method it uses', 'its sample size', 'its main finding'];
   await serve(page, 4207, async ({ seed, completed, state, origin }) => {
     const papers = Array.from({ length: 4 }, (_, i) => `Paper ${i + 1}: survey of 40 cities.`);
@@ -508,6 +510,24 @@ test('three Extract machines over one stack make a literature matrix', async ({ 
         { intervals: [1000] },
       )
       .toEqual([1, 1, 1, 1]);
+    // A Brief over the whole matrix: the matrix's port feeds its twelve answers.
+    const briefAct = async (work: () => Promise<unknown>) => {
+      counts.brief++;
+      await work();
+    };
+    const brief = await takeOut(page, briefAct, state, braneId, 'Brief');
+    await page.locator('.react-flow__controls-fitview').click();
+    await briefAct(() =>
+      drag(
+        page,
+        '.react-flow__node[data-id^="group:"]:has(.group-frame.matrix) .card-port',
+        brief.locator('[data-feed-slot="material"]'),
+      ),
+    );
+    await expect(brief.locator('.slot-chip')).toContainText('· 12');
+    await briefAct(() => brief.locator('.machine-lever').click());
+    await completed(braneId, 13);
+    await expect(brief.locator('.machine-state')).toHaveText('ran');
   });
   record('matrix', counts);
 });
@@ -585,7 +605,7 @@ test('two models answer one press side by side, and Keep chooses one', async ({ 
   record('compare-models', counts);
 });
 
-test('sources feed Distill, Distill’s tray feeds a Brief, and an edit updates the chain one press per machine', async ({
+test('sources feed Distill, Brief is fed from Distill, and an edit reruns the chain in one press', async ({
   page,
 }) => {
   const counts = { build: 0, update: 0, typed: 0 };
@@ -602,6 +622,7 @@ test('sources feed Distill, Distill’s tray feeds a Brief, and an edit updates 
     await build(() => page.keyboard.press('g'));
     await build(() => page.getByRole('button', { name: 'Stack', exact: true }).click());
     const distill = await takeOut(page, build, state, braneId, 'Distill');
+    const distillPlacement = (await distill.getAttribute('data-id'))!;
     await build(() =>
       drag(
         page,
@@ -610,43 +631,30 @@ test('sources feed Distill, Distill’s tray feeds a Brief, and an edit updates 
       ),
     );
     const distillLever = distill.locator('.machine-lever');
-    const distillPlacement = await distill.getAttribute('data-id');
     await build(() => distillLever.click());
     await completed(braneId, 1);
-    // A second machine, written here, takes Distill's tray.
-    const before = new Set((await state(braneId)).blocks.map((b) => b.id));
-    await build(() => page.getByRole('button', { name: '＋ Add' }).click());
-    await build(() => page.getByRole('button', { name: '⚙ Machine' }).click());
-    let briefPlacement = '';
-    await expect
-      .poll(async () => {
-        const read = await state(braneId);
-        const block = read.blocks.find((b) => b.kind === 'machine' && !before.has(b.id));
-        briefPlacement = read.placements.find((p) => p.block_id === block?.id)?.id ?? '';
-        return briefPlacement;
-      })
-      .not.toBe('');
-    const brief = page.locator(`.react-flow__node[data-id="${briefPlacement}"]`);
-    const prompt = 'Write a council brief from {material} in three sentences.';
-    counts.typed += prompt.length;
-    await build(() => brief.getByRole('textbox', { name: 'Machine prompt' }).fill(prompt));
-    await expect(brief.locator('[data-feed-slot="material"]')).toBeVisible();
-    // Distill is out of sight past the new machine; the whole table is brought into view.
-    await build(() => page.locator('.react-flow__controls-fitview').click());
+    // Brief comes from the Workshop and is fed from Distill by name: Distill may be out
+    // of sight.
+    const brief = await takeOut(page, build, state, braneId, 'Brief');
+    const briefPlacement = (await brief.getAttribute('data-id'))!;
     await build(() =>
-      drag(
-        page,
-        `.react-flow__node[data-id="${distillPlacement}"] .card-port`,
-        brief.locator('[data-feed-slot="material"]'),
-      ),
+      brief.getByRole('button', { name: 'Feed material from another machine' }).click(),
     );
+    await build(() => brief.getByRole('button', { name: 'Distill', exact: true }).click());
     await expect(brief.locator('[data-feed-slot="material"] .slot-chip')).toHaveCount(1);
+    // The feed is drawn from Distill itself, not from its answer.
+    await expect(
+      page.getByRole('img', { name: `Edge from ${distillPlacement} to ${briefPlacement}` }),
+    ).toHaveCount(1);
     const briefLever = brief.locator('.machine-lever');
     await expect(briefLever).toHaveText(/^Run/);
     await build(() => briefLever.click());
     await completed(braneId, 2);
     await expect(brief.locator('.machine-state')).toHaveText('ran');
-    // A loop is refused as it is drawn: Brief's tray into Distill.
+    // Distill is offered nothing that would close a loop, and a drawn loop is refused.
+    await expect(
+      distill.getByRole('button', { name: 'Feed material from another machine' }),
+    ).toHaveCount(0);
     await page.locator('.react-flow__controls-fitview').click();
     await drag(
       page,
@@ -655,8 +663,9 @@ test('sources feed Distill, Distill’s tray feeds a Brief, and an edit updates 
     );
     await expect(page.getByRole('alert')).toContainText('would close a loop');
     await expect(distill.locator('[data-feed-slot="material"] .slot-chip')).toHaveCount(1);
+    await page.getByRole('alert').getByRole('button').first().click();
 
-    // An edit upstream: Distill goes stale, Brief waits; one press per machine.
+    // An edit upstream: Distill goes stale and Brief waits on it; one press reruns both.
     const editor = page
       .locator(`.react-flow__node[data-id="${cards[0].placementId}"]`)
       .getByRole('textbox', { name: 'Block text' });
@@ -664,24 +673,44 @@ test('sources feed Distill, Distill’s tray feeds a Brief, and an edit updates 
       editor.fill(`${sources[0]} Land sales show the rise began at announcement.`),
     );
     await expect(distill.locator('.machine-state')).toHaveText('stale · material changed');
-    await expect(brief.locator('.machine-state')).toHaveText('ran');
-    await act('update', () => distillLever.click());
-    await completed(braneId, 3);
-    await expect(brief.locator('.machine-state')).toHaveText('stale · material changed');
-    await expect(briefLever).toHaveText(/^Rerun/);
+    await expect(brief.locator('.machine-state')).toHaveText('ran · waiting on Distill');
+    await expect(briefLever).toHaveText(/^Rerun the chain ×2/);
+    await expect(brief.getByRole('button', { name: 'Run this one only' })).toBeVisible();
     await act('update', () => briefLever.click());
     await completed(braneId, 4);
+    await expect(distill.locator('.machine-state')).toHaveText('ran');
     await expect(brief.locator('.machine-state')).toHaveText('ran');
-    // Brief's last run read Distill's newest answer.
+    // Distill answered before Brief was pressed, and Brief read that answer.
     const read = await state(braneId);
-    const newestDistill = read.runs
-      .filter((r) => r.machine_block_id === read.runs[0].machine_block_id)
-      .at(-1)!;
+    const machineOf = (placementId: string) =>
+      read.placements.find((p) => p.id === placementId)!.block_id;
+    const distillRuns = read.runs.filter((r) => r.machine_block_id === machineOf(distillPlacement));
+    const briefRuns = read.runs.filter((r) => r.machine_block_id === machineOf(briefPlacement));
+    expect(briefRuns.at(-1)!.created_at).toBeGreaterThan(distillRuns.at(-1)!.created_at);
     const feeds = read.feeds.filter((f) => f.to_placement_id === briefPlacement);
     expect(
       feeds.map((f) => read.placements.find((p) => p.id === f.from_placement_id)?.block_id),
-    ).toEqual([newestDistill.output_block_id]);
+    ).toEqual([distillRuns.at(-1)!.output_block_id]);
     await page.screenshot({ path: 'test-results/machine-chain.png' });
+
+    // On a 320-pixel phone the same chain reruns from Brief.
+    await editor.fill(`${sources[0]} The rise held for five years.`);
+    await expect(brief.locator('.machine-state')).toHaveText('ran · waiting on Distill');
+    await page.setViewportSize({ width: 320, height: 740 });
+    // A phone opens the brane in Focus; Brief is chosen from the strip.
+    await page.getByRole('button', { name: /^\d+ Write a brief from/ }).click();
+    const lever = page.locator('.machine-lever');
+    await expect(lever).toHaveText(/^Rerun the chain ×2/);
+    await expect(
+      page.getByRole('button', { name: 'Feed material from another machine' }),
+    ).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+    await page.screenshot({ path: 'test-results/machine-chain-phone.png' });
+    await lever.click();
+    await completed(braneId, 6);
+    await expect(lever).toHaveText(/^Run/);
   });
   record('chain', counts);
 });
@@ -946,6 +975,7 @@ interface BraneRead {
   feeds: { to_placement_id: string; from_placement_id: string | null }[];
   runs: {
     id: string;
+    created_at: number;
     model: string;
     status: string;
     output_block_id: string;
@@ -1030,8 +1060,10 @@ async function serve(page: Page, port: number, scenario: (server: Server) => Pro
       completed: (braneId, count) =>
         expect
           .poll(
-            async () => (await state(braneId)).runs.filter((r) => r.status === 'completed').length,
-            { timeout: 20_000 },
+            // A refused read (the account's request limit) counts as not yet.
+            async () =>
+              (await state(braneId)).runs?.filter((r) => r.status === 'completed').length ?? -1,
+            { timeout: 20_000, intervals: [250, 500, 1000] },
           )
           .toBe(count),
     });
@@ -1054,8 +1086,18 @@ async function drag(page: Page, from: string, to: Locator) {
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );
-  const start = await page.locator(from).boundingBox();
-  const end = await to.boundingBox();
+  // A fitted view animates; both ends are read once they have held still for three
+  // reads in a row.
+  let start = await page.locator(from).boundingBox();
+  let end = await to.boundingBox();
+  for (let attempt = 0, still = 0; attempt < 40 && still < 3; attempt++) {
+    await page.waitForTimeout(100);
+    const nextStart = await page.locator(from).boundingBox();
+    const nextEnd = await to.boundingBox();
+    still = JSON.stringify([nextStart, nextEnd]) === JSON.stringify([start, end]) ? still + 1 : 0;
+    start = nextStart;
+    end = nextEnd;
+  }
   if (!start || !end) throw new Error('Feed endpoints are not visible');
   await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
   await page.mouse.down();

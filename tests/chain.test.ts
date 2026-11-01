@@ -13,7 +13,7 @@ import { keepOutput, runMachine } from '../server/services/runs';
 import { completeAttempt, startAttempt } from '../server/services/run-lifecycle';
 import { applyWorkspaceOperation } from '../server/services/workspace-operations';
 import { feedClosesLoop } from '../shared/machines';
-import { machineStaleness, machineTray } from '../src/canvas/machines';
+import { machineChain, machineStaleness, machineTray, trayOwners } from '../src/canvas/machines';
 
 let db: DB, actor: string, brane: string;
 type Machine = ReturnType<typeof createMachineBlock>;
@@ -40,7 +40,7 @@ const finish = () => {
   }
 };
 const state = () => readBrane(db, actor, brane);
-const press = (machine: Machine, models?: string[]) => {
+const press = (machine: Machine, models?: string[], finished = true) => {
   const view = machineStaleness(state(), machine.placement.id);
   const run = runMachine(
     db,
@@ -58,7 +58,7 @@ const press = (machine: Machine, models?: string[]) => {
     },
     limits,
   );
-  finish();
+  if (finished) finish();
   return run;
 };
 const operate = (command: Record<string, unknown>) =>
@@ -206,4 +206,49 @@ it('moves a feed from a compared answer to the kept one', () => {
   const briefRun = state().runs.find((r) => r.output_block_id === outputs[1].block_id)!;
   keepOutput(db, actor, briefRun.id);
   expect(feedsInto(brief).map((f) => f.from_placement_id)).toEqual([outputs[1].id]);
+});
+
+it('waits on the first stale machine upstream, and the chain reruns everything between', () => {
+  press(distill);
+  feed(tray(distill), brief, 'material');
+  press(brief);
+  const third = createMachineBlock(
+    db,
+    actor,
+    brane,
+    { x: 1800, y: 400, width: 400, height: 300 },
+    'Check {claim}.',
+  );
+  feed(tray(brief), third, 'claim');
+  press(third);
+  expect(trayOwners(state()).get((tray(distill) as { placementId: string }).placementId)).toBe(
+    distill.placement.id,
+  );
+  expect(machineChain(state(), third.placement.id)).toEqual({
+    waitingOn: null,
+    chain: [third.placement.id],
+  });
+  updateBlockLiveState(db, actor, { blockId: papers[1].id, text: 'Paper 1, revised.', version: 1 });
+  // Brief is not stale itself, but Distill will change what it is fed; both rerun first.
+  expect(machineStaleness(state(), brief.placement.id).stale).toBe(false);
+  expect(machineChain(state(), third.placement.id)).toEqual({
+    waitingOn: { placementId: distill.placement.id, name: 'Distill', running: false },
+    chain: [distill.placement.id, brief.placement.id, third.placement.id],
+  });
+  expect(machineChain(state(), distill.placement.id).waitingOn).toBe(null);
+  // While Distill runs, the machines downstream wait on it.
+  press(distill, undefined, false);
+  expect(machineChain(state(), brief.placement.id).waitingOn).toEqual({
+    placementId: distill.placement.id,
+    name: 'Distill',
+    running: true,
+  });
+  finish();
+  // Distill has answered: Brief is stale itself, and only Brief waits for Third.
+  expect(machineStaleness(state(), brief.placement.id).stale).toBe(true);
+  expect(machineChain(state(), brief.placement.id).waitingOn).toBe(null);
+  expect(machineChain(state(), third.placement.id).chain).toEqual([
+    brief.placement.id,
+    third.placement.id,
+  ]);
 });

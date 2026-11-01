@@ -266,6 +266,7 @@ it('keeps saved machines in the Workshop beside the built-in ones', () => {
     'Distill',
     'Split',
     'Diagram',
+    'Brief',
     'Extract',
   ]);
   const saved = saveWorkshopMachine(db, actor, 'Method', 'Extract the method of {source}.');

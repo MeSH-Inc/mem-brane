@@ -31,7 +31,7 @@ import {
   machineName,
   type RunMachine,
 } from '../../shared/machines';
-import { machineStaleness, machineTray, openSpot } from '../canvas/machines';
+import { machineChain, machineStaleness, machineTray, openSpot } from '../canvas/machines';
 import {
   bounds,
   groupOf,
@@ -43,8 +43,9 @@ import {
 } from '../canvas/groups';
 import { matrixOf, matrixLayout, matrixFootprint } from '../canvas/matrix';
 
-// How long run status reports gather before one read catches up with them.
-const STATUS_REFRESH_MS = 200;
+// How long run status reports and local changes gather before one read catches up
+// with all of them.
+const REFRESH_GATHER_MS = 200;
 type DraftState = Pick<
   Interaction,
   | 'actor'
@@ -97,7 +98,7 @@ export class WorkspaceController {
   private epoch = 0;
   private active = false;
   private refreshGeneration = 0;
-  private statusRefresh?: ReturnType<typeof setTimeout>;
+  private gatheredRefresh?: ReturnType<typeof setTimeout>;
   private estimateGeneration = 0;
   private lineageGeneration = 0;
   private inspectionGeneration = 0;
@@ -274,7 +275,9 @@ export class WorkspaceController {
         this.emit();
       }),
     );
-    const reconcile = () => this.background(this.refresh());
+    // Every local change and every acknowledgement of one announces itself; a burst of
+    // them (a lasso's saves, an outbox draining) is caught up with by one read.
+    const reconcile = () => this.gatherRefresh();
     const onRun = (event: Event) => this.onRun((event as CustomEvent).detail);
     const before = (event: Event) => {
       if (this.hasPending) event.preventDefault();
@@ -317,8 +320,8 @@ export class WorkspaceController {
     this.timers.clear();
     clearTimeout(this.estimateTimer);
     clearTimeout(this.titleTimer);
-    clearTimeout(this.statusRefresh);
-    this.statusRefresh = undefined;
+    clearTimeout(this.gatheredRefresh);
+    this.gatheredRefresh = undefined;
     clearInterval(this.poll);
     this.delivering.clear();
   }
@@ -465,12 +468,7 @@ export class WorkspaceController {
     if (data.status) {
       // A press of a dozen runs reports each run's start and end; one read a moment after
       // the first report catches up with every report that arrived meanwhile.
-      if (this.statusRefresh) return;
-      const epoch = this.epoch;
-      this.statusRefresh = setTimeout(() => {
-        this.statusRefresh = undefined;
-        if (this.valid(epoch)) this.background(this.refresh());
-      }, STATUS_REFRESH_MS);
+      this.gatherRefresh();
     } else if (data.text !== undefined && this.serverState) {
       this.streamed.set(data.runId, { revision: ++this.streamRevision, text: data.text });
       this.document.install({
@@ -481,6 +479,14 @@ export class WorkspaceController {
       });
     }
   };
+  private gatherRefresh() {
+    if (this.gatheredRefresh) return;
+    const epoch = this.epoch;
+    this.gatheredRefresh = setTimeout(() => {
+      this.gatheredRefresh = undefined;
+      if (this.valid(epoch)) this.background(this.refresh());
+    }, REFRESH_GATHER_MS);
+  }
   private deliverImports() {
     const ready = this.importTasks.filter(
       (t) => t.status === 'ready' && !t.delivered && !this.delivering.has(t.id),
@@ -878,6 +884,50 @@ export class WorkspaceController {
       if (this.valid(epoch)) return accepted.receipt.outputBlockId;
     }).catch(() => undefined);
   };
+  // Rerun a chain: each stale machine upstream, then this one, one press each in feeding
+  // order. A machine is pressed only once the one before it has finished, since it is
+  // fed that machine's new answer; a run that does not finish stops the chain there.
+  runChain = (placementId: string) => {
+    this.requireActive();
+    return this.command(`chain:${placementId}`, async (progress) => {
+      const epoch = this.epoch;
+      const chain = this.state ? machineChain(this.state, placementId).chain : [];
+      let output: string | undefined;
+      for (const machine of chain) {
+        const before = new Set(this.state?.runs.map((r) => r.id));
+        output = await this.runMachine(machine);
+        if (!this.valid(epoch)) return;
+        if (!output) throw new Error('The chain stopped: a machine in it could not be run.');
+        progress('refreshing');
+        const runs = (this.state?.runs ?? []).filter((r) => !before.has(r.id)).map((r) => r.id);
+        const ended = await this.settled(runs);
+        if (!this.valid(epoch)) return;
+        if (ended.some((status) => status !== 'completed'))
+          throw new Error('The chain stopped: a machine in it did not finish its answer.');
+      }
+      return output;
+    }).catch(() => undefined);
+  };
+  // Resolves with the runs' final statuses once none of them is still under way. Status
+  // reports refresh the workspace; a slow refresh here covers a missed report.
+  private settled(runIds: string[]) {
+    const statuses = () =>
+      runIds.map((id) => this.state?.runs.find((r) => r.id === id)?.status ?? 'missing');
+    const done = () =>
+      statuses().every(
+        (status) => !['queued', 'claimed', 'running', 'cancel_requested'].includes(status),
+      );
+    return new Promise<string[]>((resolve) => {
+      if (done()) return resolve(statuses());
+      const timer = setInterval(() => void this.refresh(), 3000);
+      const stop = this.document.store.subscribe(() => {
+        if (!done() && this.active) return;
+        clearInterval(timer);
+        stop();
+        resolve(statuses());
+      });
+    });
+  }
   // Keep one answer of a comparison; the press's other answers go on its back.
   keepOutput = (runId: string) =>
     this.mutate(`keep:${runId}`, async () => {

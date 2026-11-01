@@ -337,6 +337,12 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
         const id = await controller.runMachine(placementId);
         if (id) presentation.getState().reveal(attention, { blockId: id, kind: 'reveal' });
       },
+      onRunChain: async (placementId: string) => {
+        if (needsAccount()) return;
+        const attention = presentation.getState().attention;
+        const id = await controller.runChain(placementId);
+        if (id) presentation.getState().reveal(attention, { blockId: id, kind: 'reveal' });
+      },
       onEstimateMachine: controller.estimateMachine,
       onFeed: controller.feed,
       onFeedTray: controller.feedTray,
