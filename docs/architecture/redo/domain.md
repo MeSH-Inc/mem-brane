@@ -107,6 +107,11 @@ machine._ A feed from a machine would need a second source kind whose inputs dep
 the run history; the cards are already the run's inputs, and moving feeds at the few
 points the tray changes keeps every reader of feeds unchanged.
 
+_Decision (iteration 13): a chain is rerun by the page, one ordinary press per machine
+in feeding order, each after the previous press's runs have ended._ The server keeps
+no notion of a chain: every press is admitted, held against the allowance and recorded
+as before, and a run that does not finish stops the chain.
+
 **Arrow** (brane-scoped, table `relations`): `from_placement_id`, `to_placement_id`,
 `label` (required, 1 to 60 characters). Both ends are cards on the table; removing
 either removes the arrow, and a rerun or Update moves the arrows of the card it

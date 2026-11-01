@@ -1,13 +1,15 @@
 # Redo: a table of cards and machines
 
-Status: iteration 12. Machines, feeds, machines fed from another machine's tray (a
-feed that follows the tray as it is rerun, with loops refused), the slot's **each** mode (one run per card of a
+Status: iteration 13. Machines, feeds, machines fed from another machine's tray (a
+feed that follows the tray as it is rerun, with loops refused, drawn from the port or
+chosen by name with _Feed from…_), chains that show what they wait on and rerun in
+order with one press, the slot's **each** mode (one run per card of a
 fed group, admitted in one press, with the outputs as a stack), **Compare models** (one
 run per model in one press, answers side by side, Keep, chosen on the machine's back),
 the back of a machine (its prompt version and past presses with their cost), outputs of several cards
 (Split's stack of ideas and Diagram's region of cards and arrows, laid out by its
 arrows), the output shape chosen from a machine's menu, Duplicate with feeds, the
-Workshop with Critique, Distill, Split, Diagram and Extract and saved machines, arrows
+Workshop with Critique, Distill, Split, Diagram, Brief and Extract and saved machines, arrows
 (rewordable), groups as regions, stacks and matrices that feed as one, staleness that
 sees edited cards, changed group membership, changed arrows and changed mode, card
 backs, tray history, Update for machines and asked answers, the selection chips, the

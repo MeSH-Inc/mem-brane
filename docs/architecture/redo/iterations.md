@@ -773,22 +773,96 @@ refused with the slot unchanged. Scenario 1 needed no change and still takes 7.
   sight twice, so the test fits the view before drawing from it. A chain wider than the
   screen needs a way to draw a feed without both ends in view.
 
-## Recommended iteration 13
+## Iteration 13: chains that are easy to build and to read
 
-Chains that are easy to build and to read.
+Iteration 13 let a chain be built without both machines in view, showed which machine
+a chain is waiting on, and let one press rerun a chain in order.
 
-1. **Feed from a slot.** A slot row offers _Feed from…_, listing the machines on the
-   brane that could feed it without a loop, by name, so a feed can be drawn without
-   both machines in view. The Brief chain should no longer need the fit view.
-2. **Brief in the Workshop.** A built-in Brief machine (`Write a brief for {audience}
-from {material}`), so scenario 6's second machine is taken out, not typed.
-3. **A chain's state at a glance.** A machine stale only because a machine upstream
-   reran shows _stale · waiting on Distill_ while Distill is itself stale or running,
-   and its lever names the upstream machine to press first; a feed edge from a tray is
-   drawn from the machine's port, not from the card, so the chain reads as machines.
-4. **Run the chain.** On a stale machine whose upstream machines are stale too, the
-   lever's menu offers _Rerun the chain · $…_: one press per machine, in order, each
-   admitted only after the one before completes, with one estimate for all of them and
-   the same refusal when the day's allowance would not cover it.
-5. Measure scenario 6 again (build and update), and scenario 4 with the matrix and a
-   Brief over it.
+- **Feed from a slot.** A slot row offers _Feed from…_, listing by name every machine
+  whose tray could feed it: run, not the machine itself, not feeding that slot already,
+  and not downstream of it. Choosing one makes the same feed as dragging that machine's
+  port. A slot with nothing to offer shows no menu, so a loop is never offered.
+- **Brief in the Workshop.** A built-in Brief machine: _Write a brief from {material}
+  in five sentences: the situation, what is known, what is disputed, what to decide,
+  and what to do next._
+- **Waiting on a machine upstream.** A machine whose upstream machine is stale or
+  running reads _ran · waiting on Distill_ (or _stale · …_), in the stale colour.
+  While Distill runs, the lever reads _Waiting on Distill_ and is disabled.
+- **Feeds drawn from machines.** A feed from a machine's tray is drawn from that
+  machine's port, so a chain reads machine to machine.
+- **Rerun the chain.** On a machine waiting on a stale machine, the lever reads
+  _Rerun the chain ×2 · $…_. One press reruns every stale machine upstream, every
+  machine between them and this one, and this one, in feeding order. Each is pressed
+  only after the one before has finished its answer, and a run that does not finish
+  stops the chain with a message. _Run this one only_ beneath the lever presses just
+  this machine on what it is fed now.
+- **Fewer reads.** Local changes and outbox acknowledgements now gather into one read
+  of the brane 200 ms later, the brane list is read at most once a second, and a
+  session confirmed in the last ten seconds is not asked for again before each edit.
+
+### Decisions taken while building
+
+| Question                                          | Decision                                                                                                                    | Rationale                                                                                                                                                                                    |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Where does _Feed from…_ live?                     | On each slot row, as a menu of machine names.                                                                               | The slot is where a feed lands; naming machines needs neither end in view, which is what the fit view in scenario 6 stood in for, and it works in Focus on a phone, which has no ports.      |
+| Who runs a chain?                                 | The page: it presses each machine through the ordinary machine request, waits for the runs to finish, and presses the next. | Every press stays a press the server already admits, checks against the allowance and records; a server-side chain would need a queue of presses waiting on runs.                            |
+| When is the next machine pressed?                 | When every run of the previous press has ended, read from run reports with a read every 3 s as a backstop.                  | The next machine is fed the previous one's new answer, which the server refuses as an input until it is final.                                                                               |
+| What does the chain's estimate say?               | The sum of each machine's own estimate over what it is fed now; the lever refuses when the sum exceeds today's allowance.   | A downstream machine's new input does not exist before its upstream answers; each press is still held against the allowance at its own admission, so the chain stops rather than overspends. |
+| Which machines does the chain rerun?              | Every machine upstream that is stale or running, or is fed by one that reruns, then this one.                               | A machine between two stale ones is not stale itself until its producer answers, but its answer will change.                                                                                 |
+| What is the lever while an upstream machine runs? | _Waiting on Distill_, disabled; _Run this one only_ stays.                                                                  | Pressing now would answer from the answer about to be replaced; the escape remains for a reader who wants exactly that.                                                                      |
+| Which feeds are drawn from a machine?             | A feed whose source is a machine's tray now: its newest card, or the stack it made.                                         | That feed follows the tray, so the machine is what it reads from; a feed from an older card the machine left is drawn from that card.                                                        |
+| Which scenario holds the matrix?                  | Scenario 3; the recommendation's "scenario 4" was a slip, as scenario 4 is _Ask a region_.                                  | The concept's numbering is the reference for every measurement.                                                                                                                              |
+| What does Brief take?                             | One slot, `{material}`, with a fixed five-part shape.                                                                       | An audience slot would cost a card and a feed in every chain that ends in a brief; the audience can be written into the prompt.                                                              |
+
+### Measured
+
+| Scenario                                    | Actions                                                                                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6. Sources into Distill into a Brief, built | 15 (drop, lasso, `G`, Stack, Add, Workshop, Distill, port, Run, Add, Workshop, Brief, _Feed from…_, Distill, Run), none typed, from 57 characters |
+| 6. The same chain after a source is edited  | 2, from 3 (the edit, _Rerun the chain ×2_)                                                                                                        |
+| 3. The matrix, then a Brief over it         | 22 to the matrix, unchanged, 188 characters typed; then 5 (Add, Workshop, Brief, the matrix's port, Run)                                          |
+
+Scenario 6 needs no typing and no fit view, and keeping it current is one press after
+the edit. The browser test also reruns the chain from Brief in Focus on a 320-pixel
+phone, where nothing overflows. The Brief over the matrix reads all twelve answers in
+one slot.
+
+### Defects found by building it
+
+- Scenario 3 with a Brief reached the account's limit of 240 requests a minute:
+  every local change and every acknowledgement of one made the page read the brane,
+  the budget and the brane list, and every edit sent from the outbox asked for the
+  session first. Over the scenario the page made 219 requests before the Brief was
+  even taken out; it now makes 125 with the Brief.
+- A machine whose answers were split into cards read as stale once they arrived: its
+  runs' sources are listed once for every card, so it compared more inputs than it
+  had sent. Since iteration 10 this only coloured Split; with chains, Diagram fed from
+  Split offered _Rerun the chain_ and reran Split. Staleness now reads the sources of
+  the run's own output only.
+- The tray handle that feed edges start from lay over the tray port and took its drags;
+  it no longer takes the pointer. The port itself overlapped the end of the lever and
+  now sits on the machine's edge.
+- A machine waiting on a running machine asked for an estimate over an answer still
+  being written, which the server refuses; it now waits.
+- A drag started while a fitted view was still animating missed its target; the test's
+  drag now waits for both ends to hold still.
+
+## Recommended iteration 14
+
+Chains as things to keep, and the canvas at scale.
+
+1. **A chain stays current on request.** A machine's back offers _Keep current_: when
+   any machine upstream reruns, this one is marked _due_ and its lever reads _Run (due)_,
+   and the brane header counts machines due with one _Run all due · $…_ in feeding
+   order. Nothing runs without a press; the header press is the one press.
+2. **A chain's receipt.** The back of the last machine in a chain lists the chain's
+   last full rerun: each machine, its model, its runs and their settled cost, and the
+   total.
+3. **Large tables.** Measure scenario 2 with twelve papers through Split each and
+   Diagram, and scenario 3 with twelve papers and five questions (60 answers): frame
+   time while panning, the page's requests per minute against the 240 limit, and the
+   time from press to matrix. Fix what crosses a frame budget of 16 ms or the limit.
+4. **The machine's port on a phone.** Focus on a phone shows a machine's answers and
+   offers _Feed into…_, the mirror of _Feed from…_, so a chain can be built without a
+   desktop.
+5. Measure scenarios 6 and 3 again, and scenario 7 (tune a prompt) for the first time.
