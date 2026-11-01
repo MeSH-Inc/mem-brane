@@ -63,6 +63,8 @@ const unavailable = (error: unknown) =>
     : error instanceof TypeError ||
       (error instanceof DOMException && ['AbortError', 'TimeoutError'].includes(error.name));
 
+// How long a confirmed session is trusted before the outbox asks for it again.
+const SESSION_CONFIRMATION_MS = 10_000;
 export class WorkspaceReplica {
   // Replica identity is a content library, independent of the login principal.
   actor?: string;
@@ -70,6 +72,7 @@ export class WorkspaceReplica {
   guest = false;
   private listeners = new Set<() => void>();
   private checking?: { actor: string; generation: number; result: Promise<boolean> };
+  private confirmed?: { actor: string; generation: number; time: number };
   private scheduler: ReplicaScheduler;
   private channel?: BroadcastChannel;
   private reads = new Map<string, Promise<unknown>>();
@@ -441,7 +444,21 @@ export class WorkspaceReplica {
   private checkSession(actor: string, generation: number) {
     if (this.checking?.actor === actor && this.checking.generation === generation)
       return this.checking.result;
-    const result = this.validateSession(actor, generation);
+    // A session confirmed moments ago still holds; an outbox draining edit by edit would
+    // otherwise ask the server for it before every edit. Every request is still
+    // authenticated by the server.
+    const confirmed = this.confirmed;
+    if (
+      confirmed?.actor === actor &&
+      confirmed.generation === generation &&
+      Date.now() - confirmed.time < SESSION_CONFIRMATION_MS &&
+      this.status.connected
+    )
+      return Promise.resolve(true);
+    const result = this.validateSession(actor, generation).then((valid) => {
+      if (valid) this.confirmed = { actor, generation, time: Date.now() };
+      return valid;
+    });
     this.checking = { actor, generation, result };
     const cleanup = () => {
       if (this.checking?.result === result) this.checking = undefined;

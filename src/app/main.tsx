@@ -205,11 +205,32 @@ function Shell() {
         await navigate({ to: '/b/$braneId', params: { braneId: entry.braneId } });
       })
       .catch((e) => setError(e.message));
-  const refreshBranes = () =>
+  // The list of branes changes rarely: it is read at once, and a burst of local changes
+  // after that is caught up with by one more read a second later.
+  const listTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const listAgain = useRef(false);
+  const readBranes = () =>
     void client
       .branes()
       .then(setBranes)
       .catch((e) => setError(e.message));
+  const refreshBranes = () => {
+    if (listTimer.current) {
+      listAgain.current = true;
+      return;
+    }
+    readBranes();
+    const settle = () => {
+      listTimer.current = setTimeout(() => {
+        listTimer.current = undefined;
+        if (!listAgain.current) return;
+        listAgain.current = false;
+        readBranes();
+        settle();
+      }, 1000);
+    };
+    settle();
+  };
   useEffect(() => {
     const braneId = /^\/b\/([^/]+)/.exec(window.location.pathname)?.[1];
     void openEntry(braneId)
