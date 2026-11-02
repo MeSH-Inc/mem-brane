@@ -183,6 +183,16 @@ machines due._ Only a brane with a machine kept current is read for it. The page
 computes staleness itself for everything it shows; the list's count is as of the last
 read of the list, which is read again when an answer finishes.
 
+**Quote.** A passage selected in a PDF or webpage card becomes an authored text card:
+the passage in quotation marks, then a citation line (the PDF's file name and page, or
+the webpage's address), with an arrow _quotes_ to the source card. Nothing else records
+it: the card feeds and edits like any other. _(Implemented in iteration 16.)_
+
+_Decision (iteration 16): a read made while operations are in flight answers from the
+replica alone, unless an operation is paused on a refusal._ The acknowledgement that
+drains the outbox announces a change and so reads the server; reading behind every save
+as well read each save twice.
+
 **Reply thread.** A run that continues a conversation names, as `continued_block_id`,
 the answer whose message its context's parent is. The canvas draws a dotted _reply_
 line from that answer to the reply's answer, so two replies to one answer read as two

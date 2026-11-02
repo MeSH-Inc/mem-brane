@@ -1033,3 +1033,94 @@ Fewer reads, and the last scenario.
    beside the first reply, rather than level with the answer, so a conversation reads
    top to bottom.
 6. Measure scenarios 4, 5 and 8 again.
+
+## Iteration 16: quotes, and fewer reads
+
+Iteration 16 built _Quote to card_, the last scenario never run, cut the requests a busy
+minute spends by reading only when something can have changed, said on a frame when an
+answer was cut at 24 cards, and laid replies beneath their answer.
+
+- **Quote to card.** Selecting a passage in a PDF's page text or a webpage's text shows
+  _❝ Quote_, and `Q` presses it. The passage becomes an ordinary authored card beside
+  its source, in quotation marks, then _— Research.pdf, page 1_ (or the webpage's
+  address), with an arrow _quotes_ to the source. It works the same in Focus and on a
+  phone. A PDF's page text can now be selected on the canvas, which it could not be.
+- **Fewer reads.**
+  - A run starting changes only its own status, which its report carries; the brane is
+    read when a run settles.
+  - A read made while operations are in flight answers from the replica: the
+    acknowledgement that drains the outbox brings the server's state. With an
+    operation paused on a refusal, the server is still read behind the local answer.
+  - The allowance is read when a read shows a run new or with a new status, at most
+    once in 4 s.
+  - The list of branes is read after a local change only when a brane is created or
+    retitled, and after a finished answer only when it belongs to a brane not open
+    here. The open brane's count of machines due comes from its page.
+- **A cut answer says so.** A group whose answers listed more items than became cards
+  reads _Diagram · 24 cards · of 48 listed_; its title says every item is in the whole
+  answer, on the first card's back.
+- **Replies beneath.** A Reply's Ask box opens beneath the answer it continues, so a
+  second reply lies beside the first, beneath their answer.
+
+### Decisions taken while building
+
+| Question                                         | Decision                                                                                                             | Rationale                                                                                                           |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| What is a quote?                                 | An authored text card: the passage in quotation marks and a citation line, with an arrow _quotes_ to its source.     | It feeds and edits like any card; the arrow is the visible link back, and no new kind or table is needed.           |
+| How is `Q` heard in a webpage's editable text?   | With a passage selected, `Q` quotes it instead of typing over it; with nothing selected, it types _q_.               | Replacing a selected passage with one letter is not something anyone means; the key stays a letter everywhere else. |
+| How is `Q` heard over a PDF's page text?         | While a passage of that PDF is selected, the page listens for `Q` outside any text field.                            | Page text cannot hold focus, so the card cannot hear the key itself.                                                |
+| What does a quote cite?                          | The PDF's file name and the page the selection began on, or the webpage's address.                                   | Those are what the card holds; a passage cut to fit one card keeps its citation.                                    |
+| Why not send changed state with each run report? | Reads were cut where they were wasted instead: run starts, reads while saves are in flight, the allowance, the list. | Those were 60 of the minute's requests; a change-set protocol is larger work for the 31 reads that remain.          |
+| Is a read in flight answered locally?            | Yes, unless an operation is paused on a refusal.                                                                     | The acknowledgement reads the server anyway; a paused operation could otherwise keep the page from ever reading it. |
+| Where does the open brane's due count come from? | Its page, which projects staleness on every edit; the list's own count holds for the others.                         | The list need not be read after every edit, and the count is right offline and before saves land.                   |
+| When does a frame say an answer was cut?         | When its cards' answers listed more numbered items than became cards.                                                | It is the one fact the cards alone cannot show.                                                                     |
+| Where does a reply open?                         | Beneath the answer it continues, sliding right past earlier replies.                                                 | A conversation then reads down the table, and its branches read as siblings of one another, not of the answer.      |
+
+### Measured
+
+| Scenario                       | Result                                                                                                                                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 9. Quote to card (first time)  | 5 actions on the canvas (drop the PDF, Load page text, open the page, select, `Q`), none typed; on a 320-pixel phone 5 (open, page, select, _❝ Quote_)                                     |
+| 8. Branch a conversation       | 12 actions, 91 characters, unchanged; both replies beneath the answer, the second 420 to the right of the first, each joined by a _reply_ line                                             |
+| 4. Ask a region                | 4 actions, 63 characters, unchanged; grouped first, 5                                                                                                                                      |
+| 5. Pick a model by looking     | 5 actions, unchanged                                                                                                                                                                       |
+| 3 at scale: the 60-cell matrix | At most 76 requests a minute under the full suite (77 to 88 alone), from 116 to 126; the busiest minute: 31 brane reads, 21 saves, 6 allowance reads, 2 list reads, 5 presses, 5 estimates |
+| 2 at scale: 24 papers          | At most 52 requests a minute, from 77; the frame reads _of 48 listed_; frames 16.7 ms                                                                                                      |
+| 2 at scale: twelve papers      | At most 35 requests a minute, from 49                                                                                                                                                      |
+
+Every scenario of the concept now runs as a browser journey. The sixty-cell matrix's
+busiest minute is under the aim of 90 and a third of the account's limit; what is left
+is one brane read per settled gather of runs and one save per change.
+
+### Defects found by building it
+
+- A PDF's page text could not be selected on the canvas: cards take no text selection,
+  and the page text did not ask for it.
+- Each save was read twice: once when made (behind the local answer) and once when
+  acknowledged.
+- An acknowledgement of edits sent with a press announced a change to the list of
+  branes, so every press read the list.
+- Once, early in this iteration, the matrix journey failed a lever's text check; nine
+  repeated runs and the full suite passed after it, and it did not recur.
+
+## Recommended iteration 17
+
+The table offline, and quoting the web.
+
+1. **Quote from a webpage in a browser journey.** Serve a page from the test's own
+   server, import it, select a passage in its text and press `Q`; check the citation is
+   the address, and that a quote of a passage longer than a card is cut with its
+   citation kept.
+2. **Quote and branch offline.** With the connection dropped, quote a passage, reply to
+   an answer (refused politely: a run needs the server), and lay out a matrix; reconnect
+   and check every card, arrow and place arrives in one or two requests.
+3. **Fewer saves while typing a prompt.** The matrix's 21 saves are mostly a machine's
+   prompt saved as it is typed. Save a prompt once typing pauses for a second, and
+   measure saves per typed prompt.
+4. **Scenario 3 on a phone.** Build the literature matrix at 320 pixels in Focus:
+   three Extract machines fed **each**, then the matrix; record its actions and where
+   the phone needs more than the desktop.
+5. **Quote from an image.** An image card's selection of a region becomes a card that
+   crops the original, citing it; decide whether a crop is a new asset or a view of the
+   original, and record the decision.
+6. Measure scenarios 1, 2 and 9 again.

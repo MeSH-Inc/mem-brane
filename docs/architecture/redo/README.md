@@ -1,6 +1,7 @@
 # Redo: a table of cards and machines
 
-Status: iteration 15. Machines, feeds, machines fed from another machine's tray (a
+Status: iteration 16. Quote to card from a PDF or webpage card, replies that open beneath
+the answer they continue, frames that say when an answer was cut at 24 cards. Machines, feeds, machines fed from another machine's tray (a
 feed that follows the tray as it is rerun, with loops refused, drawn from the port or
 chosen by name with _Feed from…_ and _Feed into…_, each option priced before the feed
 is made), chains that show what they wait on and rerun in order with one press,

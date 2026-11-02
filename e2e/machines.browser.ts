@@ -1343,9 +1343,10 @@ test('at scale: twelve papers and five questions make a sixty-cell matrix', asyn
     pan = await panFrames(page);
     counts.requestsPerMinute = requests();
     record('scale-matrix-requests', requests.paths());
-    // Laying out the matrix saves every card's place in one request, not one each. The
-    // busiest minute measures 115 to 126 with the load on the machine; before it was 186.
-    expect(counts.requestsPerMinute).toBeLessThan(130);
+    // Saves travel together, a read made while they are in flight answers locally, and
+    // the list and the allowance are read only when they can change: 76 to 88 requests
+    // in the busiest minute (186 in iteration 14).
+    expect(counts.requestsPerMinute).toBeLessThan(90);
   });
   record('scale-matrix', { ...counts, pan });
 });
