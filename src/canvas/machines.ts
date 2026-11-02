@@ -399,3 +399,127 @@ export function machineChain(scene: ChainScene, machinePlacementId: string): Mac
     chain: [...upstream.filter((machine) => rerun.has(machine)), machinePlacementId],
   };
 }
+
+// One press of a machine's lever: the runs it admitted, together, each, or one per
+// compared model.
+export interface Press {
+  id: string;
+  created_at: number;
+  models: string[];
+  runs: number;
+  // Each status among the press's runs, with how many runs have it.
+  statuses: [string, number][];
+  // The press's cost, once every run's usage is settled.
+  confirmed_microusd: number | null;
+}
+const anchors = (scene: Pick<BraneState, 'derivations'>) => {
+  const anchored = new Map<string, string>();
+  for (const d of scene.derivations)
+    if (d.anchorPlacementId) anchored.set(d.runId, d.anchorPlacementId);
+  return anchored;
+};
+// A machine's presses, newest first.
+export function machinePresses(
+  scene: Pick<BraneState, 'runs' | 'derivations'>,
+  machinePlacementId: string,
+): Press[] {
+  const anchored = anchors(scene);
+  const presses = new Map<string, Press>();
+  for (const run of scene.runs) {
+    if (anchored.get(run.id) !== machinePlacementId) continue;
+    const id = run.batch_id ?? run.id;
+    const press = presses.get(id) ?? {
+      id,
+      created_at: run.created_at,
+      models: [],
+      runs: 0,
+      statuses: [],
+      confirmed_microusd: 0,
+    };
+    press.created_at = Math.min(press.created_at, run.created_at);
+    if (!press.models.includes(run.model)) press.models.push(run.model);
+    press.runs += 1;
+    const status = press.statuses.find(([name]) => name === run.status);
+    if (status) status[1] += 1;
+    else press.statuses.push([run.status, 1]);
+    press.confirmed_microusd =
+      press.confirmed_microusd === null || run.confirmed_microusd === null
+        ? null
+        : press.confirmed_microusd + run.confirmed_microusd;
+    presses.set(id, press);
+  }
+  return [...presses.values()].sort((a, b) => b.created_at - a.created_at);
+}
+
+// What a machine's newest answer was made from: its last press and, for every card that
+// press read which another machine wrote, that machine's press, and so on upstream.
+// Upstream first; a machine appears once, at the press its answer came from.
+export function chainReceipt(scene: ChainScene, machinePlacementId: string) {
+  const anchored = anchors(scene);
+  const producer = new Map<string, Run>();
+  for (const run of scene.runs) producer.set(run.output_block_id, run);
+  const byId = new Map(scene.runs.map((r) => [r.id, r]));
+  for (const part of scene.parts) {
+    const run = byId.get(part.runId);
+    if (run) producer.set(part.blockId, run);
+  }
+  const receipt: { placementId: string; name: string; press: Press }[] = [];
+  const seen = new Set<string>();
+  const visit = (machine: string, run: Run) => {
+    const pressId = run.batch_id ?? run.id;
+    if (seen.has(machine)) return;
+    seen.add(machine);
+    const runs = scene.runs.filter((r) => (r.batch_id ?? r.id) === pressId);
+    for (const pressed of runs)
+      for (const d of scene.derivations)
+        if (d.runId === pressed.id && d.outputBlockId === pressed.output_block_id) {
+          const made = producer.get(d.sourceBlockId);
+          const upstream = made && anchored.get(made.id);
+          if (made && upstream && upstream !== machine) visit(upstream, made);
+        }
+    const press = machinePresses({ runs, derivations: scene.derivations }, machine)[0];
+    const block = scene.blocks.find(
+      (b) => b.id === scene.placements.find((p) => p.id === machine)?.block_id,
+    );
+    if (press)
+      receipt.push({ placementId: machine, name: machineName(block?.content.text ?? ''), press });
+  };
+  const last = scene.runs.filter((r) => anchored.get(r.id) === machinePlacementId).at(-1);
+  if (last) visit(machinePlacementId, last);
+  return receipt;
+}
+
+// Machines in feeding order: a machine after every machine that feeds it.
+export function feedingOrder(scene: ChainScene, machines: Iterable<string>) {
+  const { edges } = machineDependencies(scene);
+  const wanted = new Set(machines);
+  const ordered: string[] = [];
+  const visit = (machine: string, path: Set<string>) => {
+    if (ordered.includes(machine) || path.has(machine)) return;
+    path.add(machine);
+    for (const edge of edges) if (edge.consumer === machine) visit(edge.producer, path);
+    path.delete(machine);
+    if (wanted.has(machine)) ordered.push(machine);
+  };
+  for (const machine of wanted) visit(machine, new Set());
+  return ordered;
+}
+
+// The machines kept current that are due: stale, or waiting on a machine upstream. The
+// due run is every one of their chains, together, in feeding order; it waits while any
+// machine in it is running.
+export function dueMachines(scene: ChainScene & Pick<BraneState, 'keptCurrent'>) {
+  const placed = new Set(scene.placements.filter((p) => !p.host_placement_id).map((p) => p.id));
+  const due: string[] = [];
+  const chained = new Set<string>();
+  let waitingOn: MachineChain['waitingOn'] = null;
+  for (const machine of scene.keptCurrent) {
+    if (!placed.has(machine)) continue;
+    const chain = machineChain(scene, machine);
+    if (!chain.waitingOn && !machineStaleness(scene, machine).stale) continue;
+    due.push(machine);
+    for (const member of chain.chain) chained.add(member);
+    if (chain.waitingOn?.running) waitingOn = chain.waitingOn;
+  }
+  return { due, run: feedingOrder(scene, chained), waitingOn };
+}

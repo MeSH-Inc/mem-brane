@@ -44,7 +44,7 @@ export const CardBack = memo(function CardBack({
   const receipt = useStore(document.store, (s) => {
     const run = s.runs[blockId];
     return run
-      ? `${new Date(run.created_at).toLocaleString()} · ${run.model === 'mock' ? 'Local mock' : run.model} · ${statusLabels[run.status] ?? run.status}`
+      ? `${new Date(run.created_at).toLocaleString()} · ${run.model === 'mock' ? 'Local mock' : run.model} · ${statusLabels[run.status] ?? run.status}${run.machine_version !== null ? ` · prompt version ${run.machine_version}` : ''}`
       : '';
   });
   // A primitive key keeps the back still while unrelated cards stream or move.
@@ -162,6 +162,7 @@ export const CardBack = memo(function CardBack({
               <header>
                 <span className="eyebrow" title={new Date(item.createdAt).toLocaleString()}>
                   {item.earlier ? 'Earlier version' : 'Development'}
+                  {item.promptVersion !== null && ` · prompt version ${item.promptVersion}`}
                 </span>
                 {item.runId && (
                   <button className="text-button" onClick={() => actions.onInspect(item.runId!)}>
@@ -197,12 +198,14 @@ interface BackItem {
   runId?: string;
   createdAt: number;
   earlier: boolean;
+  // The machine prompt's version the card's run read; null when no machine ran it.
+  promptVersion: number | null;
 }
 // A development is a developed output; every other generated card on a back is an
 // earlier version that a rerun or an Update replaced.
 export function backItems(
   placements: { id: string; block_id: string; host_placement_id: string | null }[],
-  runs: Record<string, { id: string; created_at: number }>,
+  runs: Record<string, { id: string; created_at: number; machine_version: number | null }>,
   derivations: { outputBlockId: string; kind: string }[],
   hostPlacementId: string,
 ): BackItem[] {
@@ -215,6 +218,7 @@ export function backItems(
         blockId: p.block_id,
         runId: run?.id,
         createdAt: run?.created_at ?? 0,
+        promptVersion: run?.machine_version ?? null,
         earlier:
           !!run && !derivations.some((d) => d.outputBlockId === p.block_id && d.kind === 'source'),
       };

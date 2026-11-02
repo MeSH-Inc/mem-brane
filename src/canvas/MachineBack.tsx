@@ -4,18 +4,7 @@ import type { WorkspaceDocument } from '../services/workspace-document';
 import { useInteraction } from '../stores/interaction';
 import { statusLabels } from '../lib/labels';
 import { formatUsd } from '../lib/format';
-
-// One press of the lever: the runs it admitted, together, each, or one per compared model.
-export interface Press {
-  id: string;
-  created_at: number;
-  models: string[];
-  runs: number;
-  // Each status among the press's runs, with how many runs have it.
-  statuses: [string, number][];
-  // The press's cost, once every run's usage is settled.
-  confirmed_microusd: number | null;
-}
+import { chainReceipt, machinePresses, type Press } from './machines';
 
 const ACTIVE = new Set(['queued', 'claimed', 'running', 'cancel_requested']);
 const modelName = (model: string) => (model === 'mock' ? 'Local mock' : model);
@@ -34,8 +23,10 @@ export const MachineBack = memo(function MachineBack({
   blockId,
   document,
   models,
+  onKeepCurrent,
   children,
 }: {
+  onKeepCurrent: (placementId: string, keptCurrent: boolean) => void;
   // The lever, pressed from the back once the models are chosen.
   children?: React.ReactNode;
   placementId: string;
@@ -54,38 +45,15 @@ export const MachineBack = memo(function MachineBack({
     );
     return (s.state?.runs ?? []).filter((r) => runIds.has(r.id)).at(-1)?.machine_version ?? null;
   });
-  const pressKey = useStore(document.store, (s) => {
-    const scene = s.state;
-    if (!scene) return '[]';
-    const runIds = new Set(
-      scene.derivations.filter((d) => d.anchorPlacementId === placementId).map((d) => d.runId),
-    );
-    const presses = new Map<string, Press>();
-    for (const run of scene.runs) {
-      if (!runIds.has(run.id)) continue;
-      const id = run.batch_id ?? run.id;
-      const press = presses.get(id) ?? {
-        id,
-        created_at: run.created_at,
-        models: [],
-        runs: 0,
-        statuses: [],
-        confirmed_microusd: 0,
-      };
-      press.created_at = Math.min(press.created_at, run.created_at);
-      if (!press.models.includes(run.model)) press.models.push(run.model);
-      press.runs += 1;
-      const status = press.statuses.find(([name]) => name === run.status);
-      if (status) status[1] += 1;
-      else press.statuses.push([run.status, 1]);
-      press.confirmed_microusd =
-        press.confirmed_microusd === null || run.confirmed_microusd === null
-          ? null
-          : press.confirmed_microusd + run.confirmed_microusd;
-      presses.set(id, press);
-    }
-    return JSON.stringify([...presses.values()].sort((a, b) => b.created_at - a.created_at));
-  });
+  const pressKey = useStore(document.store, (s) =>
+    JSON.stringify(s.state ? machinePresses(s.state, placementId) : []),
+  );
+  // The chain behind the newest answer, when another machine's answer was among its inputs.
+  const chainKey = useStore(document.store, (s) =>
+    JSON.stringify(s.state ? chainReceipt(s.state, placementId) : []),
+  );
+  const chain = useMemo(() => JSON.parse(chainKey) as ReturnType<typeof chainReceipt>, [chainKey]);
+  const keptCurrent = useStore(document.store, (s) => !!s.state?.keptCurrent.includes(placementId));
   const presses = useMemo(() => JSON.parse(pressKey) as Press[], [pressKey]);
   const compared = useInteraction((s) => s.comparisons[placementId]);
   const chosen = (compared ?? []).filter((model) => models.includes(model));
@@ -120,31 +88,43 @@ export const MachineBack = memo(function MachineBack({
         </fieldset>
       )}
       {children}
+      <label className="back-receipt machine-keep">
+        <input
+          type="checkbox"
+          checked={keptCurrent}
+          onChange={(event) => onKeepCurrent(placementId, event.target.checked)}
+        />
+        Keep current
+        <span className="back-meta">
+          {' '}
+          · marked due when a machine feeding it reruns; nothing runs without a press
+        </span>
+      </label>
+      {chain.length > 1 && (
+        <section className="back-receipt" aria-label="Chain">
+          <span className="eyebrow">Chain behind the newest answer</span>
+          <ol className="machine-presses">
+            {chain.map(({ placementId: machine, name, press }) => (
+              <li key={machine}>
+                <PressLine press={press} label={name} />
+              </li>
+            ))}
+            <li className="chain-total">
+              <span>Total</span>
+              <span />
+              <span>{chain.reduce((sum, link) => sum + link.press.runs, 0)} runs</span>
+              <span>{costOf(chain.map((link) => link.press))}</span>
+            </li>
+          </ol>
+        </section>
+      )}
       <section className="back-receipt" aria-label="Presses">
         <span className="eyebrow">Presses</span>
         {presses.length ? (
           <ol className="machine-presses">
             {presses.map((press) => (
               <li key={press.id}>
-                <span>{pressTime(press.created_at)}</span>
-                <span>{press.models.map(modelName).join(' · ')}</span>
-                <span>
-                  {press.runs} {press.runs === 1 ? 'run' : 'runs'},{' '}
-                  {press.statuses
-                    .map(([status, count]) =>
-                      press.statuses.length > 1
-                        ? `${count} ${statusLabels[status] ?? status}`
-                        : (statusLabels[status] ?? status),
-                    )
-                    .join(', ')}
-                </span>
-                <span>
-                  {press.confirmed_microusd !== null
-                    ? formatUsd(press.confirmed_microusd)
-                    : press.statuses.some(([status]) => ACTIVE.has(status))
-                      ? 'cost pending'
-                      : 'cost not known'}
-                </span>
+                <PressLine press={press} label={pressTime(press.created_at)} />
               </li>
             ))}
           </ol>
@@ -155,3 +135,30 @@ export const MachineBack = memo(function MachineBack({
     </div>
   );
 });
+
+const costOf = (presses: Press[]) =>
+  presses.every((press) => press.confirmed_microusd !== null)
+    ? formatUsd(presses.reduce((sum, press) => sum + press.confirmed_microusd!, 0))
+    : presses.some((press) => press.statuses.some(([status]) => ACTIVE.has(status)))
+      ? 'cost pending'
+      : 'cost not known';
+// One press: its label, models, runs and how they ended, and its cost.
+function PressLine({ press, label }: { press: Press; label: string }) {
+  return (
+    <>
+      <span>{label}</span>
+      <span>{press.models.map(modelName).join(' · ')}</span>
+      <span>
+        {press.runs} {press.runs === 1 ? 'run' : 'runs'},{' '}
+        {press.statuses
+          .map(([status, count]) =>
+            press.statuses.length > 1
+              ? `${count} ${statusLabels[status] ?? status}`
+              : (statusLabels[status] ?? status),
+          )
+          .join(', ')}
+      </span>
+      <span>{costOf([press])}</span>
+    </>
+  );
+}

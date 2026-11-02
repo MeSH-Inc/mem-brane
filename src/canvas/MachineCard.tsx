@@ -54,6 +54,7 @@ export const MachineCard = memo(function MachineCard({
   const view = useMachineView(document, placementId, draft);
   const chain = useMachineChain(document, placementId);
   const waitingOn = chain?.waitingOn;
+  const keptCurrent = useStore(document.store, (s) => !!s.state?.keptCurrent.includes(placementId));
   // Slot handles appear and vanish with the template; React Flow must re-measure them
   // or feeds into a new slot have no anchor to draw to.
   const updateNodeInternals = useUpdateNodeInternals();
@@ -61,7 +62,16 @@ export const MachineCard = memo(function MachineCard({
   useEffect(() => updateNodeInternals(placementId), [slotKey, placementId, updateNodeInternals]);
   if (!block) return null;
   const template = draft ?? block.content.text;
-  const state = waitingOn ? 'waiting' : view?.stale ? 'stale' : view?.ran ? 'ran' : '';
+  const state =
+    keptCurrent && (waitingOn || view?.stale)
+      ? 'due'
+      : waitingOn
+        ? 'waiting'
+        : view?.stale
+          ? 'stale'
+          : view?.ran
+            ? 'ran'
+            : '';
   return (
     <article
       className={`canvas-card machine-card ${selected ? 'selected' : ''} ${view?.stale ? 'stale' : ''}${flipped ? ' flipped' : ''}`}
@@ -87,15 +97,20 @@ export const MachineCard = memo(function MachineCard({
         <span className="card-status">
           {state && (
             <span className={`machine-state ${state}`}>
-              {waitingOn
-                ? `${view?.stale ? 'stale' : view?.ran ? 'ran' : 'not run'} · waiting on ${waitingOn.name}`
-                : view?.stale
-                  ? view.templateChanged
-                    ? 'stale · prompt edited'
-                    : view.changedSlots.length
-                      ? `stale · ${view.changedSlots.join(', ')} changed`
-                      : 'stale · arrows changed'
-                  : 'ran'}
+              {(() => {
+                const reason = waitingOn
+                  ? `waiting on ${waitingOn.name}`
+                  : view?.templateChanged
+                    ? 'prompt edited'
+                    : view?.changedSlots.length
+                      ? `${view.changedSlots.join(', ')} changed`
+                      : 'arrows changed';
+                // A machine kept current that is stale or waiting is due.
+                if (keptCurrent && (waitingOn || view?.stale)) return `due · ${reason}`;
+                if (waitingOn)
+                  return `${view?.stale ? 'stale' : view?.ran ? 'ran' : 'not run'} · ${reason}`;
+                return view?.stale ? `stale · ${reason}` : 'ran';
+              })()}
             </span>
           )}
         </span>
@@ -142,6 +157,7 @@ export const MachineCard = memo(function MachineCard({
           blockId={blockId}
           document={document}
           models={actions.models}
+          onKeepCurrent={actions.onKeepCurrent}
         >
           <MachineControls
             placementId={placementId}

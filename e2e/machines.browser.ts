@@ -608,12 +608,12 @@ test('two models answer one press side by side, and Keep chooses one', async ({ 
 test('sources feed Distill, Brief is fed from Distill, and an edit reruns the chain in one press', async ({
   page,
 }) => {
-  const counts = { build: 0, update: 0, typed: 0 };
+  const counts = { build: 0, update: 0, keep: 0, typed: 0 };
   await serve(page, 4210, async ({ seed, completed, state, origin }) => {
     const { braneId, cards } = await seed('Chain', sources, grid);
     counts.build++; // the drop
     await page.goto(`${origin}/b/${braneId}`);
-    const act = async (phase: 'build' | 'update', work: () => Promise<unknown>) => {
+    const act = async (phase: 'build' | 'update' | 'keep', work: () => Promise<unknown>) => {
       counts[phase]++;
       await work();
     };
@@ -693,9 +693,31 @@ test('sources feed Distill, Brief is fed from Distill, and an edit reruns the ch
     ).toEqual([distillRuns.at(-1)!.output_block_id]);
     await page.screenshot({ path: 'test-results/machine-chain.png' });
 
+    // Keep Brief current: its back lists the chain behind its answer, and after an edit
+    // upstream the header offers one press for everything due.
+    await act('keep', () => brief.getByRole('button', { name: 'Show back' }).click());
+    const chainList = brief.getByRole('region', { name: 'Chain' });
+    await expect(chainList.locator('li')).toHaveCount(3);
+    await expect(chainList.locator('li').first()).toContainText('Distill');
+    await expect(chainList.locator('li').last()).toContainText('Total');
+    const keep = brief.getByRole('checkbox', { name: /Keep current/ });
+    await act('keep', () => keep.click());
+    await expect(keep).toBeChecked();
+    await act('keep', () => brief.getByRole('button', { name: 'Show front' }).click());
+    await act('keep', () =>
+      editor.fill(`${sources[0]} Prices near stations fell back after a decade.`),
+    );
+    await expect(brief.locator('.machine-state')).toHaveText('due · waiting on Distill');
+    const due = page.locator('.due-run');
+    await expect(due).toHaveText(/^Run all due ×2/);
+    await act('keep', () => due.click());
+    await completed(braneId, 6);
+    await expect(due).toHaveCount(0);
+    await expect(brief.locator('.machine-state')).toHaveText('ran');
+
     // On a 320-pixel phone the same chain reruns from Brief.
     await editor.fill(`${sources[0]} The rise held for five years.`);
-    await expect(brief.locator('.machine-state')).toHaveText('ran · waiting on Distill');
+    await expect(brief.locator('.machine-state')).toHaveText('due · waiting on Distill');
     await page.setViewportSize({ width: 320, height: 740 });
     // A phone opens the brane in Focus; Brief is chosen from the strip.
     await page.getByRole('button', { name: /^\d+ Write a brief from/ }).click();
@@ -709,10 +731,314 @@ test('sources feed Distill, Brief is fed from Distill, and an edit reruns the ch
     );
     await page.screenshot({ path: 'test-results/machine-chain-phone.png' });
     await lever.click();
-    await completed(braneId, 6);
+    await completed(braneId, 8);
     await expect(lever).toHaveText(/^Run/);
   });
   record('chain', counts);
+});
+
+test('on a 320-pixel phone a chain is built and run in Focus with Feed into…', async ({ page }) => {
+  const counts = { actions: 0 };
+  await page.setViewportSize({ width: 320, height: 740 });
+  await serve(page, 4211, async ({ seed, completed, state, api, origin }) => {
+    const { braneId, cards } = await seed('Phone chain', sources);
+    // Two machines already on the brane: Distill fed the sources, and a Brief unfed.
+    const place = async (template: string, y: number) => {
+      const block = await (
+        await page.request.post(api('/blocks/machine'), {
+          data: { braneId, geometry: { x: 900, y, width: 400, height: 300 }, template },
+        })
+      ).json();
+      return (await state(braneId)).placements.find((p) => p.block_id === block.id)!.id;
+    };
+    const distill = await place('Distill {material} into one card.', 0);
+    const brief = await place('Write a brief from {material}.', 400);
+    for (const card of cards)
+      await page.request.post(api('/feeds'), {
+        data: {
+          braneId,
+          fromPlacementId: card.placementId,
+          toPlacementId: distill,
+          slot: 'material',
+        },
+      });
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    const strip = (name: RegExp) => page.getByRole('button', { name });
+    const lever = page.locator('.machine-lever');
+    await act(() => strip(/^\d+ Distill \{material\}/).click());
+    await act(() => lever.click());
+    await completed(braneId, 1);
+    await act(() =>
+      page
+        .getByRole('button', { name: 'Feed this machine’s answers into another machine' })
+        .click(),
+    );
+    await act(() => page.getByRole('button', { name: 'Write a brief from · material' }).click());
+    await expect
+      .poll(async () => (await state(braneId)).feeds.filter((f) => f.to_placement_id === brief))
+      .toHaveLength(1);
+    await act(() => strip(/^\d+ Write a brief from/).click());
+    await expect(page.locator('.slot-chip')).toHaveCount(1);
+    await act(() => lever.click());
+    await completed(braneId, 2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+    await page.screenshot({ path: 'test-results/machine-phone-feed-into.png' });
+  });
+  record('phone-chain', counts);
+});
+
+test('a machine’s prompt is tuned: its answer goes stale, reruns, and keeps the earlier one', async ({
+  page,
+}) => {
+  const counts = { actions: 0, typed: 0 };
+  await serve(page, 4212, async ({ seed, completed, state, api, origin }) => {
+    const { braneId, cards } = await seed('Tune', sources.slice(0, 1));
+    const block = await (
+      await page.request.post(api('/blocks/machine'), {
+        data: {
+          braneId,
+          geometry: { x: 420, y: 40, width: 400, height: 300 },
+          template: 'Summarise {source} in one sentence.',
+        },
+      })
+    ).json();
+    const machine = (await state(braneId)).placements.find((p) => p.block_id === block.id)!.id;
+    await page.request.post(api('/feeds'), {
+      data: {
+        braneId,
+        fromPlacementId: cards[0].placementId,
+        toPlacementId: machine,
+        slot: 'source',
+      },
+    });
+    await page.goto(`${origin}/b/${braneId}`);
+    const node = page.locator(`.react-flow__node[data-id="${machine}"]`);
+    const lever = node.locator('.machine-lever');
+    await lever.click();
+    await completed(braneId, 1);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    // Tune the prompt: the machine reads stale, and one press reruns it.
+    const prompt = 'Summarise {source} in one sentence for a council member.';
+    counts.typed += prompt.length;
+    await act(() => node.getByRole('textbox', { name: 'Machine prompt' }).fill(prompt));
+    await expect(node.locator('.machine-state')).toHaveText('stale · prompt edited');
+    await expect(lever).toHaveText(/^Rerun/);
+    await act(() => lever.click());
+    await completed(braneId, 2);
+    const read = await state(braneId);
+    const [first, second] = read.runs;
+    const versions = [first, second].map(
+      (run) => (run as unknown as { machine_version: number }).machine_version,
+    );
+    expect(versions[1]).toBeGreaterThan(versions[0]);
+    const answer = page.locator(
+      `.react-flow__node[data-id="${read.placements.find((p) => p.block_id === second.output_block_id)!.id}"]`,
+    );
+    await act(() => answer.getByRole('button', { name: /^Show back/ }).click());
+    await expect(answer.getByRole('region', { name: 'Receipt' })).toContainText(
+      `prompt version ${versions[1]}`,
+    );
+    await expect(answer.locator('.back-item')).toContainText(
+      `Earlier version · prompt version ${versions[0]}`,
+    );
+  });
+  record('tune', counts);
+});
+
+// At scale: what the page costs in frames, requests and time once a table holds dozens
+// of answers. Recorded, not asserted beyond what must hold.
+async function panFrames(page: Page) {
+  const pane = page.locator('.react-flow__pane');
+  const box = (await pane.boundingBox())!;
+  await page.evaluate(() => {
+    const frames: number[] = [];
+    (window as unknown as { frames_: number[] }).frames_ = frames;
+    const tick = (time: number) => {
+      frames.push(time);
+      if (frames.length < 400) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.keyboard.down('Space');
+  await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.4, { steps: 60 });
+  await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.6, { steps: 60 });
+  await page.mouse.up();
+  await page.keyboard.up('Space');
+  const frames = await page.evaluate(() => (window as unknown as { frames_: number[] }).frames_);
+  const gaps = frames
+    .slice(1)
+    .map((time, index) => time - frames[index])
+    .sort((a, b) => a - b);
+  return {
+    frames: gaps.length,
+    medianMs: Math.round(gaps[Math.floor(gaps.length / 2)] * 10) / 10,
+    p95Ms: Math.round(gaps[Math.floor(gaps.length * 0.95)] * 10) / 10,
+    maxMs: Math.round(gaps.at(-1)! * 10) / 10,
+  };
+}
+function countRequests(page: Page) {
+  const times: number[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/')) times.push(Date.now());
+  });
+  // The most requests the page made in any one minute so far.
+  return () =>
+    times.reduce(
+      (most, time, index) =>
+        Math.max(most, times.slice(index).filter((later) => later - time < 60_000).length),
+      0,
+    );
+}
+
+test('at scale: twelve papers through Split each and Diagram', async ({ page }) => {
+  test.slow();
+  const counts = { actions: 0, splitMs: 0, diagramMs: 0, ideas: 0, requestsPerMinute: 0 };
+  let pan: Awaited<ReturnType<typeof panFrames>> | undefined;
+  await serve(page, 4213, async ({ seed, completed, state, origin }) => {
+    const requests = countRequests(page);
+    const papers = Array.from(
+      { length: 12 },
+      (_, i) => `Paper ${i + 1} finds that sleep helps memory. Its effect holds for naps.`,
+    );
+    const { braneId, cards } = await seed('Scale pile', papers, grid);
+    counts.actions++; // the drop
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    await act(() => lasso(page, cards));
+    await act(() => page.keyboard.press('g'));
+    await act(() => page.getByRole('button', { name: 'Stack', exact: true }).click());
+    const split = await takeOut(page, act, state, braneId, 'Split');
+    await page.locator('.react-flow__controls-fitview').click();
+    await act(() =>
+      drag(
+        page,
+        '.react-flow__node[data-id^="group:"]:has([aria-label="Group 1"]) .card-port',
+        split.locator('[data-feed-slot="text"]'),
+      ),
+    );
+    await act(() => split.getByRole('button', { name: /one card at a time/ }).click());
+    await expect(split.locator('.machine-lever')).toHaveText(/^Run ×12/);
+    let started = Date.now();
+    await act(() => split.locator('.machine-lever').click());
+    await completed(braneId, 12);
+    const ideas = page.locator('[aria-roledescription="group"][aria-label="Each text"]');
+    await expect(ideas).toContainText('Stack · 24');
+    counts.splitMs = Date.now() - started;
+    counts.ideas = 24;
+    const diagram = await takeOut(page, act, state, braneId, 'Diagram');
+    await page.locator('.react-flow__controls-fitview').click();
+    await act(() =>
+      drag(
+        page,
+        '.react-flow__node[data-id^="group:"]:has([aria-label="Each text"]) .card-port',
+        diagram.locator('[data-feed-slot="material"]'),
+      ),
+    );
+    started = Date.now();
+    await act(() => diagram.locator('.machine-lever').click());
+    await completed(braneId, 13);
+    await expect(
+      page.locator('[aria-roledescription="group"][aria-label="Diagram"]'),
+    ).toBeVisible();
+    counts.diagramMs = Date.now() - started;
+    await page.locator('.react-flow__controls-fitview').click();
+    pan = await panFrames(page);
+    counts.requestsPerMinute = requests();
+    expect(counts.requestsPerMinute).toBeLessThan(240);
+  });
+  record('scale-pile', { ...counts, pan });
+});
+
+test('at scale: twelve papers and five questions make a sixty-cell matrix', async ({ page }) => {
+  test.slow();
+  const counts = {
+    actions: 0,
+    typed: 0,
+    pressMs: [] as number[],
+    matrixMs: 0,
+    requestsPerMinute: 0,
+  };
+  let pan: Awaited<ReturnType<typeof panFrames>> | undefined;
+  const questions = [
+    'what method it uses',
+    'its sample size',
+    'its main finding',
+    'where it was done',
+    'what it leaves open',
+  ];
+  await serve(page, 4214, async ({ seed, completed, state, origin }) => {
+    const requests = countRequests(page);
+    const papers = Array.from({ length: 12 }, (_, i) => `Paper ${i + 1}: survey of 40 cities.`);
+    const { braneId, cards } = await seed('Scale matrix', papers, grid);
+    counts.actions++; // the drop
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    await act(() => lasso(page, cards));
+    await act(() => page.keyboard.press('g'));
+    await act(() => page.getByRole('button', { name: 'Stack', exact: true }).click());
+    let previous: Locator | undefined;
+    for (const [index, question] of questions.entries()) {
+      const prompt = `From {source}, answer in one short sentence: ${question}?`;
+      counts.typed += prompt.length;
+      let extract: Locator;
+      if (!previous) {
+        extract = await takeOut(page, act, state, braneId, 'Extract');
+        await act(() => extract.getByRole('textbox', { name: 'Machine prompt' }).fill(prompt));
+        await page.locator('.react-flow__controls-fitview').click();
+        await act(() =>
+          drag(
+            page,
+            '.react-flow__node[data-id^="group:"]:has([aria-label="Group 1"]) .card-port',
+            extract.locator('[data-feed-slot="source"]'),
+          ),
+        );
+        await act(() => extract.getByRole('button', { name: /one card at a time/ }).click());
+      } else {
+        extract = await duplicate(page, act, state, braneId, previous);
+        await act(() => extract.getByRole('textbox', { name: 'Machine prompt' }).fill(prompt));
+      }
+      previous = extract;
+      await expect(extract.locator('.machine-lever')).toHaveText(/^Run ×12/);
+      const started = Date.now();
+      await act(() => extract.locator('.machine-lever').click());
+      await completed(braneId, 12 * (index + 1));
+      counts.pressMs.push(Date.now() - started);
+    }
+    const read = await state(braneId);
+    await page.locator('.react-flow__controls-fitview').click();
+    const outputs = read.runs.map((run) => ({
+      placementId: read.placements.find((p) => p.block_id === run.output_block_id)!.id,
+    }));
+    await act(() => lasso(page, outputs, 'below'));
+    await act(() => page.keyboard.press('g'));
+    const started = Date.now();
+    await act(() => page.getByRole('button', { name: 'Matrix', exact: true }).click());
+    const matrix = page.locator('[aria-roledescription="group"]').filter({ hasText: '12 × 5' });
+    await expect(matrix.getByRole('rowheader')).toHaveCount(12);
+    counts.matrixMs = Date.now() - started;
+    await page.locator('.react-flow__controls-fitview').click();
+    pan = await panFrames(page);
+    counts.requestsPerMinute = requests();
+    expect(counts.requestsPerMinute).toBeLessThan(240);
+  });
+  record('scale-matrix', { ...counts, pan });
 });
 
 test('a reading pile splits into ideas each, and the ideas become a diagram', async ({ page }) => {
@@ -804,12 +1130,15 @@ async function duplicate(
   await act(() => machine.getByRole('button', { name: 'Duplicate with feeds' }).click());
   let placementId = '';
   await expect
-    .poll(async () => {
-      const read = await state(braneId);
-      const block = read.blocks.find((b) => b.kind === 'machine' && !before.has(b.id));
-      placementId = read.placements.find((p) => p.block_id === block?.id)?.id ?? '';
-      return placementId;
-    })
+    .poll(
+      async () => {
+        const read = await state(braneId);
+        const block = read.blocks.find((b) => b.kind === 'machine' && !before.has(b.id));
+        placementId = read.placements.find((p) => p.block_id === block?.id)?.id ?? '';
+        return placementId;
+      },
+      { intervals: [250, 500] },
+    )
     .not.toBe('');
   return page.locator(`.react-flow__node[data-id="${placementId}"]`);
 }
@@ -835,12 +1164,15 @@ async function takeOut(
   );
   let placementId = '';
   await expect
-    .poll(async () => {
-      const read = await state(braneId);
-      const block = read.blocks.find((b) => b.kind === 'machine' && !before.has(b.id));
-      placementId = read.placements.find((p) => p.block_id === block?.id)?.id ?? '';
-      return placementId;
-    })
+    .poll(
+      async () => {
+        const read = await state(braneId);
+        const block = read.blocks.find((b) => b.kind === 'machine' && !before.has(b.id));
+        placementId = read.placements.find((p) => p.block_id === block?.id)?.id ?? '';
+        return placementId;
+      },
+      { intervals: [250, 500] },
+    )
     .not.toBe('');
   return page.locator(`.react-flow__node[data-id="${placementId}"]`);
 }
@@ -1063,7 +1395,7 @@ async function serve(page: Page, port: number, scenario: (server: Server) => Pro
             // A refused read (the account's request limit) counts as not yet.
             async () =>
               (await state(braneId)).runs?.filter((r) => r.status === 'completed').length ?? -1,
-            { timeout: 20_000, intervals: [250, 500, 1000] },
+            { timeout: 30_000, intervals: [500, 1000] },
           )
           .toBe(count),
     });

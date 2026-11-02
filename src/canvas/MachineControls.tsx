@@ -27,6 +27,7 @@ export interface MachineActions {
   onFeedMode: (feedId: string, mode: 'together' | 'each') => Promise<unknown>;
   onSaveToWorkshop: (blockId: string) => void;
   onDuplicate: (placementId: string) => void;
+  onKeepCurrent: (placementId: string, keptCurrent: boolean) => void;
   // The models a comparison may choose from.
   models: string[];
 }
@@ -111,6 +112,42 @@ export function MachineControls({
       ),
     );
   });
+  // The slots of other machines this machine's tray could feed: the mirror of the
+  // sources above, so a chain can be built from either end, or on a phone.
+  const targetsKey = useStore(document.store, (s) => {
+    const state = s.state;
+    const tray = state && machineTray(state, placementId);
+    if (!state || !tray) return '[]';
+    return JSON.stringify(
+      state.placements
+        .filter(
+          (p) =>
+            p.id !== placementId &&
+            !p.host_placement_id &&
+            state.blocks.find((b) => b.id === p.block_id)?.kind === 'machine',
+        )
+        .flatMap((machine) => {
+          if (feedClosesLoop(state, tray, machine.id)) return [];
+          const template = state.blocks.find((b) => b.id === machine.block_id)?.content.text ?? '';
+          return machineSlots(template).flatMap((slot) =>
+            state.feeds.some(
+              (f) =>
+                f.to_placement_id === machine.id &&
+                f.slot === slot &&
+                ('groupId' in tray
+                  ? f.from_group_id === tray.groupId
+                  : f.from_placement_id === tray.placementId),
+            )
+              ? []
+              : [{ placementId: machine.id, slot, name: `${machineName(template)} · ${slot}` }],
+          );
+        }),
+    );
+  });
+  const targets = useMemo(
+    () => JSON.parse(targetsKey) as { placementId: string; slot: string; name: string }[],
+    [targetsKey],
+  );
   const sources = useMemo(
     () => JSON.parse(sourcesKey) as Record<string, { placementId: string; name: string }[]>,
     [sourcesKey],
@@ -282,6 +319,24 @@ export function MachineControls({
         </ul>
       )}
       <footer className="machine-footer nodrag nopan">
+        {targets.length > 0 && (
+          <ActionMenu
+            label="Feed this machine’s answers into another machine"
+            text="Feed into…"
+            className="machine-targets"
+          >
+            {targets.map((target) => (
+              <button
+                key={`${target.placementId}:${target.slot}`}
+                onClick={() =>
+                  void actions.onFeedTray(placementId, target.placementId, target.slot)
+                }
+              >
+                {target.name}
+              </button>
+            ))}
+          </ActionMenu>
+        )}
         {output !== 'card' && (
           <span className="machine-output" title="What one answer becomes on the table">
             → {output}

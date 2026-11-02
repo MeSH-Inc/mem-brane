@@ -57,6 +57,7 @@ const state: BraneState = {
   groups: [],
   relationEntries: [],
   parts: [],
+  keptCurrent: [],
   derivations: [],
 };
 const workspace = new WorkspaceDocument();
@@ -68,6 +69,7 @@ const machine = {
   onFeed: async () => {},
   onFeedTray: async () => {},
   onRunChain: async () => {},
+  onKeepCurrent: () => {},
   onUnfeed: async () => {},
   onFeedMode: async () => {},
   onSaveToWorkshop: () => {},

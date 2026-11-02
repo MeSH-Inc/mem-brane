@@ -40,6 +40,7 @@ import { SpawnButton } from '../components/SpawnButton';
 import { ArtifactActions, type CardAction } from '../components/ArtifactActions';
 import { FirstSteps } from '../components/FirstSteps';
 import { RunHistory } from '../components/RunHistory';
+import { DueRun } from '../canvas/DueRun';
 import { RunInputs } from '../components/RunInputs';
 import { UnplacedCards } from '../components/UnplacedCards';
 import { Workshop } from '../components/Workshop';
@@ -346,6 +347,8 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
       onEstimateMachine: controller.estimateMachine,
       onFeed: controller.feed,
       onFeedTray: controller.feedTray,
+      onKeepCurrent: (placementId: string, keptCurrent: boolean) =>
+        void controller.keepCurrent(placementId, keptCurrent),
       onUnfeed: controller.unfeed,
       onFeedMode: controller.setFeedMode,
       onSaveToWorkshop: (blockId: string) =>
@@ -885,6 +888,11 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
               Focus
             </button>
           </div>
+          <DueRun
+            document={controller.document}
+            onEstimate={controller.estimateMachine}
+            onRun={controller.runDue}
+          />
           <button
             onClick={(event) => {
               event.currentTarget.focus();

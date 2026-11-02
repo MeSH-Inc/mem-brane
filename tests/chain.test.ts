@@ -13,7 +13,15 @@ import { keepOutput, runMachine } from '../server/services/runs';
 import { completeAttempt, startAttempt } from '../server/services/run-lifecycle';
 import { applyWorkspaceOperation } from '../server/services/workspace-operations';
 import { feedClosesLoop } from '../shared/machines';
-import { machineChain, machineStaleness, machineTray, trayOwners } from '../src/canvas/machines';
+import {
+  chainReceipt,
+  dueMachines,
+  feedingOrder,
+  machineChain,
+  machineStaleness,
+  machineTray,
+  trayOwners,
+} from '../src/canvas/machines';
 
 let db: DB, actor: string, brane: string;
 type Machine = ReturnType<typeof createMachineBlock>;
@@ -251,4 +259,54 @@ it('waits on the first stale machine upstream, and the chain reruns everything b
     brief.placement.id,
     third.placement.id,
   ]);
+});
+
+it('keeps a machine current: due when upstream changes, run with its chain in order', () => {
+  press(distill);
+  feed(tray(distill), brief, 'material');
+  press(brief);
+  const third = createMachineBlock(
+    db,
+    actor,
+    brane,
+    { x: 1800, y: 400, width: 400, height: 300 },
+    'Check {claim}.',
+  );
+  feed(tray(brief), third, 'claim');
+  press(third);
+  operate({ type: 'machine.keep', id: third.placement.id, keptCurrent: true });
+  operate({ type: 'machine.keep', id: brief.placement.id, keptCurrent: true });
+  // Listed in the order the machines were placed.
+  expect(state().keptCurrent).toEqual([brief.placement.id, third.placement.id]);
+  expect(dueMachines(state())).toEqual({ due: [], run: [], waitingOn: null });
+  updateBlockLiveState(db, actor, { blockId: papers[0].id, text: 'Paper 0, revised.', version: 1 });
+  expect(dueMachines(state())).toEqual({
+    due: [brief.placement.id, third.placement.id],
+    run: [distill.placement.id, brief.placement.id, third.placement.id],
+    waitingOn: null,
+  });
+  expect(feedingOrder(state(), [third.placement.id, distill.placement.id])).toEqual([
+    distill.placement.id,
+    third.placement.id,
+  ]);
+  operate({ type: 'machine.keep', id: third.placement.id, keptCurrent: false });
+  expect(state().keptCurrent).toEqual([brief.placement.id]);
+  // A machine taken off the table is no longer kept.
+  expect(() =>
+    operate({ type: 'machine.keep', id: papers[0].placement.id, keptCurrent: true }),
+  ).toThrow('no longer on the brane');
+});
+
+it('lists the chain behind a machine’s newest answer, upstream first', () => {
+  press(distill);
+  feed(tray(distill), brief, 'material');
+  press(brief);
+  const receipt = chainReceipt(state(), brief.placement.id);
+  expect(receipt.map((link) => [link.name, link.press.runs, link.press.statuses])).toEqual([
+    ['Distill', 1, [['completed', 1]]],
+    ['Brief from', 1, [['completed', 1]]],
+  ]);
+  expect(receipt.every((link) => link.press.confirmed_microusd === 0)).toBe(true);
+  // A machine fed only cards has no chain behind it.
+  expect(chainReceipt(state(), distill.placement.id)).toHaveLength(1);
 });

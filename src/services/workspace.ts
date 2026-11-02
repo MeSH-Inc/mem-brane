@@ -31,7 +31,13 @@ import {
   machineName,
   type RunMachine,
 } from '../../shared/machines';
-import { machineChain, machineStaleness, machineTray, openSpot } from '../canvas/machines';
+import {
+  dueMachines,
+  machineChain,
+  machineStaleness,
+  machineTray,
+  openSpot,
+} from '../canvas/machines';
 import {
   bounds,
   groupOf,
@@ -46,6 +52,11 @@ import { matrixOf, matrixLayout, matrixFootprint } from '../canvas/matrix';
 // How long run status reports and local changes gather before one read catches up
 // with all of them.
 const REFRESH_GATHER_MS = 200;
+// While several runs are under way their reports arrive in a stream; one read a second
+// keeps the table current without spending the account's requests on every report.
+const BUSY_REFRESH_GATHER_MS = 1000;
+const BUSY_RUNS = 3;
+const BUDGET_READ_MS = 1500;
 type DraftState = Pick<
   Interaction,
   | 'actor'
@@ -99,6 +110,8 @@ export class WorkspaceController {
   private active = false;
   private refreshGeneration = 0;
   private gatheredRefresh?: ReturnType<typeof setTimeout>;
+  private budgetReadAt = 0;
+  private budgetTimer?: ReturnType<typeof setTimeout>;
   private estimateGeneration = 0;
   private lineageGeneration = 0;
   private inspectionGeneration = 0;
@@ -322,6 +335,8 @@ export class WorkspaceController {
     clearTimeout(this.titleTimer);
     clearTimeout(this.gatheredRefresh);
     this.gatheredRefresh = undefined;
+    clearTimeout(this.budgetTimer);
+    this.budgetTimer = undefined;
     clearInterval(this.poll);
     this.delivering.clear();
   }
@@ -390,15 +405,7 @@ export class WorkspaceController {
     const epoch = this.epoch,
       generation = ++this.refreshGeneration,
       streamRevision = this.streamRevision;
-    void this.client
-      .budget()
-      .then((budget) => {
-        if (this.valid(epoch) && generation === this.refreshGeneration) {
-          this.budget = budget;
-          this.emit();
-        }
-      })
-      .catch(() => {});
+    this.readBudget();
     let next: BraneState;
     try {
       next = await this.client.workspace(this.braneId);
@@ -468,7 +475,10 @@ export class WorkspaceController {
     if (data.status) {
       // A press of a dozen runs reports each run's start and end; one read a moment after
       // the first report catches up with every report that arrived meanwhile.
-      this.gatherRefresh();
+      const active = (this.serverState?.runs ?? []).filter((r) =>
+        ['queued', 'claimed', 'running', 'cancel_requested'].includes(r.status),
+      ).length;
+      this.gatherRefresh(active >= BUSY_RUNS ? BUSY_REFRESH_GATHER_MS : REFRESH_GATHER_MS);
     } else if (data.text !== undefined && this.serverState) {
       this.streamed.set(data.runId, { revision: ++this.streamRevision, text: data.text });
       this.document.install({
@@ -479,13 +489,35 @@ export class WorkspaceController {
       });
     }
   };
-  private gatherRefresh() {
+  // The day's allowance changes only as runs are admitted and settle. A stream of reads
+  // asks for it at most once in BUDGET_READ_MS, and once more at the end of the stream.
+  private readBudget() {
+    if (this.budgetTimer) return;
+    const wait = this.budgetReadAt + BUDGET_READ_MS - Date.now();
+    const epoch = this.epoch;
+    const read = () => {
+      this.budgetTimer = undefined;
+      if (!this.valid(epoch)) return;
+      this.budgetReadAt = Date.now();
+      void this.client
+        .budget()
+        .then((budget) => {
+          if (!this.valid(epoch)) return;
+          this.budget = budget;
+          this.emit();
+        })
+        .catch(() => {});
+    };
+    if (wait <= 0) read();
+    else this.budgetTimer = setTimeout(read, wait);
+  }
+  private gatherRefresh(delay = REFRESH_GATHER_MS) {
     if (this.gatheredRefresh) return;
     const epoch = this.epoch;
     this.gatheredRefresh = setTimeout(() => {
       this.gatheredRefresh = undefined;
       if (this.valid(epoch)) this.background(this.refresh());
-    }, REFRESH_GATHER_MS);
+    }, delay);
   }
   private deliverImports() {
     const ready = this.importTasks.filter(
@@ -885,29 +917,41 @@ export class WorkspaceController {
     }).catch(() => undefined);
   };
   // Rerun a chain: each stale machine upstream, then this one, one press each in feeding
-  // order. A machine is pressed only once the one before it has finished, since it is
-  // fed that machine's new answer; a run that does not finish stops the chain there.
-  runChain = (placementId: string) => {
+  // order.
+  runChain = (placementId: string) =>
+    this.runInOrder(`chain:${placementId}`, () =>
+      this.state ? machineChain(this.state, placementId).chain : [],
+    );
+  // Run every machine kept current that is due, with the machines their chains need.
+  runDue = () => this.runInOrder('due', () => (this.state ? dueMachines(this.state).run : []));
+  // Machines pressed one after another. A machine is pressed only once the one before it
+  // has finished, since it may be fed that machine's new answer; a run that does not
+  // finish stops the rest. Resolves with the last machine's output.
+  private runInOrder(key: string, machines: () => string[]) {
     this.requireActive();
-    return this.command(`chain:${placementId}`, async (progress) => {
+    return this.command(key, async (progress) => {
       const epoch = this.epoch;
-      const chain = this.state ? machineChain(this.state, placementId).chain : [];
       let output: string | undefined;
-      for (const machine of chain) {
+      for (const machine of machines()) {
         const before = new Set(this.state?.runs.map((r) => r.id));
         output = await this.runMachine(machine);
         if (!this.valid(epoch)) return;
-        if (!output) throw new Error('The chain stopped: a machine in it could not be run.');
+        if (!output) throw new Error('The run stopped: a machine in it could not be run.');
         progress('refreshing');
         const runs = (this.state?.runs ?? []).filter((r) => !before.has(r.id)).map((r) => r.id);
         const ended = await this.settled(runs);
         if (!this.valid(epoch)) return;
         if (ended.some((status) => status !== 'completed'))
-          throw new Error('The chain stopped: a machine in it did not finish its answer.');
+          throw new Error('The run stopped: a machine in it did not finish its answer.');
       }
       return output;
     }).catch(() => undefined);
-  };
+  }
+  // Keep a machine current, or no longer.
+  keepCurrent = (placementId: string, keptCurrent: boolean) =>
+    this.mutate(`keep:${placementId}`, () =>
+      this.client.keepCurrent(placementId, this.braneId, keptCurrent),
+    ).catch(() => undefined);
   // Resolves with the runs' final statuses once none of them is still under way. Status
   // reports refresh the workspace; a slow refresh here covers a missed report.
   private settled(runIds: string[]) {

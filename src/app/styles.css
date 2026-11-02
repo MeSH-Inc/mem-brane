@@ -2738,3 +2738,24 @@ summary:focus-visible {
   flex-basis: 100%;
   font-size: 11px;
 }
+.machine-state.due {
+  color: #a8710f;
+  font-weight: 600;
+}
+.machine-keep {
+  display: block;
+}
+.chain-total {
+  font-weight: 600;
+}
+.due-run {
+  color: #7a4f08;
+  border-color: #e0c48a;
+  background: #fbf3e2;
+}
+.machine-targets summary {
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
