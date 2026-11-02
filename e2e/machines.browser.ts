@@ -640,7 +640,10 @@ test('sources feed Distill, Brief is fed from Distill, and an edit reruns the ch
     await build(() =>
       brief.getByRole('button', { name: 'Feed material from another machine' }).click(),
     );
-    await build(() => brief.getByRole('button', { name: 'Distill', exact: true }).click());
+    // The option says what one press of Brief would cost once Distill fed it.
+    const fromDistill = brief.getByRole('button', { name: /^Distill/ });
+    await expect(fromDistill).toHaveText('Distill · 1 run');
+    await build(() => fromDistill.click());
     await expect(brief.locator('[data-feed-slot="material"] .slot-chip')).toHaveCount(1);
     // The feed is drawn from Distill itself, not from its answer.
     await expect(
@@ -708,6 +711,10 @@ test('sources feed Distill, Brief is fed from Distill, and an edit reruns the ch
       editor.fill(`${sources[0]} Prices near stations fell back after a decade.`),
     );
     await expect(brief.locator('.machine-state')).toHaveText('due · waiting on Distill');
+    // Its back says what pressing everything due would run now.
+    await brief.getByRole('button', { name: 'Show back' }).click();
+    await expect(brief.locator('.machine-due-cost')).toHaveText('Run all due now: 2 machines');
+    await brief.getByRole('button', { name: 'Show front' }).click();
     const due = page.locator('.due-run');
     await expect(due).toHaveText(/^Run all due ×2/);
     await act('keep', () => due.click());
@@ -777,7 +784,9 @@ test('on a 320-pixel phone a chain is built and run in Focus with Feed into…',
         .getByRole('button', { name: 'Feed this machine’s answers into another machine' })
         .click(),
     );
-    await act(() => page.getByRole('button', { name: 'Write a brief from · material' }).click());
+    const intoBrief = page.getByRole('button', { name: /^Write a brief from · material/ });
+    await expect(intoBrief).toHaveText('Write a brief from · material · 1 run');
+    await act(() => intoBrief.click());
     await expect
       .poll(async () => (await state(braneId)).feeds.filter((f) => f.to_placement_id === brief))
       .toHaveLength(1);

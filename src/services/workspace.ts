@@ -10,6 +10,7 @@ import type {
   SubmissionReceipt,
   Revision,
   Group,
+  Feed,
 } from '../../shared/types/domain';
 import type { ConversationMessage } from '../../shared/types/conversation';
 import { submitRun, spawnArtifact } from '../../shared/schemas';
@@ -863,8 +864,7 @@ export class WorkspaceController {
   };
   // The run names the machine's current feeds explicitly and freezes them with any
   // unsaved edits to the template or the fed cards.
-  private machineRequest(placementId: string): RunMachine {
-    const state = this.state;
+  private machineRequest(placementId: string, state = this.state): RunMachine {
     const placement = state?.placements.find((p) => p.id === placementId);
     if (!state || !placement) throw new Error('This machine is no longer on the brane.');
     const draft = this.deps.drafts.getState().draftRecords[placement.block_id]?.text;
@@ -889,9 +889,45 @@ export class WorkspaceController {
       edits: this.edits([placement.block_id, ...inputs.map((i) => i.blockId)]),
     };
   }
-  estimateMachine = (placementId: string) => {
+  estimateMachine = async (placementId: string) => {
     this.requireActive();
     return this.client.estimateMachine({ ...this.machineRequest(placementId), edits: [] });
+  };
+  // What one press of a machine would cost once another machine's tray fed its slot,
+  // before the feed exists: the request is made from the brane as if it did.
+  estimateFeed = async (trayMachineId: string, toPlacementId: string, slot: string) => {
+    this.requireActive();
+    const state = this.state;
+    const tray = state && machineTray(state, trayMachineId);
+    if (!state || !tray) throw new Error('Run this machine before feeding its answers to another.');
+    const feed: Feed = {
+      id: `hypothetical:${trayMachineId}`,
+      brane_id: this.braneId,
+      from_placement_id: 'groupId' in tray ? null : tray.placementId,
+      from_group_id: 'groupId' in tray ? tray.groupId : null,
+      to_placement_id: toPlacementId,
+      slot,
+      mode: 'together',
+      created_at: Date.now(),
+    };
+    return this.client.estimateMachine({
+      ...this.machineRequest(toPlacementId, { ...state, feeds: [...state.feeds, feed] }),
+      edits: [],
+    });
+  };
+  // What Run all due would cost now if this machine were kept current too.
+  estimateDue = async (placementId: string) => {
+    this.requireActive();
+    const state = this.state;
+    if (!state) throw new Error('This brane is not loaded.');
+    const kept = { ...state, keptCurrent: [...new Set([...state.keptCurrent, placementId])] };
+    const { run, waitingOn } = dueMachines(kept);
+    if (waitingOn?.running) throw new Error('A machine in the chain is still answering.');
+    const each = await Promise.all(
+      run.map((id) => this.client.estimateMachine({ ...this.machineRequest(id, kept), edits: [] })),
+    );
+    const reservedMicrousd = each.reduce((sum, next) => sum + next.reservedMicrousd, 0);
+    return { machines: run.length, reservedMicrousd };
   };
   runMachine = (placementId: string) => {
     this.requireActive();

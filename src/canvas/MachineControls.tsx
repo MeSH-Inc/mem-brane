@@ -20,6 +20,10 @@ export interface MachineActions {
   // Rerun the stale machines upstream, then this one, one after another.
   onRunChain: (placementId: string) => Promise<unknown>;
   onEstimateMachine: (placementId: string) => Promise<Estimate>;
+  // One press of the machine at toPlacementId, as if the tray of trayMachineId fed its slot.
+  onEstimateFeed: (trayMachineId: string, toPlacementId: string, slot: string) => Promise<Estimate>;
+  // Run all due now, as if this machine were kept current too.
+  onEstimateDue: (placementId: string) => Promise<{ machines: number; reservedMicrousd: number }>;
   onFeed: (fromPlacementIds: string[], toPlacementId: string, slot: string) => Promise<unknown>;
   // The machine's tray feeds another machine's slot.
   onFeedTray: (machinePlacementId: string, toPlacementId: string, slot: string) => Promise<unknown>;
@@ -202,6 +206,23 @@ export function MachineControls({
     }, 400);
     return () => clearTimeout(timer);
   }, [ready, waitingOnRun, viewKey, template, models, placementId, actions, chained]);
+  // What each Feed option would cost, read when its menu opens.
+  const [optionCosts, setOptionCosts] = useState<Record<string, string>>({});
+  const estimateOptions = (options: { tray: string; to: string; slot: string }[]) => {
+    for (const { tray, to, slot } of options) {
+      const key = `${tray}>${to}:${slot}`;
+      actions
+        .onEstimateFeed(tray, to, slot)
+        .then((estimate) => feedCost(estimate.runs, estimate.reservedMicrousd))
+        .catch((error: unknown) => {
+          // A machine with another slot still empty cannot be priced yet; say what it needs.
+          const empty =
+            error instanceof Error && /^Feed the \{(.+)\} slot first/.exec(error.message);
+          return empty ? `then feed ${empty[1]}` : '';
+        })
+        .then((cost) => setOptionCosts((costs) => ({ ...costs, [key]: cost })));
+    }
+  };
   const candidates = selection.filter((id) => id !== placementId);
   const missing = slots.find((slot) => !view?.inputs.some((i) => i.slot === slot));
   const refused = estimate && estimate !== 'unavailable' && !estimate.canAfford;
@@ -299,6 +320,15 @@ export function MachineControls({
                       label={`Feed ${slot} from another machine`}
                       text="Feed from…"
                       className="slot-source"
+                      onOpen={() =>
+                        estimateOptions(
+                          sources[slot].map((source) => ({
+                            tray: source.placementId,
+                            to: placementId,
+                            slot,
+                          })),
+                        )
+                      }
                     >
                       {sources[slot].map((source) => (
                         <button
@@ -308,6 +338,9 @@ export function MachineControls({
                           }
                         >
                           {source.name}
+                          <OptionCost
+                            cost={optionCosts[`${source.placementId}>${placementId}:${slot}`]}
+                          />
                         </button>
                       ))}
                     </ActionMenu>
@@ -324,6 +357,15 @@ export function MachineControls({
             label="Feed this machine’s answers into another machine"
             text="Feed into…"
             className="machine-targets"
+            onOpen={() =>
+              estimateOptions(
+                targets.map((target) => ({
+                  tray: placementId,
+                  to: target.placementId,
+                  slot: target.slot,
+                })),
+              )
+            }
           >
             {targets.map((target) => (
               <button
@@ -333,6 +375,9 @@ export function MachineControls({
                 }
               >
                 {target.name}
+                <OptionCost
+                  cost={optionCosts[`${placementId}>${target.placementId}:${target.slot}`]}
+                />
               </button>
             ))}
           </ActionMenu>
@@ -376,4 +421,11 @@ export function MachineControls({
       </footer>
     </>
   );
+}
+
+// A press's size and price in a few words: "12 runs · $0.04"; a free model shows runs alone.
+export const feedCost = (runs: number, microusd: number) =>
+  `${runs} ${runs === 1 ? 'run' : 'runs'}${microusd > 0 ? ` · ${formatUsd(microusd)}` : ''}`;
+function OptionCost({ cost }: { cost?: string }) {
+  return cost ? <span className="option-cost"> · {cost}</span> : null;
 }

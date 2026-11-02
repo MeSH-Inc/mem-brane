@@ -1,10 +1,16 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useStore } from 'zustand';
 import type { WorkspaceDocument } from '../services/workspace-document';
 import { useInteraction } from '../stores/interaction';
 import { statusLabels } from '../lib/labels';
 import { formatUsd } from '../lib/format';
-import { chainReceipt, machinePresses, type Press } from './machines';
+import {
+  chainReceipt,
+  dueMachines,
+  machinePresses,
+  machineStaleness,
+  type Press,
+} from './machines';
 
 const ACTIVE = new Set(['queued', 'claimed', 'running', 'cancel_requested']);
 const modelName = (model: string) => (model === 'mock' ? 'Local mock' : model);
@@ -24,9 +30,11 @@ export const MachineBack = memo(function MachineBack({
   document,
   models,
   onKeepCurrent,
+  onEstimateDue,
   children,
 }: {
   onKeepCurrent: (placementId: string, keptCurrent: boolean) => void;
+  onEstimateDue: (placementId: string) => Promise<{ machines: number; reservedMicrousd: number }>;
   // The lever, pressed from the back once the models are chosen.
   children?: React.ReactNode;
   placementId: string;
@@ -55,6 +63,38 @@ export const MachineBack = memo(function MachineBack({
   const chain = useMemo(() => JSON.parse(chainKey) as ReturnType<typeof chainReceipt>, [chainKey]);
   const keptCurrent = useStore(document.store, (s) => !!s.state?.keptCurrent.includes(placementId));
   const presses = useMemo(() => JSON.parse(pressKey) as Press[], [pressKey]);
+  // What Run all due would press now with this machine kept current: read again whenever
+  // what is due, or what a due machine is fed, changes.
+  const dueKey = useStore(document.store, (s) => {
+    if (!s.state) return '';
+    const kept = { ...s.state, keptCurrent: [...new Set([...s.state.keptCurrent, placementId])] };
+    const { run } = dueMachines(kept);
+    return JSON.stringify(run.map((id) => [id, machineStaleness(kept, id).inputs]));
+  });
+  const [dueCost, setDueCost] = useState('');
+  useEffect(() => {
+    setDueCost('');
+    if (!dueKey || dueKey === '[]') return;
+    let current = true;
+    const timer = setTimeout(
+      () =>
+        void onEstimateDue(placementId).then(
+          ({ machines, reservedMicrousd }) =>
+            current &&
+            setDueCost(
+              `Run all due now: ${machines} ${machines === 1 ? 'machine' : 'machines'}${
+                reservedMicrousd > 0 ? ` · ${formatUsd(reservedMicrousd)}` : ''
+              }`,
+            ),
+          () => undefined,
+        ),
+      400,
+    );
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [dueKey, placementId, onEstimateDue]);
   const compared = useInteraction((s) => s.comparisons[placementId]);
   const chosen = (compared ?? []).filter((model) => models.includes(model));
   return (
@@ -100,6 +140,7 @@ export const MachineBack = memo(function MachineBack({
           · marked due when a machine feeding it reruns; nothing runs without a press
         </span>
       </label>
+      {dueCost && <p className="back-meta machine-due-cost">{dueCost}</p>}
       {chain.length > 1 && (
         <section className="back-receipt" aria-label="Chain">
           <span className="eyebrow">Chain behind the newest answer</span>

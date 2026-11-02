@@ -345,6 +345,8 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
         if (id) presentation.getState().reveal(attention, { blockId: id, kind: 'reveal' });
       },
       onEstimateMachine: controller.estimateMachine,
+      onEstimateFeed: controller.estimateFeed,
+      onEstimateDue: controller.estimateDue,
       onFeed: controller.feed,
       onFeedTray: controller.feedTray,
       onKeepCurrent: (placementId: string, keptCurrent: boolean) =>

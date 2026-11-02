@@ -66,6 +66,12 @@ const machine = {
   onEstimateMachine: async () => {
     throw new Error('unused');
   },
+  onEstimateFeed: async () => {
+    throw new Error('unused');
+  },
+  onEstimateDue: async () => {
+    throw new Error('unused');
+  },
   onFeed: async () => {},
   onFeedTray: async () => {},
   onRunChain: async () => {},

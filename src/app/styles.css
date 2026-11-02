@@ -2759,3 +2759,10 @@ summary:focus-visible {
   cursor: pointer;
   white-space: nowrap;
 }
+.option-cost {
+  color: var(--muted);
+  font-size: 11px;
+}
+.machine-due-cost {
+  padding: 0 0 0 22px;
+}

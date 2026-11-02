@@ -6,7 +6,10 @@ export function ActionMenu({
   children,
   className = '',
   align = 'left',
+  onOpen,
 }: {
+  // Called each time the menu opens, for content worth reading only when it is seen.
+  onOpen?: () => void;
   label: string;
   // Visible summary content when it differs from the accessible label.
   text?: ReactNode;
@@ -26,6 +29,7 @@ export function ActionMenu({
     <details
       ref={ref}
       className={`action-menu ${className}`}
+      onToggle={(event) => event.currentTarget.open && onOpen?.()}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation();

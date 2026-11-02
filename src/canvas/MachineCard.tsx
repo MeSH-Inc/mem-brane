@@ -158,6 +158,7 @@ export const MachineCard = memo(function MachineCard({
           document={document}
           models={actions.models}
           onKeepCurrent={actions.onKeepCurrent}
+          onEstimateDue={actions.onEstimateDue}
         >
           <MachineControls
             placementId={placementId}
