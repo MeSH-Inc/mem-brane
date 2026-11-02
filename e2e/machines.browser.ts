@@ -1237,6 +1237,8 @@ test('at scale: twenty-four papers through two Splits and one Diagram', async ({
     await completed(braneId, 25);
     const drawn = page.locator('[aria-roledescription="group"][aria-label="Diagram"]');
     await expect(drawn).toBeVisible();
+    // The frame says the answer listed more than became cards.
+    await expect(drawn.locator('.group-cut')).toHaveText('of 48 listed');
     counts.diagramMs = Date.now() - started;
     // One answer becomes at most 24 cards; the items past them stay in the whole answer.
     const read = await state(braneId);

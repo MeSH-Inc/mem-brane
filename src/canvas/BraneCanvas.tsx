@@ -28,6 +28,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { Placement } from '../../shared/types/domain';
+import { answerCuts } from '../../shared/machine-output';
 import { derivationEdges, machineEdges, groupNodeId, threadEdges } from './derivations';
 import { GroupFrame, type GroupNode } from './GroupFrame';
 import { frame, groupOf, STACK_EDGES, tableMembers } from './groups';
@@ -542,6 +543,14 @@ function Inner(props: Props) {
     [matrixKey],
   );
   // Frames follow their members as they are dragged, so they read the gesture's preview.
+  // Groups whose answers listed more items than became cards, as a stable key.
+  const cutsKey = useStore(props.document.store, (s) =>
+    s.state ? JSON.stringify([...answerCuts(s.state)]) : '[]',
+  );
+  const cuts = useMemo(
+    () => new Map(JSON.parse(cutsKey) as [string, { cards: number; listed: number }][]),
+    [cutsKey],
+  );
   const frames = useMemo<GroupNode[]>(
     () =>
       groups.flatMap((group) => {
@@ -549,6 +558,7 @@ function Inner(props: Props) {
         const members = placed.map((p) => geometry[p.id] ?? p);
         if (!members.length) return [];
         const matrix = group.display === 'matrix' ? matrices.get(group.id) : undefined;
+        const cut = cuts.get(group.id);
         const fitted = frame(members);
         // A matrix's frame leaves room for its headings above and to the left.
         const box = matrix
@@ -589,6 +599,7 @@ function Inner(props: Props) {
               label: group.label,
               display: group.display,
               count: members.length,
+              listed: cut?.listed,
               matrix: headings || undefined,
               chosen: group.members.every((id) => selected.includes(id)),
               onFeed: props.onFeedGroup,
@@ -597,7 +608,16 @@ function Inner(props: Props) {
           },
         ];
       }),
-    [groups, placements, geometry, selected, matrices, props.onFeedGroup, props.onRenameGroup],
+    [
+      groups,
+      placements,
+      geometry,
+      selected,
+      matrices,
+      cuts,
+      props.onFeedGroup,
+      props.onRenameGroup,
+    ],
   );
   const askData = useMemo(
     () => props.ask && { content: props.ask.content, onClose: props.onCloseAsk },

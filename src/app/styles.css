@@ -2791,3 +2791,8 @@ summary:focus-visible {
   font-weight: 600;
   white-space: nowrap;
 }
+.group-cut {
+  color: #7a4f08;
+  font-size: 10px;
+  white-space: nowrap;
+}

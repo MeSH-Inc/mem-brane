@@ -1,3 +1,4 @@
+import { answerCuts } from '../shared/machine-output';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase, type DB } from '../server/db/index';
 import {
@@ -251,6 +252,9 @@ it('wraps a wide layer of a large diagram so it stays near square, arrows pointi
   expect([columns, rows]).toEqual([5, 6]);
   const [supported, ...supporting] = placed;
   expect(supporting.every((p) => p.y < supported.y)).toBe(true);
+  // Its frame can say the answer listed 48: the rest are in the whole answer.
+  const diagramGroup = state.groups.find((g) => g.label === 'Diagram')!;
+  expect(answerCuts(state).get(diagramGroup.id)).toEqual({ cards: 24, listed: 48 });
 });
 
 it('puts each answer’s cards in its place in the stack a press made', () => {

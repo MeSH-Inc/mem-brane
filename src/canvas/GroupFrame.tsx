@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { MAX_GROUP_LABEL } from '../../shared/groups';
+import { MAX_OUTPUT_CARDS } from '../../shared/machine-output';
 import { CardPort } from './MachineCard';
 import type { Group } from '../../shared/types/domain';
 
@@ -9,6 +10,8 @@ export type GroupData = {
   label: string;
   display: Group['display'];
   count: number;
+  // When its cards are answers cut at the card bound: how many items the answers listed.
+  listed?: number;
   // A matrix's headings, placed from the frame's corner: a row's top, a column's left.
   matrix?: {
     rows: { label: string; top: number }[];
@@ -45,6 +48,14 @@ export const GroupFrame = memo(function GroupFrame({ data }: NodeProps<GroupNode
                   ? `${data.matrix.rows.length} × ${data.matrix.columns.length}`
                   : `${data.count} cards`}
             </span>
+            {data.listed && (
+              <span
+                className="group-cut"
+                title={`One answer becomes at most ${MAX_OUTPUT_CARDS} cards. Every item is in the whole answer, on the first card's back.`}
+              >
+                of {data.listed} listed
+              </span>
+            )}
             <button
               className="icon-button"
               aria-label={`Rename ${data.label}`}

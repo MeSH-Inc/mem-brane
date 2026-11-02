@@ -33,6 +33,8 @@ export interface OutputParts {
   arrows: OutputArrow[];
   // Relation lines that name an item the answer does not have, or join an item to itself.
   dropped: number;
+  // How many items the answer listed, those past the card bound included.
+  listed: number;
 }
 
 const itemLine = /^\s*(\d{1,3})[.)]\s+(.+)$/;
@@ -79,6 +81,7 @@ export function parseOutput(text: string, output: MachineOutput): OutputParts {
     items: kept.map((item) => item.lines.join('\n')),
     arrows,
     dropped: named.length - arrows.length,
+    listed: items.length,
   };
 }
 
@@ -96,4 +99,37 @@ export function diagramLayers(count: number, arrows: OutputArrow[]): number[] | 
     if (!changed) return layer;
   }
   return null;
+}
+
+// The groups whose cards are answers cut at the card bound: for each, how many cards
+// its answers became and how many items those answers listed.
+export function answerCuts(state: {
+  parts: { runId: string; blockId: string }[];
+  runs: { id: string; output_block_id: string }[];
+  blocks: { id: string; content: { text: string } }[];
+  placements: { id: string; block_id: string }[];
+  groups: { id: string; members: string[] }[];
+}): Map<string, { cards: number; listed: number }> {
+  const runOf = new Map(state.parts.map((part) => [part.blockId, part.runId]));
+  const blockOf = new Map(state.placements.map((p) => [p.id, p.block_id]));
+  const cuts = new Map<string, { cards: number; listed: number }>();
+  for (const group of state.groups) {
+    const runs = new Set(
+      group.members.flatMap((member) => {
+        const run = runOf.get(blockOf.get(member) ?? '');
+        return run ? [run] : [];
+      }),
+    );
+    let cards = 0,
+      listed = 0;
+    for (const runId of runs) {
+      const run = state.runs.find((r) => r.id === runId);
+      const text = state.blocks.find((b) => b.id === run?.output_block_id)?.content.text ?? '';
+      const parts = state.parts.filter((part) => part.runId === runId).length;
+      cards += parts;
+      listed += Math.max(parts, parseOutput(text, 'cards').listed);
+    }
+    if (listed > cards) cuts.set(group.id, { cards, listed });
+  }
+  return cuts;
 }
