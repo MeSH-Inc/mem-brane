@@ -26,6 +26,8 @@ import { PasswordRecovery } from '../components/PasswordRecovery';
 import { accountPromptOf, type AccountPrompt } from '../services/account-prompt';
 import { useVisualViewport } from './useVisualViewport';
 import { FirstSteps } from '../components/FirstSteps';
+// How long after the last answer finishes the list of branes is read again.
+const ANSWERS_SETTLE_MS = 2000;
 function AuthScreen({
   onSignedIn,
   onGuest,
@@ -252,6 +254,7 @@ function Shell() {
     if (!session) return;
     refreshBranes();
     const reconcile = () => window.dispatchEvent(new Event('brane:reconcile'));
+    let answersTimer: ReturnType<typeof setTimeout> | undefined;
     const disconnect = connectLiveUpdates({
       open: () => new EventSource(`/api/events?library=${encodeURIComponent(session.libraryId)}`),
       eventTypes: ['ready', 'run'],
@@ -263,8 +266,12 @@ function Shell() {
         try {
           const detail = runEventResponse.parse(JSON.parse((event as MessageEvent).data));
           window.dispatchEvent(new CustomEvent('brane:run', { detail }));
-          // A finished answer may make a machine kept current due, or no longer due.
-          if (detail.status === 'completed') refreshBranes();
+          // A finished answer may make a machine kept current due, or no longer due. A
+          // press of twelve finishes twelve answers; the list is read once they stop.
+          if (detail.status === 'completed') {
+            clearTimeout(answersTimer);
+            answersTimer = setTimeout(refreshBranes, ANSWERS_SETTLE_MS);
+          }
         } catch {
           // SSE is only a hint. A malformed update must be reconciled from storage.
           reconcile();
@@ -273,13 +280,16 @@ function Shell() {
     });
     window.addEventListener('brane:reconcile', refreshBranes);
     window.addEventListener('brane:local-change', refreshBranes);
-    const timer = setInterval(refreshBranes, 10000);
+    // Local changes and finished answers read the list themselves; this read only
+    // catches what another device changed.
+    const timer = setInterval(refreshBranes, 30_000);
     return () => {
       disconnect();
       window.dispatchEvent(new CustomEvent('brane:live', { detail: true }));
       window.removeEventListener('brane:reconcile', refreshBranes);
       window.removeEventListener('brane:local-change', refreshBranes);
       clearInterval(timer);
+      clearTimeout(answersTimer);
     };
   }, [session]);
   if (session === undefined)
