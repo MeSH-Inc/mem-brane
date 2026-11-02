@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import type { WorkspaceDocument } from '../services/workspace-document';
 import type { Estimate } from '../../shared/contracts';
-import { feedClosesLoop, machineName, machineSlots } from '../../shared/machines';
+import { feedClosesLoop, machineName, machineSlots, MAX_EACH_RUNS } from '../../shared/machines';
+import { MAX_RUN_INPUTS } from '../../shared/limits';
 import { machineOutput } from '../../shared/machine-output';
 import { useInteraction } from '../stores/interaction';
 import { ActionMenu } from '../components/ActionMenu';
@@ -181,8 +182,20 @@ export function MachineControls({
   const [running, setRunning] = useState(false);
   const [estimate, setEstimate] = useState<Estimate | 'unavailable'>();
   const estimateFor = useRef('');
+  // A press past the bounds would be refused; the lever says which bound instead.
+  const perRun = !view
+    ? 0
+    : view.eachSlot
+      ? view.inputs.filter((i) => i.slot !== view.eachSlot).length + 1
+      : view.inputs.length;
+  const overfed = perRun > MAX_RUN_INPUTS;
+  const overEach = !!view?.eachSlot && view.runs > MAX_EACH_RUNS;
   const ready =
-    !!view && slots.length > 0 && slots.every((slot) => view.inputs.some((i) => i.slot === slot));
+    !!view &&
+    slots.length > 0 &&
+    slots.every((slot) => view.inputs.some((i) => i.slot === slot)) &&
+    !overfed &&
+    !overEach;
   // Re-estimate when what the lever would send changes; stale answers are discarded.
   useEffect(() => {
     // An answer still being written upstream cannot be estimated from; the lever waits.
@@ -234,29 +247,33 @@ export function MachineControls({
         ? `Feed ${missing}`
         : view?.eachConflict
           ? 'One slot runs each'
-          : models.length > 1 && view?.eachSlot
-            ? 'Compare with the cards together'
-            : chain?.waitingOn?.running
-              ? `Waiting on ${chain.waitingOn.name}`
-              : refused
-                ? 'Over today’s allowance'
-                : chained
-                  ? `Rerun the chain ×${chained.length}${
-                      estimate && estimate !== 'unavailable' && estimate.reservedMicrousd > 0
-                        ? ` · ${formatUsd(estimate.reservedMicrousd)}`
-                        : ''
-                    }`
-                  : `${view?.stale ? 'Rerun' : 'Run'}${
-                      models.length > 1
-                        ? ` ×${models.length} models`
-                        : view && view.runs > 1
-                          ? ` ×${view.runs}`
-                          : ''
-                    }${
-                      estimate && estimate !== 'unavailable' && estimate.reservedMicrousd > 0
-                        ? ` · ${formatUsd(estimate.reservedMicrousd)}`
-                        : ''
-                    }`;
+          : overfed
+            ? `Fed ${perRun} cards; a run reads ${MAX_RUN_INPUTS}`
+            : overEach
+              ? `Each runs at most ${MAX_EACH_RUNS} cards`
+              : models.length > 1 && view?.eachSlot
+                ? 'Compare with the cards together'
+                : chain?.waitingOn?.running
+                  ? `Waiting on ${chain.waitingOn.name}`
+                  : refused
+                    ? 'Over today’s allowance'
+                    : chained
+                      ? `Rerun the chain ×${chained.length}${
+                          estimate && estimate !== 'unavailable' && estimate.reservedMicrousd > 0
+                            ? ` · ${formatUsd(estimate.reservedMicrousd)}`
+                            : ''
+                        }`
+                      : `${view?.stale ? 'Rerun' : 'Run'}${
+                          models.length > 1
+                            ? ` ×${models.length} models`
+                            : view && view.runs > 1
+                              ? ` ×${view.runs}`
+                              : ''
+                        }${
+                          estimate && estimate !== 'unavailable' && estimate.reservedMicrousd > 0
+                            ? ` · ${formatUsd(estimate.reservedMicrousd)}`
+                            : ''
+                        }`;
   return (
     <>
       {showSlots && (

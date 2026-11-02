@@ -1,3 +1,4 @@
+import { MAX_RUN_INPUTS } from '../../shared/limits.js';
 import { modelProvider } from '../llm/provider.js';
 import { planRun, relationEntryText, type MachinePlan, type RunPlanLimits } from './run-plan.js';
 import {
@@ -458,7 +459,7 @@ export function spawnArtifact(
   if (
     input.action !== 'develop' ||
     !input.sourceBlockIds.length ||
-    input.sourceBlockIds.length > 32 ||
+    input.sourceBlockIds.length > MAX_RUN_INPUTS ||
     new Set(input.sourceBlockIds).size !== input.sourceBlockIds.length ||
     input.edits.some((e) => !input.sourceBlockIds.includes(e.blockId))
   )

@@ -56,15 +56,27 @@ export function placeRunParts(db: DB, runId: string, text: string) {
     ).n >= MAX_BRANE_GROUPS
   )
     return;
-  // A diagram is laid in layers by its arrows, each layer a row in item order, or on a
-  // grid when its arrows go round in a cycle; it piles only when it joins a stack.
+  // A diagram is laid in layers by its arrows, each layer rows of at most a square grid's
+  // width in item order, or on that grid when its arrows go round in a cycle; it piles
+  // only when it joins a stack. A wide layer wraps, so a large diagram stays near square.
   const spread = output === 'diagram' && membership?.display !== 'stack';
   const layers = diagramLayers(parts.items.length, parts.arrows);
   const columns = Math.ceil(Math.sqrt(parts.items.length));
+  // The first row of each layer: every layer before it takes its own wrapped rows.
+  const firstRow: number[] = [];
+  if (layers)
+    for (let layer = 0, row = 0; layer <= Math.max(...layers); layer++) {
+      firstRow[layer] = row;
+      row += Math.max(1, Math.ceil(layers.filter((l) => l === layer).length / columns));
+    }
   const cell = parts.items.map((_, index) => {
     if (!layers) return { row: Math.floor(index / columns), column: index % columns };
-    const row = layers[index];
-    return { row, column: layers.slice(0, index).filter((l) => l === row).length };
+    const layer = layers[index];
+    const position = layers.slice(0, index).filter((l) => l === layer).length;
+    return {
+      row: firstRow[layer] + Math.floor(position / columns),
+      column: position % columns,
+    };
   });
   const geometry = (index: number) =>
     spread

@@ -976,6 +976,107 @@ test('at scale: twelve papers through Split each and Diagram', async ({ page }) 
   record('scale-pile', { ...counts, pan });
 });
 
+test('at scale: twenty-four papers through two Splits and one Diagram', async ({ page }) => {
+  test.slow();
+  const counts = {
+    actions: 0,
+    splitMs: [] as number[],
+    diagramMs: 0,
+    ideas: 0,
+    answerItems: 0,
+    diagramCards: 0,
+    diagramArrows: 0,
+    diagramExtent: { width: 0, height: 0 },
+    requestsPerMinute: 0,
+  };
+  let pan: Awaited<ReturnType<typeof panFrames>> | undefined;
+  await serve(page, 4215, async ({ seed, completed, state, origin }) => {
+    const requests = countRequests(page);
+    const papers = Array.from(
+      { length: 24 },
+      (_, i) => `Paper ${i + 1} finds that sleep helps memory. Its effect holds for naps.`,
+    );
+    const { braneId, cards } = await seed('Scale pile of 24', papers, grid);
+    counts.actions++; // the drop
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    // One press runs each for at most twelve cards, so the pile is two stacks of twelve.
+    for (const half of [cards.slice(0, 12), cards.slice(12)]) {
+      await page.locator('.react-flow__controls-fitview').click();
+      await act(() => lasso(page, half));
+      await act(() => page.keyboard.press('g'));
+      await act(() => page.getByRole('button', { name: 'Stack', exact: true }).click());
+    }
+    for (const group of ['Group 1', 'Group 2']) {
+      const split = await takeOut(page, act, state, braneId, 'Split');
+      await page.locator('.react-flow__controls-fitview').click();
+      await act(() =>
+        drag(
+          page,
+          `.react-flow__node[data-id^="group:"]:has([aria-label="${group}"]) .card-port`,
+          split.locator('[data-feed-slot="text"]'),
+        ),
+      );
+      await act(() => split.getByRole('button', { name: /one card at a time/ }).click());
+      await expect(split.locator('.machine-lever')).toHaveText(/^Run ×12/);
+      const started = Date.now();
+      await act(() => split.locator('.machine-lever').click());
+      await completed(braneId, 12 * (counts.splitMs.length + 1));
+      counts.splitMs.push(Date.now() - started);
+    }
+    const ideas = page.locator('[aria-roledescription="group"][aria-label="Each text"]');
+    await expect(ideas).toHaveCount(2);
+    for (const stack of await ideas.all()) await expect(stack).toContainText('Stack · 24');
+    counts.ideas = 48;
+    // Both stacks of ideas feed the Diagram's one slot, together in one run.
+    const diagram = await takeOut(page, act, state, braneId, 'Diagram');
+    for (const index of [0, 1]) {
+      await page.locator('.react-flow__controls-fitview').click();
+      await act(() =>
+        drag(
+          page,
+          `.react-flow__node[data-id^="group:"]:has([aria-label="Each text"]) >> nth=${index} >> .card-port`,
+          diagram.locator('[data-feed-slot="material"]'),
+        ),
+      );
+    }
+    await expect(diagram.locator('[data-feed-slot="material"] .slot-chip')).toHaveCount(2);
+    await expect(diagram.locator('.machine-lever')).toHaveText(/^Run(?! ×)/);
+    const started = Date.now();
+    await act(() => diagram.locator('.machine-lever').click());
+    await completed(braneId, 25);
+    const drawn = page.locator('[aria-roledescription="group"][aria-label="Diagram"]');
+    await expect(drawn).toBeVisible();
+    counts.diagramMs = Date.now() - started;
+    // One answer becomes at most 24 cards; the items past them stay in the whole answer.
+    const read = await state(braneId);
+    const members = read.groups.find((g) => g.label === 'Diagram')!.members;
+    counts.diagramCards = members.length;
+    expect(counts.diagramCards).toBe(24);
+    counts.diagramArrows = read.relations.filter((r) =>
+      members.includes(r.from_placement_id),
+    ).length;
+    const placed = read.placements.filter((p) => members.includes(p.id));
+    counts.diagramExtent = {
+      width: Math.max(...placed.map((p) => p.x + p.width)) - Math.min(...placed.map((p) => p.x)),
+      height: Math.max(...placed.map((p) => p.y + p.height)) - Math.min(...placed.map((p) => p.y)),
+    };
+    const run = read.runs.at(-1)!;
+    const answer = await page.request.get(`${origin}/api/blocks/${run.output_block_id}`);
+    const text = ((await answer.json()) as { content: { text: string } }).content.text;
+    counts.answerItems = text.split('\n').filter((line) => /^\s*\d{1,3}[.)]\s/.test(line)).length;
+    await page.locator('.react-flow__controls-fitview').click();
+    await page.screenshot({ path: 'test-results/machine-scale-diagram-48.png' });
+    pan = await panFrames(page);
+    counts.requestsPerMinute = requests();
+    expect(counts.requestsPerMinute).toBeLessThan(120);
+  });
+  record('scale-pile-24', { ...counts, pan });
+});
+
 test('at scale: twelve papers and five questions make a sixty-cell matrix', async ({ page }) => {
   test.slow();
   const counts = {

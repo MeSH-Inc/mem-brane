@@ -1,4 +1,4 @@
-import { MAX_BLOCK_TEXT_CHARACTERS } from '../limits.js';
+import { MAX_BLOCK_TEXT_CHARACTERS, MAX_RUN_INPUTS } from '../limits.js';
 import { z } from 'zod';
 export const runStatus = z.enum([
   'queued',
@@ -28,9 +28,13 @@ export const submitRun = z.object({
   key: id,
   model: z.string().max(100),
   prompt: z.string().trim().min(1).max(20000),
-  references: z.array(id).max(32),
+  references: z.array(id).max(MAX_RUN_INPUTS),
   continueFrom: id.optional(),
-  edits: z.array(edit).max(64).default([]),
+  // The cards read and the prompt's own card.
+  edits: z
+    .array(edit)
+    .max(MAX_RUN_INPUTS + 1)
+    .default([]),
   maxOutputTokens: z.number().int().positive().optional(),
   maxReservedMicrousd: z.number().int().nonnegative().safe().optional(),
   // Where the answer is placed: an Ask's answer takes the Ask box's place.
@@ -47,12 +51,12 @@ export const spawnArtifact = z
     sourceBlockIds: z
       .array(id)
       .min(1)
-      .max(32)
+      .max(MAX_RUN_INPUTS)
       .refine((ids) => new Set(ids).size === ids.length, 'Duplicate source'),
     anchorPlacementId: id,
     action: z.literal('develop'),
     model: z.string().min(1).max(100),
-    edits: z.array(edit).max(32).default([]),
+    edits: z.array(edit).max(MAX_RUN_INPUTS).default([]),
   })
   .strict()
   .refine(

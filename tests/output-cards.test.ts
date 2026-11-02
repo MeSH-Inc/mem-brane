@@ -230,6 +230,29 @@ it('places a diagram as a region of cards with its arrows drawn', () => {
   );
 });
 
+it('wraps a wide layer of a large diagram so it stays near square, arrows pointing down', () => {
+  const paper = card('Paper', 0);
+  const diagram = machineCard(DIAGRAM);
+  feed(diagram.placement.id, 'material', { placementId: paper.placement.id });
+  const run = press(diagram.placement.id);
+  // Two Splits' worth of ideas: 48 items, each later one supporting the first.
+  const items = Array.from({ length: 48 }, (_, i) => `${i + 1}. Idea ${i + 1}.`);
+  const arrows = items.slice(1).map((_, i) => `${i + 2} —supports→ 1`);
+  complete(run.id, [...items, '', ...arrows].join('\n'));
+  const state = readBrane(db, actor, brane);
+  const placed = state.parts.map((part) =>
+    state.placements.find((p) => p.block_id === part.blockId)!,
+  );
+  // One answer becomes at most 24 cards.
+  expect(placed).toHaveLength(24);
+  const columns = new Set(placed.map((p) => p.x)).size;
+  const rows = new Set(placed.map((p) => p.y)).size;
+  // The 23 supporting ideas in rows of five, and the idea they support alone beneath.
+  expect([columns, rows]).toEqual([5, 6]);
+  const [supported, ...supporting] = placed;
+  expect(supporting.every((p) => p.y < supported.y)).toBe(true);
+});
+
 it('puts each answer’s cards in its place in the stack a press made', () => {
   const papers = [1, 2].map((n) => card(`Paper ${n}`, n * 300));
   const groupId = uid();

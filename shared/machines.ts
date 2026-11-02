@@ -1,7 +1,7 @@
 import type { BraneState, Feed } from './types/domain.js';
 import { z } from 'zod';
 import { id, edit } from './schemas/index.js';
-import { MAX_BLOCK_TEXT_CHARACTERS } from './limits.js';
+import { MAX_BLOCK_TEXT_CHARACTERS, MAX_RUN_INPUTS } from './limits.js';
 
 // A machine's template names its slots in braces: "Critique {claim} using {evidence}".
 // Slots are derived from the template wherever it is read, so the prompt is the only
@@ -71,8 +71,11 @@ export const runMachine = z
     inputs: z
       .array(z.object({ blockId: id, slot: slotName }).strict())
       .min(1)
-      .max(32),
-    edits: z.array(edit).max(33).default([]),
+      .max(MAX_RUN_INPUTS, `One run reads at most ${MAX_RUN_INPUTS} cards.`),
+    edits: z
+      .array(edit)
+      .max(MAX_RUN_INPUTS + 1)
+      .default([]),
     // The slot fed 'each': one run per card in it, all admitted by this one press.
     each: z.string().trim().min(1).max(40).optional(),
     // Compare models: one run per model over the same inputs, all admitted by this press.

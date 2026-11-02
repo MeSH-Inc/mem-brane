@@ -17,7 +17,13 @@ import { applyWorkspaceOperation } from '../server/services/workspace-operations
 import { buildMessages } from '../server/llm/model';
 import { RunWorker } from '../server/jobs/worker';
 import { EventHub } from '../server/sse/hub';
-import { machineSlots, orderMachineInputs, type RunMachine } from '../shared/machines';
+import {
+  machineSlots,
+  orderMachineInputs,
+  runMachine as runMachineRequest,
+  type RunMachine,
+} from '../shared/machines';
+import { MAX_RUN_INPUTS } from '../shared/limits';
 import { machineStaleness } from '../shared/machine-staleness';
 
 let db: DB, actor: string, brane: string;
@@ -61,6 +67,19 @@ beforeEach(() => {
 });
 afterEach(() => db.close());
 
+it('reads up to the bound of cards in one run and names the bound past it', () => {
+  const request = (count: number) => ({
+    braneId: uid(),
+    key: uid(),
+    machinePlacementId: uid(),
+    model: 'mock',
+    inputs: Array.from({ length: count }, () => ({ blockId: uid(), slot: 'material' })),
+  });
+  // Two Splits' ideas, 48 of them, feed one Diagram together.
+  expect(runMachineRequest.safeParse(request(48)).success).toBe(true);
+  const refused = runMachineRequest.safeParse(request(MAX_RUN_INPUTS + 1));
+  expect(refused.error?.issues[0].message).toBe(`One run reads at most ${MAX_RUN_INPUTS} cards.`);
+});
 it('derives slots from the template in order, once each', () => {
   expect(machineSlots('Weigh {claim} against {evidence}; restate {claim}.')).toEqual([
     'claim',

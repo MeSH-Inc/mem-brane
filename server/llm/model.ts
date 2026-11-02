@@ -36,7 +36,8 @@ export function buildMessages(inputs: RunInput[]): ModelMessage[] {
   }));
 }
 // The mock's answer to a prompt that asks for cards: the sentences of what was sent, as
-// numbered items, and for a diagram each later item supporting the first.
+// numbered items, and for a diagram each later item supporting the first. It lists more
+// items than one answer may become cards, so that bound is what limits a large answer.
 function mockParts(texts: string[], output: MachineOutput) {
   const sentences = texts.flatMap((text) =>
     text
@@ -47,7 +48,7 @@ function mockParts(texts: string[], output: MachineOutput) {
   );
   const items = (
     sentences.length >= 2 ? sentences : ['The main idea.', 'What follows from it.']
-  ).slice(0, 8);
+  ).slice(0, 60);
   const lines = items.map((item, index) => `${index + 1}. ${item}`);
   if (output === 'diagram')
     lines.push('', ...items.slice(1).map((_, index) => `${index + 2} —supports→ 1`));
