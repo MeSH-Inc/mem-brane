@@ -46,6 +46,7 @@ export function scene(): BraneState {
       batch_id: null,
       batch_position: null,
       confirmed_microusd: null,
+      continued_block_id: null,
       created_at: 0,
     })),
     feeds: [],

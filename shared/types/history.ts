@@ -20,6 +20,7 @@ export interface RunPage {
     | 'batch_id'
     | 'batch_position'
     | 'confirmed_microusd'
+    | 'continued_block_id'
   >[];
   nextCursor: string | null;
 }

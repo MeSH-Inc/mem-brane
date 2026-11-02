@@ -56,6 +56,35 @@ export function derivationEdges(
   });
 }
 
+// A reply's thread: a line from the answer a Reply continued down to the reply's answer,
+// so the branches of one conversation read as branches. Pairs are [continued, reply]
+// block ids.
+export function threadEdges(
+  state: Pick<BraneState, 'placements'>,
+  threads: [string, string][],
+): Edge[] {
+  return threads.flatMap(([continued, reply]) => {
+    const from = state.placements.find((p) => p.block_id === continued && !p.host_placement_id);
+    const to = state.placements.find((p) => p.block_id === reply && !p.host_placement_id);
+    if (!from || !to) return [];
+    return [
+      {
+        id: `thread:${reply}`,
+        source: from.id,
+        target: to.id,
+        sourceHandle: 'output',
+        targetHandle: 'input',
+        type: 'smoothstep',
+        label: 'reply',
+        selectable: false,
+        deletable: false,
+        className: 'thread-edge',
+        style: { stroke: '#5b6f8a', strokeWidth: 1.5, strokeDasharray: '2 4' },
+      },
+    ];
+  });
+}
+
 // Feeds are authored inputs: a card's output, or a group's frame, to a machine's slot. A
 // feed whose cards changed since the machine's last run is drawn dashed in the stale
 // colour.

@@ -137,6 +137,9 @@ export interface Run {
   batch_position: number | null;
   // What the run cost once its usage was settled; null until then, or if never known.
   confirmed_microusd: number | null;
+  // The answer whose conversation this run continues (a Reply); null for a run that
+  // starts one.
+  continued_block_id: string | null;
 }
 // One placed card, or one group's members, fills one slot of a placed machine on the
 // same brane. Exactly one of the two sources is set.

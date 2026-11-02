@@ -63,6 +63,7 @@ export const runResponse = runSummaryResponse.extend({
   batch_id: identity.nullable(),
   batch_position: z.number().int().nonnegative().nullable(),
   confirmed_microusd: z.number().int().nonnegative().nullable(),
+  continued_block_id: identity.nullable(),
 });
 const blockKind = z.enum(['text', 'image', 'webpage', 'pdf', 'machine']);
 export const blockResponse: z.ZodType<Block> = z.object({

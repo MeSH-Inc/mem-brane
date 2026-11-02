@@ -30,6 +30,7 @@ function render(text: string, status: Run['status'], actions = {}) {
     batch_id: null,
     batch_position: null,
     confirmed_microusd: null,
+    continued_block_id: null,
     created_at: 0,
   };
   act(() => root.render(<ResponseContent text="" run={run} {...actions} />));

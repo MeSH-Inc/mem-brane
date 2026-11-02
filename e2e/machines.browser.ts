@@ -256,6 +256,81 @@ test('Ask answers a region where it was asked, and Make reusable turns it into a
   record('region', counts);
 });
 
+test('a conversation branches: two replies to one answer both stay on the table', async ({
+  page,
+}) => {
+  const counts = {
+    actions: 0,
+    typed: 0,
+    // Where each reply stands from the answer it replies to, and whether a line joins them.
+    replies: [] as { below: boolean; dx: number; dy: number; joined: boolean }[],
+  };
+  await serve(page, 4216, async ({ seed, completed, state, api, origin }) => {
+    const { braneId, cards } = await seed('Branching', sources);
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    const ask = async (text: string) => {
+      counts.typed += text.length;
+      const box = page.getByRole('region', { name: 'Ask' });
+      await act(() => box.getByRole('textbox', { name: 'Run prompt' }).fill(text));
+      await act(() => box.getByRole('button', { name: 'Run ↗', exact: true }).click());
+    };
+    // The first question, about the sources.
+    await act(() => marquee(page, cards));
+    await act(() => page.getByRole('button', { name: 'Ask about 3', exact: true }).click());
+    await ask('What do these sources agree on?');
+    await completed(braneId, 1);
+    const first = (await state(braneId)).runs[0];
+    const node = (blockId: string, read: BraneRead) =>
+      read.placements.find((p) => p.block_id === blockId)!;
+    // Reply to it twice: the second reply branches from the same answer.
+    for (const [index, followUp] of [
+      'Which of them is strongest?',
+      'What would a skeptic say instead?',
+    ].entries()) {
+      const before = await state(braneId);
+      const answer = page.locator(
+        `.react-flow__node[data-id="${node(first.output_block_id, before).id}"]`,
+      );
+      await page.locator('.react-flow__controls-fitview').click();
+      await act(() => answer.locator('.card-grip').click());
+      await act(() => page.getByRole('button', { name: 'Reply', exact: true }).click());
+      await expect(page.getByRole('button', { name: '⑂ Continuing a branch ×' })).toBeVisible();
+      await ask(followUp);
+      await completed(braneId, 2 + index);
+      const read = await state(braneId);
+      const run = read.runs.at(-1)!;
+      const detail = await (await page.request.get(api(`/runs/${run.id}`))).json();
+      // The reply read the conversation it continues.
+      expect(JSON.stringify(detail.inputs)).toContain('What do these sources agree on?');
+      const parent = node(first.output_block_id, read),
+        reply = node(run.output_block_id, read);
+      counts.replies.push({
+        below: reply.y >= parent.y + parent.height,
+        dx: reply.x - parent.x,
+        dy: reply.y - parent.y,
+        // A thread line joins the reply to the answer it continues.
+        joined:
+          (await page
+            .getByRole('img', { name: `Edge from ${parent.id} to ${reply.id}` })
+            .count()) === 1,
+      });
+    }
+    expect(counts.replies.every((reply) => reply.joined)).toBe(true);
+    // Both branches stay on the table.
+    const read = await state(braneId);
+    expect(read.runs.filter((r) => r.status === 'completed')).toHaveLength(3);
+    for (const run of read.runs)
+      expect(read.placements.some((p) => p.block_id === run.output_block_id)).toBe(true);
+    await page.locator('.react-flow__controls-fitview').click();
+    await page.screenshot({ path: 'test-results/machine-branch.png' });
+  });
+  record('branch', counts);
+});
+
 test('a reading pile becomes a stack and feeds a machine as one', async ({ page }) => {
   const counts = { actions: 0 };
   await serve(page, 4204, async ({ seed, completed, state, api, origin }) => {

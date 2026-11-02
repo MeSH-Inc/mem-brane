@@ -314,6 +314,10 @@ describe('worker, branch semantics and reconnect', () => {
       ci.some((i) => i.kind === 'lineage_reference' && i.content.text === 'Original thought'),
     ).toBe(true);
     expect(readRunDetail(db, actor, continuation.id).continue_from).toBe(ao.message_id);
+    // The brane names the answer a Reply continues, so the canvas can draw the thread.
+    const runs = readBrane(db, actor, brane).runs;
+    expect(runs.find((r) => r.id === continuation.id)?.continued_block_id).toBe(a.output_block_id);
+    expect(runs.find((r) => r.id === b.id)?.continued_block_id).toBeNull();
     const synthesis = submit({ references: [a.output_block_id, b.output_block_id] });
     expect(readRunDetail(db, actor, synthesis.id).continue_from).toBeNull();
     const si = readInputs(db, synthesis.id);

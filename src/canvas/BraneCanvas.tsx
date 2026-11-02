@@ -28,7 +28,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { Placement } from '../../shared/types/domain';
-import { derivationEdges, machineEdges, groupNodeId } from './derivations';
+import { derivationEdges, machineEdges, groupNodeId, threadEdges } from './derivations';
 import { GroupFrame, type GroupNode } from './GroupFrame';
 import { frame, groupOf, STACK_EDGES, tableMembers } from './groups';
 import { matrixOf, MATRIX_COLUMN_HEADER, MATRIX_ROW_HEADER } from './matrix';
@@ -689,6 +689,14 @@ function Inner(props: Props) {
   const trays = useStore(props.document.store, (s) =>
     JSON.stringify(s.state ? [...trayOwners(s.state)] : []),
   );
+  // Each Reply's answer and the answer it continued, as a stable key.
+  const threads = useStore(props.document.store, (s) =>
+    JSON.stringify(
+      (s.state?.runs ?? []).flatMap((r) =>
+        r.continued_block_id ? [[r.continued_block_id, r.output_block_id]] : [],
+      ),
+    ),
+  );
   const edges = useMemo(
     () => [
       ...derivationEdges(scene, new Set(machineRuns.split(' ').filter(Boolean))),
@@ -698,8 +706,9 @@ function Inner(props: Props) {
         new Map(JSON.parse(trays) as [string, string][]),
       ),
       ...relationEdges(scene, props.onUnrelate, relabelArrow),
+      ...threadEdges(scene, JSON.parse(threads) as [string, string][]),
     ],
-    [scene, machineRuns, changedFeeds, trays, props.onUnrelate, relabelArrow],
+    [scene, machineRuns, changedFeeds, trays, threads, props.onUnrelate, relabelArrow],
   );
   return (
     <div
