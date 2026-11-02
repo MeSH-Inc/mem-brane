@@ -321,6 +321,9 @@ test('a conversation branches: two replies to one answer both stay on the table'
       });
     }
     expect(counts.replies.every((reply) => reply.joined)).toBe(true);
+    // Both replies lie beneath the answer, the second beside the first.
+    expect(counts.replies.every((reply) => reply.below)).toBe(true);
+    expect(counts.replies[1].dx).toBeGreaterThan(counts.replies[0].dx);
     // Both branches stay on the table.
     const read = await state(braneId);
     expect(read.runs.filter((r) => r.status === 'completed')).toHaveLength(3);

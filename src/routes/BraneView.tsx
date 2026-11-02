@@ -346,7 +346,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     if (!messageId) return;
     const block = controller.state?.blocks.find((b) => b.messageId === messageId);
     if (asking) focusPrompt();
-    else openAskAt(block ? placementsOf([block.id]) : []);
+    else openAskAt(block ? placementsOf([block.id]) : [], true);
   };
   const attentionRef = useRef<HTMLElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -468,7 +468,10 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     );
   // Beside the placements, or below them when that is nearer to open space; at the view's
   // centre when there are none.
-  const openAskAt = (around: Placement[]) => {
+  // A reply opens beneath the answer it continues, so a conversation reads down the
+  // table and a second reply lies beside the first; any other question opens beside or
+  // beneath its cards, whichever is nearer.
+  const openAskAt = (around: Placement[], beneath = false) => {
     if (!canvasAsk) {
       setAskSheet(true);
       return focusPrompt();
@@ -483,6 +486,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
       const beside = openSpot(table, { x: right + 80, y: top }, ASK_WIDTH, ASK_HEIGHT);
       const below = openSpot(table, { x: left, y: bottom + 40 }, ASK_WIDTH, ASK_HEIGHT);
       spot =
+        !beneath &&
         Math.hypot(beside.x - right, beside.y - top) <= Math.hypot(below.x - left, below.y - bottom)
           ? beside
           : below;
