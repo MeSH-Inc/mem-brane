@@ -118,6 +118,19 @@ written through the outbox as `machine.keep`._ It never runs anything: it only m
 machine due when it is stale or waiting upstream, and _Run all due_ is a press of the
 union of the due machines' chains, by the same rule as _Rerun the chain_.
 
+_Decision (iteration 15): the outbox sends every operation ready within 20 ms in one
+request._ `POST /sync/commands` takes `{operations}` (1 to 100) and answers
+`{outcomes}`, one per operation: its key, and a refusal (status, message, code) when it
+was refused. Each operation is applied in its own transaction under its own key, so one
+refusal never undoes or holds back another, and a whole-request failure (rate limit,
+lost connection) leaves every operation in it queued. A layout of sixty cards is one
+request, with no command kind for layouts.
+
+_Decision (iteration 15): one run reads at most 64 cards (`MAX_RUN_INPUTS`)._ The
+context allowance bounds what they hold together; the count only keeps one request's
+list small. A machine fed past it, or a slot fed **each** past twelve cards, says so on
+its lever instead of being refused after the press.
+
 **Arrow** (brane-scoped, table `relations`): `from_placement_id`, `to_placement_id`,
 `label` (required, 1 to 60 characters). Both ends are cards on the table; removing
 either removes the arrow, and a rerun or Update moves the arrows of the card it
@@ -163,6 +176,17 @@ server._ The client's projection works offline and updates on every local edit; 
 server re-plan per visible machine would need a request per edit. Iteration 8 adds
 group membership and arrows to the same comparison: the workspace read carries each
 visible run's sent arrows as `relationEntries` (run, from block, to block, word).
+
+_Decision (iteration 15): the projection lives in `shared/machine-staleness.ts`, and the
+server runs the same code for one purpose: the list of branes counts each brane's
+machines due._ Only a brane with a machine kept current is read for it. The page still
+computes staleness itself for everything it shows; the list's count is as of the last
+read of the list, which is read again when an answer finishes.
+
+**Reply thread.** A run that continues a conversation names, as `continued_block_id`,
+the answer whose message its context's parent is. The canvas draws a dotted _reply_
+line from that answer to the reply's answer, so two replies to one answer read as two
+branches of it. _(Implemented in iteration 15.)_
 
 ## Principle changes
 

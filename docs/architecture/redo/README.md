@@ -1,10 +1,13 @@
 # Redo: a table of cards and machines
 
-Status: iteration 14. Machines, feeds, machines fed from another machine's tray (a
+Status: iteration 15. Machines, feeds, machines fed from another machine's tray (a
 feed that follows the tray as it is rerun, with loops refused, drawn from the port or
-chosen by name with _Feed from…_), chains that show what they wait on and rerun in
-order with one press, machines kept current with one press for everything due, the
-chain behind an answer on a machine's back, _Feed into…_ for phones, the slot's
+chosen by name with _Feed from…_ and _Feed into…_, each option priced before the feed
+is made), chains that show what they wait on and rerun in order with one press,
+machines kept current with one press for everything due and the list of branes marking
+a brane with machines due, the chain behind an answer on a machine's back, a Reply's
+thread line to the answer it continues, the outbox sending what it has ready in one
+request, the slot's
 **each** mode (one run per card of a fed group, admitted in one press, with the outputs as a stack), **Compare models** (one
 run per model in one press, answers side by side, Keep, chosen on the machine's back),
 the back of a machine (its prompt version and past presses with their cost), outputs of several cards

@@ -935,3 +935,101 @@ built.
    hold, and how the diagram reads at that size.
 5. Measure scenarios 3, 6 and 7 again, and scenario 8 (branch a conversation) for the
    first time.
+
+## Iteration 15: one request for many saves, and costs before a chain is built
+
+Iteration 15 sent the outbox's ready operations in one request, priced a feed before it
+is made, marked branes with machines due on the list, ran 24 papers through two Splits
+into one Diagram, and ran scenario 8 for the first time.
+
+- **One request for many saves.** Operations ready within 20 ms go to the server in
+  one request (`POST /sync/commands` with up to 100 operations, at most 256 KB), and
+  each answers on its own. Laying out the sixty-cell matrix is one request instead of
+  sixty. A lasso move, a stack and a diagram take the same path.
+- **A feed priced before it is made.** Each option of _Feed from…_ and _Feed into…_
+  reads _Distill · 1 run_ (and the cost, for a priced model): one press of the
+  downstream machine as if the feed existed. A machine with another slot still empty
+  reads _then feed {slot}_. The estimates are made when the menu opens.
+- **Run all due, from a machine's back.** Under _Keep current_, a machine's back reads
+  _Run all due now: 2 machines · $…_: what the header's press would run, were this
+  machine kept current.
+- **Machines due on the list of branes.** A brane with machines kept current that are
+  due shows _1 due_ beside its title. The server counts it with the page's own staleness
+  code, now in `shared/machine-staleness.ts`.
+- **Large answers.** One run reads up to 64 cards, from 32. A machine fed past that, or
+  a slot fed **each** past twelve cards, says so on its lever before the press. A
+  diagram's layer wraps at a square grid's width.
+- **A reply's thread.** A run that continues a conversation names the answer it
+  continues, and the canvas draws a dotted _reply_ line from that answer to the reply.
+
+### Decisions taken while building
+
+| Question                                            | Decision                                                                                                                       | Rationale                                                                                                                                                                      |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| One `placements.arrange` command, or batched sends? | Batched sends: the outbox sends every ready operation in one request; no new command kind.                                     | It covers every burst (layouts, lasso moves, duplicates) at once, and each operation keeps its own key, conflict review and dependencies. A deviation from the recommendation. |
+| How long does an operation wait for others?         | 20 ms, or until 100 operations or 256 KB are gathered.                                                                         | Far below what a user notices; well inside the server's request size.                                                                                                          |
+| Does one refused operation fail the request?        | No. Each is applied in its own transaction and answers with its key or its refusal; a whole-request failure leaves all queued. | A guest limit on one card must not undo the cards before it or pause the ones after.                                                                                           |
+| When is a feed option priced?                       | When its menu opens, one estimate per option.                                                                                  | A closed menu costs nothing; an open one is about to be chosen from.                                                                                                           |
+| How is a feed not yet made priced?                  | The page builds the downstream machine's request from the brane as if the feed existed; the server estimates it as any press.  | The server already prices explicit inputs; no hypothetical feeds are stored or sent.                                                                                           |
+| What does _Keep current_ price?                     | What _Run all due_ would press now with this machine kept current.                                                             | It answers the question the box raises: what keeping it costs at the next press.                                                                                               |
+| Where is a brane's due count computed?              | On the server, with the page's staleness code moved to `shared/`; only branes with a machine kept current are read.            | A brane not opened on this device has no projection on the page; the server has every brane.                                                                                   |
+| When is the list read again?                        | On a local change, two seconds after the last answer finishes, and every 30 s for other devices' changes.                      | Read on every finished answer, it spent 25 of the matrix's busiest minute.                                                                                                     |
+| How many cards may one run read?                    | 64 (`MAX_RUN_INPUTS`), and the lever says so past it.                                                                          | The context allowance already bounds what the cards hold; two Splits' 48 ideas fit easily.                                                                                     |
+| How does a diagram of 24 cards lie?                 | Each layer in rows of at most ⌈√n⌉ cards, layers still top to bottom.                                                          | One row per layer laid 23 supporting ideas 9,620 wide; wrapped, the diagram is 2,060 by 2,000.                                                                                 |
+| How does a reply show what it continues?            | A dotted _reply_ line from the continued answer, read from the run's context.                                                  | It is the thread line the concept names, and it needs no stored relation.                                                                                                      |
+
+### Measured
+
+| Scenario                                                    | Result                                                                                                                                                                                          |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3 at scale: twelve papers, five questions, a 60-cell matrix | 30 actions, 316 characters; each press of twelve 3.6 to 4.6 s; the matrix laid in 0.4 s; at most 116 page requests a minute alone (115 to 126 under load), from 186; frames 16.7 ms             |
+| The matrix's busiest minute, by path                        | 47 brane reads, 21 sync requests, 17 allowance reads, 14 list reads, 5 presses, 5 estimates, 4 session reads                                                                                    |
+| 2 at scale: 24 papers, two Splits of twelve, one Diagram    | 25 actions; 48 ideas, each press in 1.5 to 2.5 s; the diagram in 5.6 s; the answer lists 48 items, 24 became cards with 23 arrows, 2,060 by 2,000; at most 77 requests a minute; frames 16.7 ms |
+| 2 at scale: twelve papers                                   | 15 actions; at most 49 requests a minute, from 58                                                                                                                                               |
+| 3. The matrix, then a Brief over it                         | 22 and 5, unchanged                                                                                                                                                                             |
+| 6. Distill → Brief, built; after an edit; kept current      | 15, 2 and 5, unchanged; the option reads _Distill · 1 run_ before the feed is made                                                                                                              |
+| 6. Built and run on a 320-pixel phone                       | 6, unchanged; the option reads _Write a brief from · material · 1 run_                                                                                                                          |
+| 7. Tune a prompt                                            | 3 actions, 56 characters, unchanged                                                                                                                                                             |
+| 8. Branch a conversation (first time)                       | 12 actions, 91 characters: the question (4), then per reply select, _Reply_, the follow-up, Run (4 each); the first reply lies beneath, the second beside; both joined by a _reply_ line        |
+
+Scenario 8 runs for the first time in twelve actions; four of them are the first
+question. The sixty-cell matrix meets the aim of 120 requests a minute on a quiet
+machine and misses it by six under the full suite's load: the saves are now 21 of the
+minute, and the rest is reads, chiefly the brane read after each gather of run reports.
+
+### Defects found by building it
+
+- A Diagram fed two Splits' 48 ideas was refused after the press with _Invalid request_:
+  one run read at most 32 cards, and nothing said so before. See the bound above.
+- A diagram's layer was one row: 23 cards supporting one idea lay 9,620 wide, wider
+  than the fitted view.
+- The mock model listed at most 8 items, so the 24-card answer bound was never reached
+  in a test; it now lists up to 60.
+- Two replies to one answer stood on the table with nothing joining them to it.
+- The first version of the due marker read the list on every finished answer; see the
+  list reads above.
+- `canvas.browser.ts` (view switching) once lost the Context button's focus after
+  Escape under the full suite's load; alone it passes twelve times of twelve.
+
+## Recommended iteration 16
+
+Fewer reads, and the last scenario.
+
+1. **Quote to card (scenario 9).** In a PDF or webpage card, select a passage and press
+   `Q`: an authored card with the passage appears beside it, citing the page (and the
+   PDF page number), and feeds like any card. It is the one scenario never run; build it
+   and measure it in a browser journey, including at 320 pixels.
+2. **Read the brane less while runs stream.** The matrix's busiest minute is 47 brane
+   reads. Send the changed runs, parts and placements with each run report (or one
+   change set per gather), and read the whole brane only on reconnect. The aim: under
+   90 requests a minute for the sixty-cell matrix under the full suite's load, with the
+   busiest minute recorded by path.
+3. **Count due on the page for the open brane.** The page already projects staleness:
+   let the list's count for the open brane come from it, and stop reading the list on
+   local changes that cannot change a title or a count (the 14 list reads).
+4. **Say what a large answer kept.** A diagram or a stack cut at 24 cards says so on its
+   frame (_24 of 48 ideas_), with the rest still in the whole answer on its back.
+5. **Branches beneath their answer.** A second reply to one answer lies beneath it,
+   beside the first reply, rather than level with the answer, so a conversation reads
+   top to bottom.
+6. Measure scenarios 4, 5 and 8 again.
