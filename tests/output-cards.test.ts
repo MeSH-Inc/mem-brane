@@ -16,7 +16,7 @@ import type { WorkspaceCommand } from '../shared/workspace-commands';
 import { machineOutput, parseOutput, MAX_OUTPUT_CARDS } from '../shared/machine-output';
 import { BUILT_IN_MACHINES } from '../shared/machines';
 import type { BraneState } from '../shared/types/domain';
-import { answerStaleness, machineChain, machineStaleness } from '../src/canvas/machines';
+import { answerStaleness, machineChain, machineStaleness } from '../shared/machine-staleness';
 import { columnHeading, matrixLayout, matrixOf } from '../src/canvas/matrix';
 import { tableMembers } from '../src/canvas/groups';
 

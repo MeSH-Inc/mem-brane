@@ -13,7 +13,7 @@ import { imports } from '../services/imports';
 import { acceptedFiles, pasteFiles, dropFiles, allowFileDrop } from '../services/import-adapters';
 import { ImportTray } from '../components/ImportTray';
 import { selectedBlockIds } from '../canvas/selection';
-import { openSpot } from '../canvas/machines';
+import { openSpot } from '../canvas/open-spot';
 import { SELECTION_MACHINE_TEMPLATE } from '../../shared/machines';
 import { CardBack, CardArrows } from '../canvas/CardBack';
 import { MachineControls } from '../canvas/MachineControls';

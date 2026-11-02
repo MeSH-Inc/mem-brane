@@ -711,6 +711,9 @@ test('sources feed Distill, Brief is fed from Distill, and an edit reruns the ch
       editor.fill(`${sources[0]} Prices near stations fell back after a decade.`),
     );
     await expect(brief.locator('.machine-state')).toHaveText('due · waiting on Distill');
+    // The list of branes marks this brane as having a machine due.
+    const listed = page.locator('.brane-nav a', { hasText: 'Chain' });
+    await expect(listed.locator('.brane-due')).toHaveText('1 due', { timeout: 15_000 });
     // Its back says what pressing everything due would run now.
     await brief.getByRole('button', { name: 'Show back' }).click();
     await expect(brief.locator('.machine-due-cost')).toHaveText('Run all due now: 2 machines');
@@ -721,6 +724,7 @@ test('sources feed Distill, Brief is fed from Distill, and an edit reruns the ch
     await completed(braneId, 6);
     await expect(due).toHaveCount(0);
     await expect(brief.locator('.machine-state')).toHaveText('ran');
+    await expect(listed.locator('.brane-due')).toHaveCount(0, { timeout: 15_000 });
 
     // On a 320-pixel phone the same chain reruns from Brief.
     await editor.fill(`${sources[0]} The rise held for five years.`);

@@ -13,7 +13,7 @@ import {
 import { runMachine, submitRun } from '../server/services/runs';
 import { applyWorkspaceOperation } from '../server/services/workspace-operations';
 import type { WorkspaceCommand } from '../shared/workspace-commands';
-import { answerStaleness, machineStaleness } from '../src/canvas/machines';
+import { answerStaleness, machineStaleness } from '../shared/machine-staleness';
 import { readingOrder, regionLayout, stackLayout } from '../src/canvas/groups';
 
 let db: DB, actor: string, brane: string;

@@ -67,7 +67,7 @@ async function fixture() {
       (expectedPrincipal && expectedPrincipal !== sessionActor)
     )
       throw new ApiError(401, 'Account changed');
-    if (path === '/branes') return [brane];
+    if (path === '/branes') return [{ ...brane, due: 0 }];
     if (path.startsWith('/branes/')) return readBrane(db, actor, path.split('/')[2]);
     if (path.startsWith('/blocks/')) return readCard(db, actor, path.split('/')[2]);
     if (path === '/sync/commands') {

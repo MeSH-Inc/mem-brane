@@ -13,7 +13,7 @@ import { keepOutput, runMachine } from '../server/services/runs';
 import { readInputs } from '../server/services/context-reader';
 import { applyWorkspaceOperation } from '../server/services/workspace-operations';
 import { declareMachineOutput, diagramLayers, machineOutput } from '../shared/machine-output';
-import { machineStaleness } from '../src/canvas/machines';
+import { machineStaleness } from '../shared/machine-staleness';
 
 describe('the output declaration', () => {
   it('is replaced, added or removed without touching the rest of the prompt', () => {

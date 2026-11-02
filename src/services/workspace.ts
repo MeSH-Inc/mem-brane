@@ -37,8 +37,8 @@ import {
   machineChain,
   machineStaleness,
   machineTray,
-  openSpot,
-} from '../canvas/machines';
+} from '../../shared/machine-staleness';
+import { openSpot } from '../canvas/open-spot';
 import {
   bounds,
   groupOf,

@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 import type { WorkspaceDocument } from '../services/workspace-document';
 import type { Estimate } from '../../shared/contracts';
 import { formatUsd } from '../lib/format';
-import { dueMachines } from './machines';
+import { dueMachines } from '../../shared/machine-staleness';
 
 // The brane's machines kept current that are due, and one press that runs them with
 // every machine their chains need, in feeding order. Shown only when one is due.

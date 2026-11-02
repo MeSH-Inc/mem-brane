@@ -10,7 +10,7 @@ import {
   machinePresses,
   machineStaleness,
   type Press,
-} from './machines';
+} from '../../shared/machine-staleness';
 
 const ACTIVE = new Set(['queued', 'claimed', 'running', 'cancel_requested']);
 const modelName = (model: string) => (model === 'mock' ? 'Local mock' : model);

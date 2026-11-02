@@ -1,5 +1,5 @@
 import type { Session } from '../../shared/contracts';
-import type { Brane, BraneState } from '../../shared/types/domain';
+import type { BraneListing, BraneState } from '../../shared/types/domain';
 import type { WorkspaceOperation } from '../../shared/workspace-commands';
 
 export interface PendingOperation extends WorkspaceOperation {
@@ -7,7 +7,7 @@ export interface PendingOperation extends WorkspaceOperation {
 }
 export interface ReplicaState {
   sequence: number;
-  branes: Brane[];
+  branes: BraneListing[];
   workspaces: Record<string, BraneState>;
   reads: Record<string, unknown>;
   fetches: Record<string, { issued: number; received: number }>;

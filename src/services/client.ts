@@ -44,7 +44,7 @@ export function createClient(request: typeof api) {
     configuration: () => read(response.configurationResponse, '/config'),
     budget: () => read(response.budgetResponse, '/budget'),
     workspace: (id: string) => read(response.workspaceResponse, `/branes/${id}`),
-    branes: () => read(z.array(response.braneResponse), '/branes'),
+    branes: () => read(z.array(response.braneListing), '/branes'),
     createBrane: (title: string) => read(response.braneResponse, '/branes', { title }),
     saveTitle: (braneId: string, title: string) =>
       request(`/branes/${braneId}`, { title }, 'PATCH'),

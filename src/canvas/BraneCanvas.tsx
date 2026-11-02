@@ -34,7 +34,7 @@ import { frame, groupOf, STACK_EDGES, tableMembers } from './groups';
 import { matrixOf, MATRIX_COLUMN_HEADER, MATRIX_ROW_HEADER } from './matrix';
 import { MachineCard, CardPort, type MachineActions } from './MachineCard';
 import { RelationEdge, RelationPicker, relationEdges, type ArrowDraft } from './RelationEdge';
-import { answerStaleness, machineStaleness, trayOwners } from './machines';
+import { answerStaleness, machineStaleness, trayOwners } from '../../shared/machine-staleness';
 import { CardBack, type BackActions } from './CardBack';
 import { AskBox, ASK_WIDTH, type AskNode, type AskPosition } from './AskBox';
 import { SpawnButton } from '../components/SpawnButton';

@@ -33,6 +33,7 @@ import {
   createBlock,
   createPlacement,
   readBrane,
+  listBranes,
   updateBlockLiveState,
   updatePlacementGeometry,
   getPlacement,
@@ -189,15 +190,7 @@ export function createApi(
     return c.json({ outcomes });
   });
   app.get('/config', (c) => c.json(readConfiguration(db, c.get('actor'))));
-  app.get('/branes', (c) =>
-    c.json(
-      db
-        .prepare(
-          'SELECT id,title,created_at,updated_at FROM branes WHERE owner_id=? ORDER BY updated_at DESC',
-        )
-        .all(c.get('actor')),
-    ),
-  );
+  app.get('/branes', (c) => c.json(listBranes(db, c.get('actor'))));
   app.post('/branes', async (c) => {
     const { title } = z
       .object({ title: z.string().trim().min(1).max(200).default('Untitled brane') })

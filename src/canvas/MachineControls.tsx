@@ -13,7 +13,7 @@ import {
   machineTray,
   type MachineChain,
   type MachineView,
-} from './machines';
+} from '../../shared/machine-staleness';
 
 export interface MachineActions {
   onRunMachine: (placementId: string) => Promise<unknown>;

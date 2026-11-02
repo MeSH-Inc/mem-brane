@@ -2766,3 +2766,15 @@ summary:focus-visible {
 .machine-due-cost {
   padding: 0 0 0 22px;
 }
+.brane-due {
+  flex: none;
+  align-self: center;
+  padding: 1px 6px;
+  border: 1px solid #e0c48a;
+  border-radius: 999px;
+  background: #fbf3e2;
+  color: #7a4f08;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}

@@ -58,7 +58,7 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         created_at: Date.now(),
         updated_at: Date.now(),
       };
-      state.branes = [brane, ...state.branes.filter((b) => b.id !== brane.id)];
+      state.branes = [{ ...brane, due: 0 }, ...state.branes.filter((b) => b.id !== brane.id)];
       state.workspaces[brane.id] = {
         brane,
         blocks: [],

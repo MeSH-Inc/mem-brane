@@ -11,6 +11,7 @@ export const braneResponse = z.object({
   created_at: z.number(),
   updated_at: z.number(),
 });
+export const braneListing = braneResponse.extend({ due: z.number().int().nonnegative() });
 export const placementResponse: z.ZodType<Placement> = z.object({
   id: identity,
   brane_id: identity,

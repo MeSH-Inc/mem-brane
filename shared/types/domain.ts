@@ -82,6 +82,11 @@ export interface Brane {
   created_at: number;
   updated_at: number;
 }
+// A brane as the list of branes shows it: with how many of its machines kept current
+// are due, so a brane needing a press is found without opening it.
+export interface BraneListing extends Brane {
+  due: number;
+}
 export interface Block {
   id: string;
   kind: BlockKind;

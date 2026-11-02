@@ -17,6 +17,7 @@ import { readFeeds, readKeptCurrent } from './feeds.js';
 import { readRelations } from './relations.js';
 import { readGroups } from './groups.js';
 import { MACHINE_TEMPLATE } from '../../shared/machines.js';
+import { dueMachines } from '../../shared/machine-staleness.js';
 import { MAX_BRANE_PLACEMENTS, fitsArtifactContent } from '../../shared/limits.js';
 import { content as contentSchema } from '../../shared/schemas/index.js';
 import { randomUUID } from 'node:crypto';
@@ -30,6 +31,8 @@ import type {
   Geometry,
   BraneState,
   Block,
+  Brane,
+  BraneListing,
 } from '../../shared/types/domain.js';
 import type { RevisionPage, RevisionSummary } from '../../shared/types/history.js';
 import { canEditBrane, canReadBrane, DomainError, requireOwned } from '../domain/access.js';
@@ -323,6 +326,29 @@ export function removePlacement(db: DB, actor: string, id: string) {
   const p = getPlacement(db, actor, id);
   canEditBrane(db, actor, p.brane_id);
   db.prepare('DELETE FROM placements WHERE id=?').run(id);
+}
+// The branes of a library, newest change first, each with how many of its machines kept
+// current are due. Only a brane with a machine kept current is read to find out.
+export function listBranes(db: DB, actor: string): BraneListing[] {
+  const branes = db
+    .prepare<unknown[], Brane>(
+      'SELECT id,title,created_at,updated_at FROM branes WHERE owner_id=? ORDER BY updated_at DESC',
+    )
+    .all(actor);
+  const kept = new Set(
+    db
+      .prepare<unknown[], { brane_id: string }>(
+        `SELECT DISTINCT p.brane_id FROM kept_current k
+         JOIN placements p ON p.id=k.placement_id
+         JOIN branes b ON b.id=p.brane_id WHERE b.owner_id=?`,
+      )
+      .all(actor)
+      .map((row) => row.brane_id),
+  );
+  return branes.map((brane) => ({
+    ...brane,
+    due: kept.has(brane.id) ? dueMachines(readBrane(db, actor, brane.id)).due.length : 0,
+  }));
 }
 export function readBrane(db: DB, actor: string, id: string): BraneState {
   const owned = canReadBrane(db, actor, id);

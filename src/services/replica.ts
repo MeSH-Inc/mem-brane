@@ -2,7 +2,7 @@ import { z } from 'zod';
 import {
   sessionResponse,
   workspaceResponse,
-  braneResponse,
+  braneListing,
   blockResponse,
 } from '../../shared/contracts';
 import {
@@ -326,7 +326,7 @@ export class WorkspaceReplica {
           return { value: readLocal(current, path) ?? value, changed: false };
         const previous = JSON.stringify(readLocal(current, path));
         current.fetches[path].received = requestGeneration;
-        if (path === '/branes') current.branes = z.array(braneResponse).parse(value);
+        if (path === '/branes') current.branes = z.array(braneListing).parse(value);
         else if (/^\/branes\/[^/]+$/.test(path)) {
           const workspace = workspaceResponse.parse(value);
           installWorkspace(current, overlayPending(current, workspace));
@@ -694,7 +694,7 @@ export class WorkspaceReplica {
           // Reset the detached projection too, so choosing server state cannot
           // resurrect a rejected local edit through a later card restoration.
           delete state.reads[`/blocks/${head.command.blockId}`];
-        state.branes = state.branes.map((b) => remote[b.id]?.brane ?? b);
+        state.branes = state.branes.map((b) => ({ ...b, ...remote[b.id]?.brane }));
         const discarded = creation ? dependentOperations(state.pending, head.key) : new Set();
         const pending: PendingOperation[] = [];
         for (const entry of state.pending) {

@@ -19,7 +19,7 @@ import {
   saveWorkshopMachine,
 } from '../server/services/workshop';
 import type { WorkspaceCommand } from '../shared/workspace-commands';
-import { machineStaleness } from '../src/canvas/machines';
+import { machineStaleness } from '../shared/machine-staleness';
 
 let db: DB, actor: string, brane: string;
 let papers: { id: string; placement: { id: string } }[];

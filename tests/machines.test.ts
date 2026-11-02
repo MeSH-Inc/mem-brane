@@ -18,7 +18,7 @@ import { buildMessages } from '../server/llm/model';
 import { RunWorker } from '../server/jobs/worker';
 import { EventHub } from '../server/sse/hub';
 import { machineSlots, orderMachineInputs, type RunMachine } from '../shared/machines';
-import { machineStaleness } from '../src/canvas/machines';
+import { machineStaleness } from '../shared/machine-staleness';
 
 let db: DB, actor: string, brane: string;
 let claim: { id: string; placement: { id: string } };

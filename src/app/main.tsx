@@ -19,7 +19,7 @@ import { runEventResponse } from '../../shared/contracts';
 import type { Session } from '../../shared/contracts';
 import { useInteraction } from '../stores/interaction';
 import { BraneView } from '../routes/BraneView';
-import type { Brane } from '../../shared/types/domain';
+import type { BraneListing } from '../../shared/types/domain';
 import './styles.css';
 import { AppStatus } from '../components/AppStatus';
 import { PasswordRecovery } from '../components/PasswordRecovery';
@@ -183,7 +183,7 @@ function Shell() {
     }
   };
   const [session, setSession] = useState<Session | undefined>(undefined),
-    [branes, setBranes] = useState<Brane[]>([]),
+    [branes, setBranes] = useState<BraneListing[]>([]),
     [error, setError] = useState('');
   const navigate = useNavigate();
   const applySession = async (value: Session) => {
@@ -263,6 +263,8 @@ function Shell() {
         try {
           const detail = runEventResponse.parse(JSON.parse((event as MessageEvent).data));
           window.dispatchEvent(new CustomEvent('brane:run', { detail }));
+          // A finished answer may make a machine kept current due, or no longer due.
+          if (detail.status === 'completed') refreshBranes();
         } catch {
           // SSE is only a hint. A malformed update must be reconciled from storage.
           reconcile();
@@ -372,6 +374,14 @@ function Shell() {
               >
                 <span>◇</span>
                 <div>{b.title}</div>
+                {b.due > 0 && (
+                  <span
+                    className="brane-due"
+                    title={`${b.due} ${b.due === 1 ? 'machine' : 'machines'} kept current ${b.due === 1 ? 'is' : 'are'} due`}
+                  >
+                    {b.due} due
+                  </span>
+                )}
               </Link>
             ))}
           </nav>

@@ -6,7 +6,7 @@ import { LiveBlockContent } from '../components/LiveBlockContent';
 import { ResponseSources } from '../components/ResponseSources';
 import type { ResponseActions } from '../components/ResponseContent';
 import { statusLabels } from '../lib/labels';
-import { answerStaleness } from './machines';
+import { answerStaleness } from '../../shared/machine-staleness';
 import type { Block } from '../../shared/types/domain';
 
 // A card named by its first words, for lists that point at other cards.

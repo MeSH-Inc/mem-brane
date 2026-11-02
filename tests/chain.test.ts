@@ -7,6 +7,7 @@ import {
   updateBlockLiveState,
   revisions,
   readBrane,
+  listBranes,
   uid,
 } from '../server/services/content';
 import { keepOutput, runMachine } from '../server/services/runs';
@@ -21,7 +22,7 @@ import {
   machineStaleness,
   machineTray,
   trayOwners,
-} from '../src/canvas/machines';
+} from '../shared/machine-staleness';
 
 let db: DB, actor: string, brane: string;
 type Machine = ReturnType<typeof createMachineBlock>;
@@ -285,6 +286,11 @@ it('keeps a machine current: due when upstream changes, run with its chain in or
     run: [distill.placement.id, brief.placement.id, third.placement.id],
     waitingOn: null,
   });
+  // The list of branes counts the machines due, and a brane with none kept counts none.
+  const other = createBrane(db, actor, 'Nothing kept');
+  expect(
+    Object.fromEntries(listBranes(db, actor).map((listed) => [listed.id, listed.due])),
+  ).toEqual({ [brane]: 2, [other.id]: 0 });
   expect(feedingOrder(state(), [third.placement.id, distill.placement.id])).toEqual([
     distill.placement.id,
     third.placement.id,
