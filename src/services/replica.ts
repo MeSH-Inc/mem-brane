@@ -44,6 +44,7 @@ const editCommands = new Set([
   'brane.title',
   'feed.remove',
   'feed.mode',
+  'machine.keep',
   'relation.relabel',
   'relation.remove',
   'group.edit',
@@ -364,6 +365,8 @@ export class WorkspaceReplica {
       command = { type: 'placement.create', ...body, id: crypto.randomUUID() };
     else if (path === '/feeds' && method === 'POST')
       command = { type: 'feed.create', ...body, id: crypto.randomUUID() };
+    else if (/^\/machines\/[^/]+\/kept-current$/.test(path) && method === 'PUT')
+      command = { type: 'machine.keep', id: path.split('/')[2], ...body };
     else if (/^\/feeds\/[^/]+$/.test(path) && method === 'PATCH')
       command = { type: 'feed.mode', id: path.split('/')[2], ...body };
     else if (/^\/feeds\/[^/]+$/.test(path) && method === 'DELETE') {
@@ -753,6 +756,7 @@ function commandBrane(state: ReplicaState, command: WorkspaceCommand): string | 
     case 'feed.create':
     case 'feed.mode':
     case 'feed.remove':
+    case 'machine.keep':
     case 'relation.create':
     case 'relation.relabel':
     case 'relation.remove':
@@ -787,6 +791,8 @@ function localState(state: ReplicaState, command: WorkspaceCommand): unknown {
     case 'relation.remove':
     case 'group.remove':
       return command;
+    case 'machine.keep':
+      return state.workspaces[command.braneId]?.keptCurrent.includes(command.id) ?? false;
     case 'feed.mode':
       return (
         Object.values(state.workspaces)
@@ -832,6 +838,8 @@ function serverState(current: BraneState, command: WorkspaceCommand): unknown {
     case 'feed.mode':
     case 'feed.remove':
       return current.feeds.find((f) => f.id === command.id);
+    case 'machine.keep':
+      return current.keptCurrent.includes(command.id);
     case 'relation.create':
     case 'relation.relabel':
     case 'relation.remove':
@@ -888,5 +896,6 @@ function isLocalMutation(path: string, method: string): boolean {
   if (/^\/(feeds|relations|groups)\/[^/]+$/.test(path)) return ['PATCH', 'DELETE'].includes(method);
   if (path === '/blocks/live') return method === 'PATCH';
   if (/^\/placements\/[^/]+\/detach$/.test(path)) return method === 'POST';
+  if (/^\/machines\/[^/]+\/kept-current$/.test(path)) return method === 'PUT';
   return /^\/placements\/[^/]+$/.test(path) && ['PATCH', 'DELETE'].includes(method);
 }

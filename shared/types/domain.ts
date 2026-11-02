@@ -190,6 +190,8 @@ export interface BraneState {
   derivations: Derivation[];
   relationEntries: RelationEntry[];
   parts: RunPart[];
+  // The machines kept current: placement ids of machines on the table.
+  keptCurrent: string[];
 }
 export interface RunInput {
   position: number;

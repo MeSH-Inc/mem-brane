@@ -40,6 +40,7 @@ test('view switching, multi-selection, resize during streaming, and keyboard per
     groups: [],
     relationEntries: [],
     parts: [],
+    keptCurrent: [],
     derivations: [],
     runs: [
       {

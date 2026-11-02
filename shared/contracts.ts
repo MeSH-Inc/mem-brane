@@ -142,6 +142,7 @@ export const workspaceResponse: z.ZodType<BraneState> = z.object({
   parts: z.array(
     z.object({ runId: identity, blockId: identity, position: z.number().int().nonnegative() }),
   ),
+  keptCurrent: z.array(identity),
 });
 export const budgetResponse = z.object({
   day: z.string(),

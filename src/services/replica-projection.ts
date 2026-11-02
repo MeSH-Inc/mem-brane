@@ -70,6 +70,7 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
         derivations: [],
         relationEntries: [],
         parts: [],
+        keptCurrent: [],
       };
       return brane;
     }
@@ -208,6 +209,12 @@ export function projectCommand(state: ReplicaState, command: WorkspaceCommand): 
       };
       workspace.feeds = [...workspace.feeds.filter((f) => f.id !== feed.id), feed];
       return feed;
+    }
+    case 'machine.keep': {
+      const workspace = requireWorkspace(state, command.braneId);
+      const others = workspace.keptCurrent.filter((id) => id !== command.id);
+      workspace.keptCurrent = command.keptCurrent ? [...others, command.id] : others;
+      return { ok: true };
     }
     case 'feed.mode': {
       const workspace = requireWorkspace(state, command.braneId);

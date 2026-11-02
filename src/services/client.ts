@@ -62,6 +62,8 @@ export function createClient(request: typeof api) {
     setFeedMode: (id: string, braneId: string, mode: 'together' | 'each') =>
       request(`/feeds/${id}`, { braneId, mode }, 'PATCH'),
     removeFeed: (id: string) => request(`/feeds/${id}`, undefined, 'DELETE'),
+    keepCurrent: (placementId: string, braneId: string, keptCurrent: boolean) =>
+      request(`/machines/${placementId}/kept-current`, { braneId, keptCurrent }, 'PUT'),
     workshop: () => read(response.workshopResponse, '/workshop'),
     saveToWorkshop: (name: string, template: string) => request('/workshop', { name, template }),
     removeFromWorkshop: (id: string) => request(`/workshop/${id}`, undefined, 'DELETE'),

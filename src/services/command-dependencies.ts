@@ -52,6 +52,8 @@ export function commandAccess(c: WorkspaceCommand): CommandAccess {
       return { reads: [exists('feed', c.id)], writes: [value('feed', c.id)] };
     case 'feed.remove':
       return { reads: [], writes: [exists('feed', c.id)] };
+    case 'machine.keep':
+      return { reads: [exists('placement', c.id)], writes: [value('kept', c.id)] };
     // A run reads the brane's arrows among its inputs, so every arrow change writes them.
     case 'relation.create':
       return {

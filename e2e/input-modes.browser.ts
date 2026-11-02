@@ -30,6 +30,7 @@ test.beforeEach(async ({ page }) => {
     groups: [],
     relationEntries: [],
     parts: [],
+    keptCurrent: [],
     derivations: [],
   };
   await page.route('**/api/**', async (route) => {

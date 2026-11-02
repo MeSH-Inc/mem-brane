@@ -177,3 +177,34 @@ export function readFeeds(db: DB, actor: string, braneId: string): Feed[] {
     )
     .all(braneId);
 }
+
+// A machine is kept current, or no longer; only a machine on the table can be.
+export function setKeptCurrent(
+  db: DB,
+  actor: string,
+  placementId: string,
+  braneId: string,
+  keptCurrent: boolean,
+) {
+  canEditBrane(db, actor, braneId);
+  const machine = db
+    .prepare(
+      `SELECT 1 FROM placements p JOIN blocks b ON b.id=p.block_id
+       WHERE p.id=? AND p.brane_id=? AND b.kind='machine' AND p.host_placement_id IS NULL`,
+    )
+    .get(placementId, braneId);
+  if (!machine) throw new DomainError(404, 'This machine is no longer on the brane.');
+  if (keptCurrent)
+    db.prepare('INSERT OR IGNORE INTO kept_current (placement_id) VALUES (?)').run(placementId);
+  else db.prepare('DELETE FROM kept_current WHERE placement_id=?').run(placementId);
+}
+export function readKeptCurrent(db: DB, actor: string, braneId: string): string[] {
+  canReadBrane(db, actor, braneId);
+  return db
+    .prepare<unknown[], string>(
+      `SELECT k.placement_id FROM kept_current k JOIN placements p ON p.id=k.placement_id
+       WHERE p.brane_id=? ORDER BY p.rowid`,
+    )
+    .pluck()
+    .all(braneId);
+}

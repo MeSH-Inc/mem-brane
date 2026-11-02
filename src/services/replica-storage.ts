@@ -55,6 +55,7 @@ export class IndexedReplicaStorage implements ReplicaStorage {
                 groups: [],
                 relationEntries: [],
                 parts: [],
+                keptCurrent: [],
                 ...(workspace as object),
               },
             ]),

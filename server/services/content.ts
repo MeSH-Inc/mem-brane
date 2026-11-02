@@ -13,7 +13,7 @@ import {
   readVisibleRelationEntries,
   readVisibleParts,
 } from './run-reads.js';
-import { readFeeds } from './feeds.js';
+import { readFeeds, readKeptCurrent } from './feeds.js';
 import { readRelations } from './relations.js';
 import { readGroups } from './groups.js';
 import { MACHINE_TEMPLATE } from '../../shared/machines.js';
@@ -372,6 +372,7 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
   const groups = readGroups(db, actor, id);
   const relationEntries = readVisibleRelationEntries(db, actor, id);
   const parts = readVisibleParts(db, actor, id);
+  const keptCurrent = readKeptCurrent(db, actor, id);
   return {
     brane,
     placements,
@@ -383,6 +384,7 @@ export function readBrane(db: DB, actor: string, id: string): BraneState {
     derivations,
     relationEntries,
     parts,
+    keptCurrent,
   };
 }
 

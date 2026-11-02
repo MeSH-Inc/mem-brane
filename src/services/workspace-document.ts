@@ -58,6 +58,9 @@ export class WorkspaceDocument {
             ? previous.relationEntries
             : next.relationEntries,
           parts: same(previous.parts, next.parts) ? previous.parts : next.parts,
+          keptCurrent: same(previous.keptCurrent, next.keptCurrent)
+            ? previous.keptCurrent
+            : next.keptCurrent,
         }
       : next;
     this.reproject();

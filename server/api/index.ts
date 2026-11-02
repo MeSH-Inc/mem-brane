@@ -58,7 +58,7 @@ import {
   machineTemplate,
   MAX_WORKSHOP_NAME,
 } from '../../shared/machines.js';
-import { createFeed, removeFeed, setFeedMode } from '../services/feeds.js';
+import { createFeed, removeFeed, setFeedMode, setKeptCurrent } from '../services/feeds.js';
 import { readWorkshop, removeWorkshopMachine, saveWorkshopMachine } from '../services/workshop.js';
 import { createRelation, relabelRelation, removeRelation } from '../services/relations.js';
 import { createGroup, editGroup, removeGroup } from '../services/groups.js';
@@ -252,6 +252,14 @@ export function createApi(
       .strict()
       .parse(await authorizedBody(c));
     setFeedMode(db, c.get('actor'), id.parse(c.req.param('id')), body.braneId, body.mode);
+    return c.json({ ok: true });
+  });
+  app.put('/machines/:id/kept-current', async (c) => {
+    const body = z
+      .object({ braneId: id, keptCurrent: z.boolean() })
+      .strict()
+      .parse(await authorizedBody(c));
+    setKeptCurrent(db, c.get('actor'), id.parse(c.req.param('id')), body.braneId, body.keptCurrent);
     return c.json({ ok: true });
   });
   app.get('/workshop', (c) => c.json(readWorkshop(db, c.get('actor'))));

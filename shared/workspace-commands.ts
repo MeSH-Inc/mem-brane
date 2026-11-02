@@ -62,6 +62,8 @@ export const workspaceCommand = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('feed.remove'), id, braneId: id }).strict(),
+  // A machine kept current, or no longer: id is the machine's placement.
+  z.object({ type: z.literal('machine.keep'), id, braneId: id, keptCurrent: z.boolean() }).strict(),
   z
     .object({
       type: z.literal('feed.mode'),
@@ -129,6 +131,8 @@ export function commandEntity(command: WorkspaceCommand): string {
     case 'brane.create':
     case 'brane.title':
       return `brane:${command.id}`;
+    case 'machine.keep':
+      return `kept:${command.id}`;
     default:
       return `placement:${command.id}`;
   }
