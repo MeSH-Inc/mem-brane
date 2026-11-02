@@ -71,22 +71,34 @@ async function fixture() {
     if (path.startsWith('/branes/')) return readBrane(db, actor, path.split('/')[2]);
     if (path.startsWith('/blocks/')) return readCard(db, actor, path.split('/')[2]);
     if (path === '/sync/commands') {
-      const op = raw as WorkspaceOperation;
-      sent.push(structuredClone(op));
-      const refused = refusals.shift();
-      if (refused) throw refused;
-      try {
-        const receipt = applyWorkspaceOperation(db, sessionLibrary!, op);
-        if (dropReceipt) {
-          dropReceipt = false;
-          throw new TypeError('Lost response after commit');
+      const { operations } = raw as { operations: WorkspaceOperation[] };
+      sent.push(...structuredClone(operations));
+      // A retryable refusal (rate limit) refuses the request; any other refuses the
+      // first operation it carries, as the server's per-operation checks do.
+      let refused = refusals.shift();
+      if (refused?.retryable) throw refused;
+      const outcomes = operations.map((op) => {
+        if (refused) {
+          const { status, message, code } = refused;
+          refused = undefined;
+          return { key: op.key, refusal: { status, error: message, code } };
         }
-        return receipt;
-      } catch (error) {
-        if (error instanceof DomainError)
-          throw new ApiError(error.status, error.message, error.code);
-        throw error;
+        try {
+          return applyWorkspaceOperation(db, sessionLibrary!, op);
+        } catch (error) {
+          if (error instanceof DomainError)
+            return {
+              key: op.key,
+              refusal: { status: error.status, error: error.message, code: error.code },
+            };
+          throw error;
+        }
+      });
+      if (dropReceipt) {
+        dropReceipt = false;
+        throw new TypeError('Lost response after commit');
       }
+      return { outcomes };
     }
     return { ok: true };
   };
@@ -720,13 +732,14 @@ it('keeps one text version across branes that place the same artifact', async ()
   });
 });
 
+// Operations ready together share one request; one queued after a request has left
+// travels in the next, so it never waits on a slow request it was not part of.
 it('dispatches independent writes and Spawn while an unrelated write is still in flight', async () => {
   const f = await fixture();
   const b = createTextBlock(db, f.actor, f.brane.id);
   await f.client.workspace(f.brane.id);
   f.offline();
   await f.client.saveText({ blockId: f.block.id, text: 'Slow A', version: 0 });
-  await f.client.saveText({ blockId: b.id, text: 'Required B', version: 0 });
   await f.replica.synchronize();
   let release!: () => void,
     started = false;
@@ -738,8 +751,9 @@ it('dispatches independent writes and Spawn while an unrelated write is still in
   const replica = new WorkspaceReplica(f.storage, async (path, body, method, actor) => {
     if (
       path === '/sync/commands' &&
-      (body as WorkspaceOperation).command.type === 'text.edit' &&
-      (body as any).command.blockId === f.block.id
+      (body as { operations: WorkspaceOperation[] }).operations.some(
+        (op) => op.command.type === 'text.edit' && op.command.blockId === f.block.id,
+      )
     ) {
       started = true;
       await gate;
@@ -750,6 +764,11 @@ it('dispatches independent writes and Spawn while an unrelated write is still in
   await replica.request('/session');
   await expect.poll(() => started).toBe(true);
   try {
+    await createClient(replica.request).saveText({
+      blockId: b.id,
+      text: 'Required B',
+      version: 0,
+    });
     await replica.request('/artifacts/spawn', {
       braneId: f.brane.id,
       sourceBlockIds: [b.id],

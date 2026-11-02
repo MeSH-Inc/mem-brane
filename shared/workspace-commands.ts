@@ -108,9 +108,26 @@ export const workspaceCommand = z.discriminatedUnion('type', [
   z.object({ type: z.literal('group.remove'), id, braneId: id }).strict(),
 ]);
 export const workspaceOperation = z.object({ key: id, command: workspaceCommand }).strict();
-export const workspaceAcknowledgement = z.object({ key: id }).strict();
+// The outbox sends whatever it has ready in one request; each operation is applied on
+// its own and answers on its own, so one refusal never holds back the others.
+export const MAX_OPERATIONS_PER_REQUEST = 100;
+export const workspaceBatch = z
+  .object({ operations: z.array(workspaceOperation).min(1).max(MAX_OPERATIONS_PER_REQUEST) })
+  .strict();
+export const workspaceOutcome = z
+  .object({
+    key: id,
+    // Absent when the operation was applied.
+    refusal: z
+      .object({ status: z.number().int(), error: z.string(), code: z.string() })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export const workspaceReceipt = z.object({ outcomes: z.array(workspaceOutcome) }).strict();
 export type WorkspaceCommand = z.infer<typeof workspaceCommand>;
 export type WorkspaceOperation = z.infer<typeof workspaceOperation>;
+export type WorkspaceOutcome = z.infer<typeof workspaceOutcome>;
 export function commandEntity(command: WorkspaceCommand): string {
   switch (command.type) {
     case 'block.create':

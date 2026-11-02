@@ -497,11 +497,35 @@ it('binds offline writes to the expected account and commits duplicate deliverie
     app.request('/api/sync/commands', {
       method: 'POST',
       headers: { ...headers(), 'X-Mem-Brane-Actor': expectedActor },
-      body: JSON.stringify(operation),
+      body: JSON.stringify({ operations: [operation] }),
     });
   expect((await send(uid())).status).toBe(401);
   expect(db.prepare('SELECT count(*) n FROM branes').get()).toEqual({ n: 0 });
   expect((await send(actor)).status).toBe(200);
   expect((await send(actor)).status).toBe(200);
   expect(db.prepare('SELECT count(*) n FROM branes').get()).toEqual({ n: 1 });
+});
+
+it('applies each operation of a batch on its own and answers each on its own', async () => {
+  const brane = uid();
+  const response = await app.request('/api/sync/commands', {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({
+      operations: [
+        { key: uid(), command: { type: 'brane.create', id: brane, title: 'First' } },
+        // The same id again is refused, and neither the one before nor after is undone.
+        { key: uid(), command: { type: 'brane.create', id: brane, title: 'Again' } },
+        { key: uid(), command: { type: 'brane.create', id: uid(), title: 'Third' } },
+      ],
+    }),
+  });
+  expect(response.status).toBe(200);
+  const { outcomes } = await response.json();
+  expect(outcomes.map((o: { refusal?: { status: number } }) => o.refusal?.status)).toEqual([
+    undefined,
+    409,
+    undefined,
+  ]);
+  expect(db.prepare('SELECT count(*) n FROM branes').get()).toEqual({ n: 2 });
 });

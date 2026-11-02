@@ -1036,7 +1036,8 @@ test('at scale: twelve papers and five questions make a sixty-cell matrix', asyn
     await page.locator('.react-flow__controls-fitview').click();
     pan = await panFrames(page);
     counts.requestsPerMinute = requests();
-    expect(counts.requestsPerMinute).toBeLessThan(240);
+    // Laying out the matrix saves every card's place in one request, not one each.
+    expect(counts.requestsPerMinute).toBeLessThan(120);
   });
   record('scale-matrix', { ...counts, pan });
 });

@@ -2,7 +2,7 @@ import { entryApi } from './entry.js';
 import { readCard, readUnplacedCards } from '../services/card-library.js';
 import { currentLibrary, authorizeLibrary } from '../domain/libraries.js';
 import { applyWorkspaceOperation } from '../services/workspace-operations.js';
-import { workspaceOperation } from '../../shared/workspace-commands.js';
+import { workspaceBatch, type WorkspaceOutcome } from '../../shared/workspace-commands.js';
 import { cancelRun } from '../services/run-lifecycle.js';
 import { readConfiguration } from '../services/configuration.js';
 import type { RunIdentity } from '../../shared/contracts.js';
@@ -24,7 +24,8 @@ import type { createAuth } from '../auth/index.js';
 import type { EventHub } from '../sse/hub.js';
 import type { AssetStore } from '../storage/assets.js';
 import { canEditBrane, DomainError, requireOwned } from '../domain/access.js';
-import { errorBody } from '../../shared/errors.js';
+import { errorBody, type ErrorBody } from '../../shared/errors.js';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import {
   createBrane,
   createTextBlock,
@@ -175,15 +176,18 @@ export function createApi(
     queueLimit: config.RUN_QUEUE_LIMIT,
     maxContextCharacters: config.MAX_CONTEXT_CHARACTERS,
   };
-  app.post('/sync/commands', async (c) =>
-    c.json(
-      applyWorkspaceOperation(
-        db,
-        c.get('actor'),
-        workspaceOperation.parse(await authorizedBody(c)),
-      ),
-    ),
-  );
+  app.post('/sync/commands', async (c) => {
+    const { operations } = workspaceBatch.parse(await authorizedBody(c));
+    const outcomes: WorkspaceOutcome[] = operations.map((operation) => {
+      try {
+        return applyWorkspaceOperation(db, c.get('actor'), operation);
+      } catch (error) {
+        const { status, body } = errorResponse(error);
+        return { key: operation.key, refusal: { status, error: body.error, code: body.code } };
+      }
+    });
+    return c.json({ outcomes });
+  });
   app.get('/config', (c) => c.json(readConfiguration(db, c.get('actor'))));
   app.get('/branes', (c) =>
     c.json(
@@ -610,18 +614,27 @@ export function createApi(
     return c.json(block, 201);
   });
   app.onError((error, c) => {
-    if (error instanceof z.ZodError)
-      return c.json(
-        errorBody('Invalid request', 'invalid_request', {
-          details: error.issues.map((i) => ({ path: i.path, message: i.message })),
-        }),
-        400,
-      );
-    if (error instanceof DomainError)
-      return c.json(errorBody(error.message, error.code), error.status);
-    const requestId = crypto.randomUUID();
-    console.error('API error', requestId, error);
-    return c.json(errorBody('An unexpected error occurred', 'internal', { requestId }), 500);
+    const { status, body } = errorResponse(error);
+    return c.json(body, status);
   });
   return app;
+}
+// The one mapping from a thrown error to an API refusal, shared by whole requests and by
+// each operation of a synchronization batch.
+function errorResponse(error: unknown): { status: ContentfulStatusCode; body: ErrorBody } {
+  if (error instanceof z.ZodError)
+    return {
+      status: 400,
+      body: errorBody('Invalid request', 'invalid_request', {
+        details: error.issues.map((i) => ({ path: i.path, message: i.message })),
+      }),
+    };
+  if (error instanceof DomainError)
+    return { status: error.status, body: errorBody(error.message, error.code) };
+  const requestId = crypto.randomUUID();
+  console.error('API error', requestId, error);
+  return {
+    status: 500,
+    body: errorBody('An unexpected error occurred', 'internal', { requestId }),
+  };
 }

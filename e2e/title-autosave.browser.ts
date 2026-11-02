@@ -56,7 +56,10 @@ test('title autosave survives reload, serializes remote sync, and remains durabl
     });
     let saving = false;
     await context.route('**/api/sync/commands', async (route) => {
-      if (route.request().postDataJSON().command.type === 'brane.title') {
+      const { operations } = route.request().postDataJSON() as {
+        operations: { command: { type: string } }[];
+      };
+      if (operations.some((operation) => operation.command.type === 'brane.title')) {
         saving = true;
         await gate;
       }

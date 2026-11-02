@@ -110,8 +110,9 @@ it('registration claims the same library and retries a lost claim acknowledgemen
   expect(
     (
       await guest.client.request('/sync/commands', {
-        key,
-        command: { type: 'text.edit', blockId: block.id, text: 'Keep me', version: 0 },
+        operations: [
+          { key, command: { type: 'text.edit', blockId: block.id, text: 'Keep me', version: 0 } },
+        ],
       })
     ).status,
   ).toBe(200);
@@ -137,7 +138,11 @@ it('registration claims the same library and retries a lost claim acknowledgemen
     (
       await guest.client.request(
         '/sync/commands',
-        { key, command: { type: 'text.edit', blockId: block.id, text: 'Keep me', version: 0 } },
+        {
+          operations: [
+            { key, command: { type: 'text.edit', blockId: block.id, text: 'Keep me', version: 0 } },
+          ],
+        },
         { library: guest.session.libraryId, principal: account },
       )
     ).status,
@@ -255,11 +260,15 @@ it('bounds guest blocks and operation receipts while retaining exactly-once retr
       key: uid(),
       command: { type: 'text.edit', blockId: block.id, text: 'At the limit', version: 0 },
     };
-    expect((await guest.client.request('/sync/commands', operation)).status).toBe(200);
-    expect((await guest.client.request('/sync/commands', operation)).status).toBe(200);
-    expect(
-      (await guest.client.request('/sync/commands', { ...operation, key: uid() })).status,
-    ).toBe(429);
+    // Each operation of a request answers on its own; the request itself succeeds.
+    const outcome = async (sent: typeof operation) => {
+      const response = await guest.client.request('/sync/commands', { operations: [sent] });
+      expect(response.status).toBe(200);
+      return (await response.json()).outcomes[0];
+    };
+    expect(await outcome(operation)).toEqual({ key: operation.key });
+    expect(await outcome(operation)).toEqual({ key: operation.key });
+    expect((await outcome({ ...operation, key: uid() })).refusal).toMatchObject({ status: 429 });
   } finally {
     [config.GUEST_MAX_BLOCKS, config.GUEST_MAX_OPERATIONS] = limits;
   }

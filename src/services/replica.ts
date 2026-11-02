@@ -7,7 +7,8 @@ import {
 } from '../../shared/contracts';
 import {
   workspaceCommand,
-  workspaceAcknowledgement,
+  workspaceReceipt,
+  MAX_OPERATIONS_PER_REQUEST,
   commandEntity,
   type WorkspaceCommand,
 } from '../../shared/workspace-commands';
@@ -24,6 +25,7 @@ import type { ReplicaStorage, ReplicaState, PendingOperation } from './replica-s
 import type { BraneState } from '../../shared/types/domain';
 import { submissionReceipt } from '../../shared/schemas';
 import { networkApi, ApiError } from './transport';
+import { isErrorCode } from '../../shared/errors';
 import { requestAccount, accountFeatureReason } from './account-prompt';
 import { commandAccess, requestResources, requiredOperations } from './command-dependencies';
 import { ReplicaScheduler } from './replica-scheduler';
@@ -66,6 +68,10 @@ const unavailable = (error: unknown) =>
 
 // How long a confirmed session is trusted before the outbox asks for it again.
 const SESSION_CONFIRMATION_MS = 10_000;
+// How long a ready operation waits for others to share its request, and how large one
+// request may grow; both stay far below what a user notices or the server accepts.
+const SYNC_GATHER_MS = 20;
+const MAX_REQUEST_CHARACTERS = 256 * 1024;
 export class WorkspaceReplica {
   // Replica identity is a content library, independent of the login principal.
   actor?: string;
@@ -79,6 +85,16 @@ export class WorkspaceReplica {
   private reads = new Map<string, Promise<unknown>>();
   private status: Status = { connected: true, pending: 0, error: '', conflicts: [] };
   private generation = 0;
+  private outgoing?: {
+    actor: string;
+    entries: {
+      item: { key: string; command: PendingOperation['command'] };
+      resolve: () => void;
+      reject: (error: unknown) => void;
+    }[];
+    characters: number;
+    timer: ReturnType<typeof setTimeout>;
+  };
   constructor(
     readonly storage: ReplicaStorage,
     private transport: typeof networkApi,
@@ -509,18 +525,70 @@ export class WorkspaceReplica {
       window.dispatchEvent(new Event('brane:reconcile'));
     return true;
   }
+  // Operations ready within a moment of each other travel in one request: a matrix laid
+  // out or a lasso moved saves every card's place together instead of one request per
+  // card. Each operation is still applied and refused on its own.
+  private send(actor: string, operation: PendingOperation) {
+    return new Promise<void>((resolve, reject) => {
+      const item = { key: operation.key, command: operation.command };
+      const characters = JSON.stringify(item).length;
+      const open = this.outgoing;
+      if (
+        open &&
+        (open.actor !== actor ||
+          open.entries.length >= MAX_OPERATIONS_PER_REQUEST ||
+          open.characters + characters > MAX_REQUEST_CHARACTERS)
+      )
+        this.flush();
+      this.outgoing ??= {
+        actor,
+        entries: [],
+        characters: 0,
+        timer: setTimeout(() => this.flush(), SYNC_GATHER_MS),
+      };
+      this.outgoing.entries.push({ item, resolve, reject });
+      this.outgoing.characters += characters;
+    });
+  }
+  private flush() {
+    const batch = this.outgoing;
+    if (!batch) return;
+    this.outgoing = undefined;
+    clearTimeout(batch.timer);
+    void (async () => {
+      let outcomes;
+      try {
+        const receipt = workspaceReceipt.parse(
+          await this.remote(
+            '/sync/commands',
+            { operations: batch.entries.map((entry) => entry.item) },
+            'POST',
+            batch.actor,
+          ),
+        );
+        outcomes = new Map(receipt.outcomes.map((outcome) => [outcome.key, outcome]));
+      } catch (error) {
+        for (const entry of batch.entries) entry.reject(error);
+        return;
+      }
+      for (const entry of batch.entries) {
+        const outcome = outcomes.get(entry.item.key);
+        if (!outcome) entry.reject(new Error('Invalid synchronization acknowledgement.'));
+        else if (outcome.refusal)
+          entry.reject(
+            new ApiError(
+              outcome.refusal.status,
+              outcome.refusal.error,
+              isErrorCode(outcome.refusal.code) ? outcome.refusal.code : undefined,
+            ),
+          );
+        else entry.resolve();
+      }
+    })();
+  }
   private async dispatch(actor: string, operation: PendingOperation): Promise<boolean> {
     try {
-      const acknowledgement = workspaceAcknowledgement.parse(
-        await this.remote(
-          '/sync/commands',
-          { key: operation.key, command: operation.command },
-          'POST',
-          actor,
-        ),
-      );
-      if (acknowledgement.key !== operation.key)
-        throw new Error('Invalid synchronization acknowledgement.');
+      await this.send(actor, operation);
       await this.storage.change(actor, (state) => {
         state.pending = state.pending.filter((op) => op.key !== operation.key);
         state.sequence++;
