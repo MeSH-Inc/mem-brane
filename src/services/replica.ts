@@ -298,6 +298,12 @@ export class WorkspaceReplica {
     const cached = readLocal(state, path);
     if (cached !== undefined && /^\/(representations\/[^/]+\/pages|revisions\/[^/]+)$/.test(path))
       return cached;
+    // While operations are only in flight, the local projection is the answer: the read
+    // that follows the outbox draining (each acknowledgement announces a change) brings
+    // the server's state. An operation paused on a refusal could hold that read back
+    // indefinitely, so then the server is read behind the local answer as well.
+    if (cached !== undefined && state.pending.length && !state.pending.some((op) => op.failure))
+      return cached;
     if (cached !== undefined && state.pending.length) {
       const key = JSON.stringify([actor, path]);
       if (!this.reads.has(key)) {

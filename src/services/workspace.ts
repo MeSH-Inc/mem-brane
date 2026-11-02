@@ -59,7 +59,11 @@ const REFRESH_GATHER_MS = 200;
 // keeps the table current without spending the account's requests on every report.
 const BUSY_REFRESH_GATHER_MS = 1000;
 const BUSY_RUNS = 3;
-const BUDGET_READ_MS = 1500;
+// A run in one of these has its answer, or will have none; its brane has changed.
+const SETTLED = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
+// The allowance is read at most this often while runs are admitted and settle, then once
+// more when they stop: a press of twelve settles a run every few hundred milliseconds.
+const BUDGET_READ_MS = 4000;
 type DraftState = Pick<
   Interaction,
   | 'actor'
@@ -408,7 +412,6 @@ export class WorkspaceController {
     const epoch = this.epoch,
       generation = ++this.refreshGeneration,
       streamRevision = this.streamRevision;
-    this.readBudget();
     let next: BraneState;
     try {
       next = await this.client.workspace(this.braneId);
@@ -417,6 +420,11 @@ export class WorkspaceController {
       return;
     }
     if (!this.valid(epoch) || generation !== this.refreshGeneration) return;
+    // The allowance changes only as runs are admitted and settle, so it is read when a
+    // read shows a run new or with a new status.
+    const statuses = (state?: BraneState) =>
+      JSON.stringify(state?.runs.map((run) => [run.id, run.status]) ?? []);
+    if (this.serverState && statuses(next) !== statuses(this.serverState)) this.readBudget();
     next.runs = next.runs.map((run) => {
       const stream = this.streamed.get(run.id);
       return stream &&
@@ -475,9 +483,20 @@ export class WorkspaceController {
       (data.braneId !== this.braneId && !this.serverState?.runs.some((r) => r.id === data.runId))
     )
       return;
-    if (data.status) {
-      // A press of a dozen runs reports each run's start and end; one read a moment after
-      // the first report catches up with every report that arrived meanwhile.
+    const known = this.serverState?.runs.find((r) => r.id === data.runId);
+    if (data.status && known && !SETTLED.has(data.status) && this.serverState) {
+      // A run starting changes only its own status, which the report carries; the brane
+      // is read when a run settles, since only then has it new cards to show.
+      if (known.status !== data.status)
+        this.document.install({
+          ...this.serverState,
+          runs: this.serverState.runs.map((r) =>
+            r.id === data.runId ? { ...r, status: data.status! } : r,
+          ),
+        });
+    } else if (data.status) {
+      // A press of a dozen runs reports each run's end; one read a moment after the first
+      // report catches up with every report that arrived meanwhile.
       const active = (this.serverState?.runs ?? []).filter((r) =>
         ['queued', 'claimed', 'running', 'cancel_requested'].includes(r.status),
       ).length;
