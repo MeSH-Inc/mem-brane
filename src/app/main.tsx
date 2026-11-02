@@ -211,10 +211,16 @@ function Shell() {
   // after that is caught up with by one more read a second later.
   const listTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const listAgain = useRef(false);
+  // The open brane's count of machines due, as its page projects it.
+  const pageDue = useRef<{ braneId: string; due: number }>(undefined);
+  const withPageDue = (list: BraneListing[]) =>
+    list.map((brane) =>
+      brane.id === pageDue.current?.braneId ? { ...brane, due: pageDue.current.due } : brane,
+    );
   const readBranes = () =>
     void client
       .branes()
-      .then(setBranes)
+      .then((list) => setBranes(withPageDue(list)))
       .catch((e) => setError(e.message));
   const refreshBranes = () => {
     if (listTimer.current) {
@@ -255,6 +261,18 @@ function Shell() {
     refreshBranes();
     const reconcile = () => window.dispatchEvent(new Event('brane:reconcile'));
     let answersTimer: ReturnType<typeof setTimeout> | undefined;
+    // Only a brane created or retitled changes the list; the open brane's count of
+    // machines due comes from its page, which projects it on every edit.
+    const listedChange = (event: Event) => {
+      if ((event as CustomEvent<{ listed?: boolean }>).detail?.listed !== false) refreshBranes();
+    };
+    const openDue = (event: Event) => {
+      // A page closing withdraws its count; the list's own reads then hold.
+      pageDue.current =
+        (event as CustomEvent<{ braneId: string; due: number } | null>).detail ?? undefined;
+      setBranes((list) => withPageDue(list));
+    };
+    window.addEventListener('brane:due', openDue);
     const disconnect = connectLiveUpdates({
       open: () => new EventSource(`/api/events?library=${encodeURIComponent(session.libraryId)}`),
       eventTypes: ['ready', 'run'],
@@ -266,9 +284,10 @@ function Shell() {
         try {
           const detail = runEventResponse.parse(JSON.parse((event as MessageEvent).data));
           window.dispatchEvent(new CustomEvent('brane:run', { detail }));
-          // A finished answer may make a machine kept current due, or no longer due. A
-          // press of twelve finishes twelve answers; the list is read once they stop.
-          if (detail.status === 'completed') {
+          // A finished answer on a brane not open here may make a machine kept current
+          // due, or no longer due (the open brane's page counts its own). A press of
+          // twelve finishes twelve answers; the list is read once they stop.
+          if (detail.status === 'completed' && detail.braneId !== pageDue.current?.braneId) {
             clearTimeout(answersTimer);
             answersTimer = setTimeout(refreshBranes, ANSWERS_SETTLE_MS);
           }
@@ -279,7 +298,7 @@ function Shell() {
       },
     });
     window.addEventListener('brane:reconcile', refreshBranes);
-    window.addEventListener('brane:local-change', refreshBranes);
+    window.addEventListener('brane:local-change', listedChange);
     // Local changes and finished answers read the list themselves; this read only
     // catches what another device changed.
     const timer = setInterval(refreshBranes, 30_000);
@@ -287,7 +306,8 @@ function Shell() {
       disconnect();
       window.dispatchEvent(new CustomEvent('brane:live', { detail: true }));
       window.removeEventListener('brane:reconcile', refreshBranes);
-      window.removeEventListener('brane:local-change', refreshBranes);
+      window.removeEventListener('brane:local-change', listedChange);
+      window.removeEventListener('brane:due', openDue);
       clearInterval(timer);
       clearTimeout(answersTimer);
     };

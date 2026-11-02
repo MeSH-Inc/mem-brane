@@ -68,6 +68,8 @@ const unavailable = (error: unknown) =>
 
 // How long a confirmed session is trusted before the outbox asks for it again.
 const SESSION_CONFIRMATION_MS = 10_000;
+// The commands that change what the list of branes shows.
+const listedCommands = new Set(['brane.create', 'brane.title']);
 // How long a ready operation waits for others to share its request, and how large one
 // request may grow; both stay far below what a user notices or the server accepts.
 const SYNC_GATHER_MS = 20;
@@ -122,7 +124,9 @@ export class WorkspaceReplica {
     this.status = { ...this.status, ...patch };
     for (const listener of this.listeners) listener();
   }
-  private async changed(actor: string, broadcast = true) {
+  // listed: whether the change can alter the list of branes (a brane created or retitled);
+  // the list is read again only then.
+  private async changed(actor: string, broadcast = true, listed = true) {
     if (this.actor !== actor) return;
     const state = await this.storage.read(actor);
     if (this.actor !== actor) return;
@@ -131,7 +135,8 @@ export class WorkspaceReplica {
       conflicts: state.pending.filter((op) => op.failure),
     });
     if (broadcast) this.channel?.postMessage({ actor });
-    if (typeof window !== 'undefined') window.dispatchEvent(new Event('brane:local-change'));
+    if (typeof window !== 'undefined')
+      window.dispatchEvent(new CustomEvent('brane:local-change', { detail: { listed } }));
   }
   start() {
     const reconnect = () => {
@@ -285,10 +290,10 @@ export class WorkspaceReplica {
         const result = structuredClone(projectCommand(state, command));
         state.pending.push({ key: crypto.randomUUID(), command });
         state.sequence++;
-        return { result };
+        return { result, listed: listedCommands.has(command.type) };
       });
       if (local) {
-        await this.changed(actor);
+        await this.changed(actor, true, local.listed);
         void this.synchronize();
         return local.result;
       }
@@ -342,7 +347,7 @@ export class WorkspaceReplica {
         const next = readLocal(current, path) ?? value;
         return { value: next, changed: previous !== JSON.stringify(next) };
       });
-      if (notify && result.changed) await this.changed(actor);
+      if (notify && result.changed) await this.changed(actor, true, path === '/branes');
       return result.value;
     } catch (error) {
       if (!unavailable(error) || this.actor !== actor) throw error;
@@ -600,7 +605,7 @@ export class WorkspaceReplica {
         state.sequence++;
       });
       if (this.actor === actor) this.setStatus({ error: '' });
-      await this.changed(actor);
+      await this.changed(actor, true, listedCommands.has(operation.command.type));
       return true;
     } catch (error) {
       // A refusal that cannot succeed unchanged pauses this operation for review;
@@ -634,7 +639,7 @@ export class WorkspaceReplica {
       }
       state.sequence++;
     });
-    await this.changed(actor);
+    await this.changed(actor, true, false);
   }
   // The local side is the item's final local state, not the first refused operation,
   // so the comparison shows everything a server choice would replace.

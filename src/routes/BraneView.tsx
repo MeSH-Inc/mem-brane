@@ -35,6 +35,7 @@ import { RunIssueNotice } from '../components/RunIssueNotice';
 import { useInteraction } from '../stores/interaction';
 import { presentationFor } from '../stores/presentation';
 import { useStore } from 'zustand';
+import { dueMachines } from '../../shared/machine-staleness';
 import { LiveBlockContent } from '../components/LiveBlockContent';
 import type { Passage } from '../components/BlockContent';
 import { SpawnButton } from '../components/SpawnButton';
@@ -315,6 +316,19 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     (blockId: string, placementId: string, view: CardAction) =>
       setManaged({ blockId, placementId, view }),
     [],
+  );
+  // The list of branes shows this brane's count of machines due as this page projects
+  // it, so an edit that makes a machine due shows there without reading the list.
+  const dueCount = useStore(controller.document.store, (s) =>
+    s.state ? dueMachines(s.state).due.length : undefined,
+  );
+  useEffect(() => {
+    if (dueCount === undefined) return;
+    window.dispatchEvent(new CustomEvent('brane:due', { detail: { braneId, due: dueCount } }));
+  }, [braneId, dueCount]);
+  useEffect(
+    () => () => void window.dispatchEvent(new CustomEvent('brane:due', { detail: null })),
+    [braneId],
   );
   // A quoted passage becomes a card beside its source, brought into view.
   const quote = useCallback(
