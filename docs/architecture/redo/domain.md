@@ -112,6 +112,12 @@ in feeding order, each after the previous press's runs have ended._ The server k
 no notion of a chain: every press is admitted, held against the allowance and recorded
 as before, and a run that does not finish stops the chain.
 
+_Decision (iteration 14): keeping a machine current is stored with the brane
+(`kept_current`, migration 009, one row per machine placement, removed with it) and
+written through the outbox as `machine.keep`._ It never runs anything: it only makes the
+machine due when it is stale or waiting upstream, and _Run all due_ is a press of the
+union of the due machines' chains, by the same rule as _Rerun the chain_.
+
 **Arrow** (brane-scoped, table `relations`): `from_placement_id`, `to_placement_id`,
 `label` (required, 1 to 60 characters). Both ends are cards on the table; removing
 either removes the arrow, and a rerun or Update moves the arrows of the card it

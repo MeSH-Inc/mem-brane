@@ -847,22 +847,91 @@ one slot.
 - A drag started while a fitted view was still animating missed its target; the test's
   drag now waits for both ends to hold still.
 
-## Recommended iteration 14
+## Iteration 14: chains kept current, and the table at scale
 
-Chains as things to keep, and the canvas at scale.
+Iteration 14 let a machine be kept current, gave the last machine of a chain a receipt
+for the chain behind its answer, let a chain be built on a phone, and measured the
+table with dozens of answers on it.
 
-1. **A chain stays current on request.** A machine's back offers _Keep current_: when
-   any machine upstream reruns, this one is marked _due_ and its lever reads _Run (due)_,
-   and the brane header counts machines due with one _Run all due · $…_ in feeding
-   order. Nothing runs without a press; the header press is the one press.
-2. **A chain's receipt.** The back of the last machine in a chain lists the chain's
-   last full rerun: each machine, its model, its runs and their settled cost, and the
-   total.
-3. **Large tables.** Measure scenario 2 with twelve papers through Split each and
-   Diagram, and scenario 3 with twelve papers and five questions (60 answers): frame
-   time while panning, the page's requests per minute against the 240 limit, and the
-   time from press to matrix. Fix what crosses a frame budget of 16 ms or the limit.
-4. **The machine's port on a phone.** Focus on a phone shows a machine's answers and
-   offers _Feed into…_, the mirror of _Feed from…_, so a chain can be built without a
-   desktop.
-5. Measure scenarios 6 and 3 again, and scenario 7 (tune a prompt) for the first time.
+- **Keep current.** A machine's back has a _Keep current_ box. A machine kept current
+  that is stale, or waiting on a machine upstream, reads _due · waiting on Distill_ (or
+  _due · material changed_). The brane's header then shows _Run all due ×N · $…_: one
+  press runs every due machine with every machine its chain needs, in feeding order,
+  each after the one before has finished. While a machine in it runs, the header reads
+  _1 due · waiting on Distill_. Nothing runs without that press. The setting is stored
+  with the brane (`kept_current`, migration 009) and goes through the offline outbox
+  as `machine.keep`.
+- **The chain behind an answer.** A machine's back lists, when another machine's answer
+  was among its inputs, the press behind each answer its newest answer read, upstream
+  first: the machine, its models, its runs and how they ended, and the settled cost,
+  then a total.
+- **Feed into…** A machine that has run offers _Feed into…_ beside its lever, listing
+  every other machine's slot its answers could feed without a loop. It is the mirror of
+  _Feed from…_, and it is how a chain is built on a phone, where machines have no ports.
+- **The prompt version on an answer.** An answer's receipt names the prompt version its
+  run read, and each earlier version on its back names its own, so a tuned prompt's
+  answers can be compared by version.
+- **Fewer reads while runs stream.** While three or more runs are under way, run reports
+  gather into one read of the brane a second instead of one every 200 ms, and the day's
+  allowance is read at most once in 1.5 s, with one more read at the end of a stream.
+
+### Decisions taken while building
+
+| Question                                          | Decision                                                                                                                              | Rationale                                                                                                                                |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Where is _Keep current_ stored?                   | With the brane, one row per machine placement, written through the outbox as `machine.keep`.                                          | It is a choice about this machine on this table, wanted on every device and offline; a page-only setting would forget it.                |
+| When is a machine due?                            | When it is kept current and is stale or waiting on a machine upstream.                                                                | Kept current means its answer should match what it is fed and asked now; an edited prompt makes it due as surely as a rerun upstream.    |
+| What does the machine's lever say when it is due? | What one press of it does, as before (_Rerun_, _Rerun the chain ×2_); the label above names it due.                                   | The lever states its own press; the header holds the press for everything due.                                                           |
+| What does _Run all due_ run?                      | The union of the due machines' chains, in feeding order, one press each, waiting for each to finish; it waits while any of them runs. | The same rule as _Rerun the chain_, so a machine shared by two chains runs once.                                                         |
+| What does the chain receipt list?                 | The press behind each answer the newest answer read, followed upstream; not the machines' newest presses.                             | The receipt explains this answer; a later upstream press that this answer did not read belongs to the next one.                          |
+| Where is _Feed into…_?                            | In the machine's footer, on the canvas and in Focus.                                                                                  | Focus on a phone shows the machine's slots and lever and nothing else; the footer is where its answers leave from.                       |
+| How often is the allowance read?                  | At most once in 1.5 s, with a trailing read.                                                                                          | It changes only when runs are admitted or settle; read on every refresh, it was a third of the page's requests during a press of twelve. |
+| How long do busy run reports gather?              | One second while three or more runs are under way; 200 ms otherwise.                                                                  | A single run still lands at once; a press of twelve no longer reads the brane ten times.                                                 |
+| How is frame time measured?                       | `requestAnimationFrame` intervals while the canvas is panned with space-drag across the fitted table, in headless Chromium.           | It is the one number the browser tests can repeat; it bounds the canvas's own work, not a slow machine's.                                |
+
+### Measured
+
+| Scenario                                                       | Result                                                                                                                                       |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6. Distill → Brief, built                                      | 15 actions, none typed, unchanged                                                                                                            |
+| 6. After an edit, with Brief kept current                      | Once: ↻, _Keep current_, ↻ (3). Then each edit: the edit and _Run all due ×2_ (2)                                                            |
+| 6. Built and run on a 320-pixel phone, machines already placed | 6 (Distill from the strip, Run, _Feed into…_, _Brief · material_, Brief from the strip, Run)                                                 |
+| 7. Tune a prompt                                               | 3 (the prompt, Rerun, ↻), 56 characters typed; the receipt names the new prompt version and _Earlier version_ the old one                    |
+| 3. The matrix, then a Brief over it                            | 22 and 5, unchanged                                                                                                                          |
+| 1. Pressure-test a claim                                       | 7, unchanged                                                                                                                                 |
+| 2 at scale: twelve papers through Split each and Diagram       | 15 actions; 24 ideas in 2.5 s from the press, the diagram in 1.6 s; at most 58 page requests a minute; frames 16.7 ms median, 16.8 ms worst  |
+| 3 at scale: twelve papers, five questions, a 60-cell matrix    | 30 actions, 316 characters; each press of twelve 3.6 to 4.6 s; the matrix laid in 0.3 s; at most 186 page requests a minute; frames as above |
+
+Scenario 7 runs for the first time and costs three actions. At sixty answers the canvas
+holds 60 frames a second while panning and nothing crosses the 16 ms budget. The
+request limit is the constraint that matters: the 60-cell matrix reached it before the
+reads were gathered, and still spends 186 of its 240 a minute, most of them one save per
+card when the matrix lays its 60 cards out.
+
+### Defects found by building it
+
+- Five presses of twelve runs reached the account's limit of 240 requests a minute:
+  each press read the brane and the allowance about ten times, once per 200 ms of run
+  reports. See the gathering above.
+- The browser tests' own reads count against the same limit, and some polled every
+  100 ms; they now poll at most twice a second.
+
+## Recommended iteration 15
+
+Fewer requests per gesture, and machines that say what they will cost before they are
+built.
+
+1. **One save for a layout.** Laying out a matrix, a diagram or a stack, and moving a
+   lasso, saves every card's place in one outbox command (`placements.arrange`) instead
+   of one per card. Measure the 60-cell matrix's requests a minute again; the aim is
+   under 120.
+2. **The cost of a chain before it is built.** _Feed from…_ and _Feed into…_ show what
+   one press of the downstream machine would cost with the new input, and _Keep current_
+   shows what a run of everything due would cost now.
+3. **A due machine on the brane list.** The list of branes marks a brane with machines
+   due, so a chain kept current is found without opening every brane.
+4. **Large answers.** Scenario 2 with 24 papers through Split each (48 ideas, two presses
+   of twelve) and a Diagram over them: whether 24 cards per answer and 200 per group
+   hold, and how the diagram reads at that size.
+5. Measure scenarios 3, 6 and 7 again, and scenario 8 (branch a conversation) for the
+   first time.
