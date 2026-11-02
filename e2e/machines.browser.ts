@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pdfFixture } from '../tests/fixtures/pdf';
 
 // Scenarios 1 and 6 of docs/architecture/redo, each run through the built app and the
 // mock model on both the redo's path and the composer's. Each user gesture (a click, a
@@ -329,6 +330,101 @@ test('a conversation branches: two replies to one answer both stay on the table'
     await page.screenshot({ path: 'test-results/machine-branch.png' });
   });
   record('branch', counts);
+});
+
+test('a passage of a PDF becomes a card citing its page, on the canvas and on a phone', async ({
+  page,
+}) => {
+  const counts = { actions: 0, phone: 0 };
+  await serve(page, 4217, async ({ seed, state, origin }) => {
+    const { braneId } = await seed('Quote to card', []);
+    await page.goto(`${origin}/b/${braneId}`);
+    const act = async (work: () => Promise<unknown>) => {
+      counts.actions++;
+      await work();
+    };
+    await act(() =>
+      page
+        .locator('input[type=file]')
+        .first()
+        .setInputFiles({
+          name: 'Research.pdf',
+          mimeType: 'application/pdf',
+          buffer: pdfFixture([
+            'Evidence on page one. Rents near stations rose ten percent.',
+            'Conclusion on page two',
+          ]),
+        }),
+    );
+    const pdf = page.locator('.react-flow__node:has(.pdf-content)');
+    await act(() => pdf.getByRole('button', { name: 'Load page text', exact: true }).click());
+    await act(() => pdf.getByText('Page 1', { exact: true }).click());
+    // Select a passage of the page's text, as a drag across it would.
+    const select = (passage: string) =>
+      page.evaluate((passage) => {
+        const pre = [...document.querySelectorAll('.pdf-page[open] pre')].find((node) =>
+          node.textContent?.includes(passage),
+        )!;
+        const text = pre.firstChild!;
+        const start = text.textContent!.indexOf(passage);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + passage.length);
+        document.getSelection()!.removeAllRanges();
+        document.getSelection()!.addRange(range);
+      }, passage);
+    await act(() => select('Rents near stations rose ten percent.'));
+    await expect(pdf.getByRole('button', { name: '❝ Quote' })).toBeVisible();
+    await act(() => page.keyboard.press('q'));
+    const quoted = '“Rents near stations rose ten percent.”\n\n— Research.pdf, page 1';
+    const read = async () => {
+      const brane = await state(braneId);
+      const block = brane.blocks.find((b) => b.content.text === quoted);
+      const placement = brane.placements.find((p) => p.block_id === block?.id);
+      return { brane, placement };
+    };
+    await expect.poll(async () => !!(await read()).placement, { intervals: [250, 500] }).toBe(true);
+    const { brane, placement } = await read();
+    const source = brane.placements.find((p) => p.block_id !== placement!.block_id)!;
+    // An arrow "quotes" joins the quotation to its source, and it stands beside it.
+    expect(brane.relations.map((r) => [r.from_placement_id, r.label, r.to_placement_id])).toEqual([
+      [placement!.id, 'quotes', source.id],
+    ]);
+    expect(placement!.x).toBeGreaterThan(source.x + source.width);
+    await expect(page.locator(`.react-flow__node[data-id="${placement!.id}"]`)).toBeVisible();
+    await page.screenshot({ path: 'test-results/machine-quote.png' });
+
+    // On a 320-pixel phone the PDF opens in Focus, and the Quote button quotes.
+    await page.setViewportSize({ width: 320, height: 740 });
+    const phone = async (work: () => Promise<unknown>) => {
+      counts.phone++;
+      await work();
+    };
+    await phone(() =>
+      page
+        .getByRole('button', { name: /Research\.pdf/ })
+        .first()
+        .click(),
+    );
+    const focus = page.locator('.focus-card');
+    if (await focus.getByRole('button', { name: 'Load page text', exact: true }).isVisible())
+      await phone(() => focus.getByRole('button', { name: 'Load page text', exact: true }).click());
+    await phone(() => focus.getByText('Page 2', { exact: true }).click());
+    await phone(() => select('Conclusion on page two'));
+    await phone(() => focus.getByRole('button', { name: '❝ Quote' }).click());
+    await expect
+      .poll(async () =>
+        (await state(braneId)).blocks
+          .map((b) => b.content.text)
+          .includes('“Conclusion on page two”\n\n— Research.pdf, page 2'),
+      )
+      .toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+    await page.screenshot({ path: 'test-results/machine-quote-phone.png' });
+  });
+  record('quote', counts);
 });
 
 test('a reading pile becomes a stack and feeds a machine as one', async ({ page }) => {
@@ -1509,7 +1605,7 @@ interface BraneRead {
     width: number;
     height: number;
   }[];
-  blocks: { id: string; kind: string; version: number }[];
+  blocks: { id: string; kind: string; version: number; content: { text: string } }[];
   relations: { from_placement_id: string; to_placement_id: string; label: string }[];
   groups: { label: string; members: string[] }[];
   feeds: { to_placement_id: string; from_placement_id: string | null }[];

@@ -1314,6 +1314,19 @@ a {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font: inherit;
+  /* A passage is selected here to quote it, on the canvas too. */
+  user-select: text;
+  cursor: text;
+}
+.quote-button {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 3px 9px;
+  border: 1px solid #c9cdb9;
+  border-radius: 999px;
+  background: #fffdf6;
+  font-size: 11px;
+  cursor: pointer;
 }
 
 .app-status {

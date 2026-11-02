@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { useStore } from 'zustand';
 import type { WorkspaceDocument } from '../services/workspace-document';
 import { ResponseContent, type ResponseActions } from './ResponseContent';
-import { BlockContent } from './BlockContent';
+import { BlockContent, type Passage } from './BlockContent';
 export const LiveBlockContent = memo(function LiveBlockContent({
   document,
   blockId,
@@ -11,7 +11,9 @@ export const LiveBlockContent = memo(function LiveBlockContent({
   onFocused,
   onStop,
   onRetry,
+  onQuote,
 }: ResponseActions & {
+  onQuote?: (blockId: string, passage: Passage) => void;
   document: WorkspaceDocument;
   blockId: string;
   onEdit: (id: string, text: string) => void;
@@ -31,6 +33,12 @@ export const LiveBlockContent = memo(function LiveBlockContent({
       />
     );
   return block ? (
-    <BlockContent block={block} onEdit={onEdit} focusRequest={focusRequest} onFocused={onFocused} />
+    <BlockContent
+      block={block}
+      onEdit={onEdit}
+      focusRequest={focusRequest}
+      onFocused={onFocused}
+      onQuote={onQuote}
+    />
   ) : null;
 });

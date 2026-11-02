@@ -11,7 +11,9 @@ import type {
   Revision,
   Group,
   Feed,
+  WorkspaceContent,
 } from '../../shared/types/domain';
+import { MAX_BLOCK_TEXT_CHARACTERS } from '../../shared/limits';
 import type { ConversationMessage } from '../../shared/types/conversation';
 import { submitRun, spawnArtifact } from '../../shared/schemas';
 import { modelCompatibility } from '../../shared/representations';
@@ -1162,6 +1164,40 @@ export class WorkspaceController {
         label: label.trim(),
       });
     }).catch(() => undefined);
+  // A passage of a PDF or webpage card becomes an authored card beside it: the passage
+  // in quotation marks and the source it was taken from, with an arrow "quotes" to the
+  // source. It is an ordinary card and feeds like any other.
+  quote = (sourcePlacementId: string, passage: { text: string; page?: number }) =>
+    this.command(`quote:${sourcePlacementId}`, async (progress) => {
+      const epoch = this.epoch;
+      const state = this.state;
+      const source = state?.placements.find((p) => p.id === sourcePlacementId);
+      const block = source && state?.blocks.find((b) => b.id === source.block_id);
+      if (!state || !source || !block) throw new Error('This card is no longer on the brane.');
+      const text = quotation(block.content, passage);
+      const geometry = openSpot(
+        state.placements.filter((p) => !p.host_placement_id),
+        { x: source.x + source.width + 60, y: source.y },
+        320,
+        220,
+      );
+      const created = await this.client.createText(this.braneId, geometry);
+      await this.client.saveText({ blockId: created.id, text, version: 0 });
+      // The new card's placement is read from the replica, which projected it.
+      await this.refresh();
+      const placement = this.state?.placements.find((p) => p.block_id === created.id);
+      if (placement)
+        await this.client.createRelation({
+          braneId: this.braneId,
+          fromPlacementId: placement.id,
+          toPlacementId: sourcePlacementId,
+          label: 'quotes',
+        });
+      if (!this.valid(epoch)) return;
+      progress('refreshing');
+      await this.refresh();
+      if (this.valid(epoch)) return created.id;
+    }).catch(() => undefined);
   relabel = (relationId: string, label: string) =>
     this.mutate(`relabel:${relationId}`, () =>
       this.client.relabelRelation(relationId, this.braneId, label.trim()),
@@ -1455,4 +1491,22 @@ function validPrepared(
     !Array.isArray(value.draftKeys) &&
     Object.values(value.draftKeys).every((key) => typeof key === 'string')
   );
+}
+
+// A quotation's text: the passage in quotation marks, then where it was taken from — the
+// PDF's file name and page, or the webpage's address.
+export function quotation(
+  content: WorkspaceContent,
+  passage: { text: string; page?: number },
+): string {
+  const source =
+    content.format === 'pdf'
+      ? `${content.filename}${passage.page ? `, page ${passage.page}` : ''}`
+      : content.format === 'webpage'
+        ? (content.url ?? 'the webpage')
+        : 'the card';
+  const citation = `\n\n— ${source}`;
+  const room = MAX_BLOCK_TEXT_CHARACTERS - citation.length - 2;
+  const text = passage.text.replace(/\s+/g, ' ').trim();
+  return `“${text.length > room ? `${text.slice(0, room - 1)}…` : text}”${citation}`;
 }

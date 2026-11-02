@@ -40,6 +40,7 @@ import { AskBox, ASK_WIDTH, type AskNode, type AskPosition } from './AskBox';
 import { SpawnButton } from '../components/SpawnButton';
 import type { CardAction } from '../components/ArtifactActions';
 import { LiveBlockContent } from '../components/LiveBlockContent';
+import type { Passage } from '../components/BlockContent';
 import type { ResponseActions } from '../components/ResponseContent';
 import { cardKind } from '../lib/labels';
 import { idleActivity, type WorkspaceDocument } from '../services/workspace-document';
@@ -73,6 +74,7 @@ type CardData = ResponseActions & {
   ) => void;
   onTakeOut: (placementId: string) => void;
   onKeep: (runId: string) => void;
+  onQuote: (placementId: string, passage: Passage) => void;
   machine: MachineActions;
 };
 type Geometry = Pick<Placement, 'x' | 'y' | 'width' | 'height'>;
@@ -254,6 +256,7 @@ const Card = memo(function Card({ id, data, selected }: NodeProps<CardNode>) {
             onEdit={data.onEdit}
             onStop={data.onStop}
             onRetry={data.onRetry}
+            onQuote={(_, passage) => data.onQuote(id, passage)}
           />
         )}
       </article>
@@ -294,6 +297,7 @@ interface Props extends ResponseActions {
   onRenameGroup: GroupNode['data']['onRename'];
   onTakeOut: CardData['onTakeOut'];
   onKeep: CardData['onKeep'];
+  onQuote: CardData['onQuote'];
   // The open Ask box: where it stands and the prompt panel it holds.
   ask?: AskPosition & { content: ReactNode };
   onCloseAsk: () => void;
@@ -449,6 +453,7 @@ function Inner(props: Props) {
           onArrow: drawArrow,
           onTakeOut: props.onTakeOut,
           onKeep: props.onKeep,
+          onQuote: props.onQuote,
           onStop: props.onStop,
           onRetry: props.onRetry,
           machine: props.machine,
@@ -495,6 +500,7 @@ function Inner(props: Props) {
     drawArrow,
     props.onTakeOut,
     props.onKeep,
+    props.onQuote,
     groups,
     props.onStop,
     props.onRetry,

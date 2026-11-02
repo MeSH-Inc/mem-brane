@@ -36,6 +36,7 @@ import { useInteraction } from '../stores/interaction';
 import { presentationFor } from '../stores/presentation';
 import { useStore } from 'zustand';
 import { LiveBlockContent } from '../components/LiveBlockContent';
+import type { Passage } from '../components/BlockContent';
 import { SpawnButton } from '../components/SpawnButton';
 import { ArtifactActions, type CardAction } from '../components/ArtifactActions';
 import { FirstSteps } from '../components/FirstSteps';
@@ -314,6 +315,17 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
     (blockId: string, placementId: string, view: CardAction) =>
       setManaged({ blockId, placementId, view }),
     [],
+  );
+  // A quoted passage becomes a card beside its source, brought into view.
+  const quote = useCallback(
+    (placementId: string, passage: Passage) =>
+      void controller.quote(placementId, passage).then((id) => {
+        if (id)
+          presentation
+            .getState()
+            .reveal(presentation.getState().attention, { blockId: id, kind: 'reveal' });
+      }),
+    [controller, presentation],
   );
   const continueBranch = (messageId?: string) => {
     controller.setContinue(messageId);
@@ -1137,6 +1149,12 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                     onEdit={edit}
                     onStop={controller.cancelRun}
                     onRetry={controller.retryRun}
+                    onQuote={(blockId, passage) => {
+                      const placement = controller.state?.placements.find(
+                        (p) => p.block_id === blockId && !p.host_placement_id,
+                      );
+                      if (placement) quote(placement.id, passage);
+                    }}
                   />
                   {focusedPlacement &&
                     (focused.kind === 'machine' ? (
@@ -1264,6 +1282,7 @@ function BraneWorkspace({ braneId, focus, view, inputs }: BraneViewProps) {
                 onReuse={makeReusable}
                 onUpdate={controller.update}
                 onRelate={controller.relate}
+                onQuote={quote}
                 onRelabel={controller.relabel}
                 onUnrelate={controller.unrelate}
                 onFeedGroup={controller.feedGroup}

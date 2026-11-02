@@ -1,14 +1,64 @@
 import { useAssetUrl } from './LocalAsset';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { isQuoteKey, QuoteButton, type Passage } from './BlockContent';
 import { client } from '../services/client';
 import type { PdfContent as Pdf, PdfSummary, PdfRepresentation } from '../../shared/types/domain';
 export function PdfContent({
   content,
   showProvenance = false,
+  onQuote,
 }: {
   content: Pdf | PdfSummary;
   showProvenance?: boolean;
+  onQuote?: (passage: Passage) => void;
 }) {
+  const host = useRef<HTMLDivElement>(null);
+  // The passage selected in this PDF's page text, and its page.
+  const [selected, setSelected] = useState<Passage>();
+  useEffect(() => {
+    if (!onQuote) return;
+    const read = () => {
+      const selection = globalThis.document.getSelection();
+      const anchor = selection?.anchorNode;
+      const text = selection?.toString().trim();
+      if (
+        !selection ||
+        selection.isCollapsed ||
+        !text ||
+        !anchor ||
+        !host.current?.contains(anchor)
+      )
+        return setSelected(undefined);
+      const page = (
+        anchor instanceof Element ? anchor : anchor.parentElement
+      )?.closest<HTMLElement>('[data-page]')?.dataset.page;
+      setSelected({ text, ...(page ? { page: Number(page) } : {}) });
+    };
+    globalThis.document.addEventListener('selectionchange', read);
+    return () => globalThis.document.removeEventListener('selectionchange', read);
+  }, [onQuote]);
+  const quote = () => {
+    if (!selected || !onQuote) return;
+    onQuote(selected);
+    globalThis.document.getSelection()?.removeAllRanges();
+    setSelected(undefined);
+  };
+  const quoteRef = useRef(quote);
+  quoteRef.current = quote;
+  useEffect(() => {
+    if (!selected) return;
+    // Page text cannot hold focus, so Q is heard from the page while a passage is selected.
+    const press = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"]') || !isQuoteKey(event))
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      quoteRef.current();
+    };
+    globalThis.addEventListener('keydown', press, true);
+    return () => globalThis.removeEventListener('keydown', press, true);
+  }, [selected]);
   const original = useAssetUrl(content.assetId);
   const identity = 'representationId' in content ? content.representationId : undefined;
   const [loaded, setLoaded] = useState<{ id: string; value: PdfRepresentation }>();
@@ -34,7 +84,7 @@ export function PdfContent({
   const representation =
     identity && loaded?.id === identity ? loaded.value : content.representation;
   return (
-    <div className="pdf-content nodrag nowheel nopan">
+    <div ref={host} className="pdf-content nodrag nowheel nopan">
       <a href={original.url} download={content.filename}>
         Download original PDF ↗
       </a>
@@ -51,7 +101,7 @@ export function PdfContent({
           </p>
           {representation.pages ? (
             representation.pages.map((page) => (
-              <details key={page.number} className="pdf-page">
+              <details key={page.number} className="pdf-page" data-page={page.number}>
                 <summary>
                   Page {page.number}
                   {!page.text && ' · no extractable text'}
@@ -85,6 +135,7 @@ export function PdfContent({
       ) : (
         <p className="error">Not available as model context: {representation.reason}</p>
       )}
+      {selected && onQuote && <QuoteButton onQuote={quote} />}
     </div>
   );
 }

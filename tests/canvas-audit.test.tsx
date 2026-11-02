@@ -106,6 +106,7 @@ function render(s = state) {
           onUpdate={async () => {}}
           onRelate={noop}
           onRelabel={noop}
+          onQuote={noop}
           onUnrelate={noop}
           onFeedGroup={noop}
           onRenameGroup={noop}
